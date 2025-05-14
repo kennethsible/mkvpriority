@@ -10,6 +10,7 @@ import tomllib
 
 @dataclass
 class TrackRecord:
+    track_id: int
     track_type: str
     track_name: str
     uid: int
@@ -41,15 +42,15 @@ def mkv_modify(file_path: str, mkv_args: list[str]):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump([file_path] + mkv_args, temp_file)
         temp_file.flush()
-        # subprocess.run(['mkvpropedit', f'@{temp_file.name}'], check=True)
+        subprocess.run(['mkvpropedit', f'@{temp_file.name}'], check=True)
 
 
 def mkv_multiplex(file_path: str, mkv_args: list[str]):
-    # TODO reorder audio and subtitle tracks according to score
+    print(' '.join(mkv_args))  # TODO remove; used for debugging
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump([file_path] + mkv_args, temp_file)
         temp_file.flush()
-        # subprocess.run(['mkvmerge', f'@{temp_file.name}'], check=True)
+        subprocess.run(['mkvmerge', f'@{temp_file.name}'], check=True)
 
 
 def main():
@@ -81,9 +82,9 @@ def main():
                 for mkv_track in mkv_tracks:
                     mkv_props = mkv_track['properties']
                     track_record = TrackRecord(
+                        track_id=mkv_track['id'],
                         track_type=mkv_track['type'],
                         track_name=mkv_props.get('track_name'),
-                        track_id=mkv_props.get('number'),
                         uid=mkv_props['uid'],
                         score=0,
                         language=mkv_props['language'],
@@ -129,6 +130,7 @@ def main():
                         subtitle_tracks.append(track_record)
                         pprint.pp(track_record)  # TODO remove; used for debugging
 
+                # audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
                 for tracks in (audio_tracks, subtitle_tracks):
                     tracks.sort(reverse=True, key=lambda record: record.score)
                 mkv_args = []
@@ -169,10 +171,13 @@ def main():
                                 'flag-forced=0',
                             ]
 
-                if 'disable' in audio_mode and len(audio_tracks) > 1:
-                    # TODO maybe only disable those not included in audio_languages
+                disable = 'disable' in audio_mode
+                disable_strict = 'disable_strict' in audio_mode
+                if (disable or disable_strict) and len(audio_tracks) > 1:
                     for audio_track in audio_tracks[1:]:
                         if audio_track.enabled:
+                            if disable and audio_track.language in audio_languages:
+                                continue
                             mkv_args += [
                                 '--edit',
                                 f'track:={audio_track.uid}',
@@ -217,7 +222,6 @@ def main():
                             ]
 
                 if 'forced' in subtitle_mode and len(subtitle_tracks) > 1:
-                    # TODO maybe ignore if audio_tracks[0] is the same language as forced_subtitle
                     forced_subtitle = next(
                         (record for record in subtitle_tracks if record.forced), None
                     )
@@ -238,6 +242,25 @@ def main():
 
                 if mkv_args:
                     mkv_modify(file_path, mkv_args)
+
+                # if audio_first:
+                #     track_order = []
+                #     for track in audio_tracks + subtitle_tracks:
+                #         track_order.append(f'0:{track.track_id}')
+                # else:
+                #     track_order = []
+                #     for track in subtitle_tracks + audio_tracks:
+                #         track_order.append(f'0:{track.track_id}')
+                #     mkv_args.append(','.join(track_order))
+
+                # if track_order:
+                #     mkv_args = [
+                #         '-o',
+                #         f'{file_path.split('.mkv')[0]}_multiplex.mkv',
+                #         '--track-order',
+                #         ','.join(track_order),
+                #     ]
+                #     mkv_multiplex(file_path, mkv_args)
 
 
 if __name__ == '__main__':

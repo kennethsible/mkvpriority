@@ -8,14 +8,15 @@ media_dirs = ["/anime"]
 # Determines how the selected audio track will be flagged in the MKV:
 # - 'default' = Sets the chosen track as default (recommended for most players)
 # - 'forced'  = Stronger flag; some players prioritize forced tracks
-# - 'disable' = Disables all other non-selected tracks (optional cleanup)
+# - 'disable_strict' = Disables all other non-selected tracks (optional cleanup)
+# - 'disable' = Disables only non-selected tracks without language rankings
 # - 'enable'  = Re-enables tracks previously disabled (used to undo 'disable')
 #
-# Recommended: ["default"]
-# Sets the best-scoring audio track as default, but leaves all others enabled.
-# Keeps English dubs available for dual-audio use. Do NOT use "disable" if you want
-# to switch audio tracks in your player (e.g., Japanese ↔ English).
-audio_mode = ["default"]
+# Recommended: ["default", "disable"]
+# Sets the best-scoring audio track as default and disables some non-selected tracks.
+# Keeps English dubs available for dual-audio use. Do NOT use "disable_strict" if
+# you want to switch audio tracks in your player (e.g., Japanese ↔ English).
+audio_mode = ["default", "disable"]
 
 
 # === Subtitle Operation Mode ===
@@ -34,6 +35,7 @@ subtitle_mode = ["default", "forced"]
 [audio_languages]
 jpn = 120 # Preferred: Japanese audio
 eng = 90  # Acceptable fallback: English dubs
+und = 20  # Use if no language is tagged
 
 
 # === Audio Codec Priorities ===
