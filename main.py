@@ -40,7 +40,7 @@ def mkv_identify(file_path: str):
 
 def mkv_modify(file_path: str, mkv_args: list[str], dry_run: bool = False):
     if dry_run:
-        print(' '.join(mkv_args))
+        print('mkvpropedit ' + ' '.join(mkv_args))
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump([file_path] + mkv_args, temp_file)
         temp_file.flush()
@@ -50,7 +50,7 @@ def mkv_modify(file_path: str, mkv_args: list[str], dry_run: bool = False):
 
 def mkv_multiplex(file_path: str, mkv_args: list[str], dry_run: bool = False):
     if dry_run:
-        print(' '.join(mkv_args))
+        print('mkvmerge ' + ' '.join(mkv_args))
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump([file_path] + mkv_args, temp_file)
         temp_file.flush()
@@ -87,6 +87,8 @@ def main():
                 file_path = os.path.join(root_path, filename)
                 if not os.path.isfile(file_path):
                     continue
+                if args.dry_run:
+                    print(file_path)
 
                 mkv_tracks = mkv_identify(file_path)['tracks']
                 audio_tracks, subtitle_tracks = [], []
