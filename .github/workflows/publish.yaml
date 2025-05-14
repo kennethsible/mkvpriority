@@ -24,6 +24,7 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: false
           tags: |
             ghcr.io/kennethsible/mkvpriority:latest
             ghcr.io/kennethsible/mkvpriority:${{ github.ref_name }}
