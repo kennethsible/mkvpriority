@@ -62,6 +62,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', metavar='FILE_PATH', default='config.toml')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--reorder', action='store_true')
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
@@ -143,7 +144,8 @@ def main():
                         if args.dry_run:
                             pprint.pp(track_record)
 
-                # audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
+                if args.reorder:
+                    audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
                 for tracks in (audio_tracks, subtitle_tracks):
                     tracks.sort(reverse=True, key=lambda record: record.score)
                 mkv_args = []
@@ -256,24 +258,25 @@ def main():
                 if mkv_args:
                     mkv_modify(file_path, mkv_args, dry_run=args.dry_run)
 
-                # if audio_first:
-                #     track_order = []
-                #     for track in audio_tracks + subtitle_tracks:
-                #         track_order.append(f'0:{track.track_id}')
-                # else:
-                #     track_order = []
-                #     for track in subtitle_tracks + audio_tracks:
-                #         track_order.append(f'0:{track.track_id}')
-                #     mkv_args.append(','.join(track_order))
+                if args.reorder:
+                    if audio_first:
+                        track_order = []
+                        for track in audio_tracks + subtitle_tracks:
+                            track_order.append(f'0:{track.track_id}')
+                    else:
+                        track_order = []
+                        for track in subtitle_tracks + audio_tracks:
+                            track_order.append(f'0:{track.track_id}')
+                        mkv_args.append(','.join(track_order))
 
-                # if track_order:
-                #     mkv_args = [
-                #         '-o',
-                #         f'{file_path.split('.mkv')[0]}_multiplex.mkv',
-                #         '--track-order',
-                #         ','.join(track_order),
-                #     ]
-                #     mkv_multiplex(file_path, mkv_args, dry_run=args.dry_run)
+                    if track_order:
+                        mkv_args = [
+                            '-o',
+                            f'{file_path.split('.mkv')[0]}_multiplex.mkv',
+                            '--track-order',
+                            ','.join(track_order),
+                        ]
+                        mkv_multiplex(file_path, mkv_args, dry_run=args.dry_run)
 
 
 if __name__ == '__main__':
