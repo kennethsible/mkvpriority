@@ -38,25 +38,30 @@ def mkv_identify(file_path: str):
         return json.loads(result.stdout)
 
 
-def mkv_modify(file_path: str, mkv_args: list[str]):
-    print(' '.join(mkv_args))  # TODO remove; used for debugging
+def mkv_modify(file_path: str, mkv_args: list[str], dry_run: bool = False):
+    if dry_run:
+        print(' '.join(mkv_args))
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump([file_path] + mkv_args, temp_file)
         temp_file.flush()
-        subprocess.run(['mkvpropedit', f'@{temp_file.name}'], check=True)
+        if not dry_run:
+            subprocess.run(['mkvpropedit', f'@{temp_file.name}'], check=True)
 
 
-def mkv_multiplex(file_path: str, mkv_args: list[str]):
-    print(' '.join(mkv_args))  # TODO remove; used for debugging
+def mkv_multiplex(file_path: str, mkv_args: list[str], dry_run: bool = False):
+    if dry_run:
+        print(' '.join(mkv_args))
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump([file_path] + mkv_args, temp_file)
         temp_file.flush()
-        subprocess.run(['mkvmerge', f'@{temp_file.name}'], check=True)
+        if not dry_run:
+            subprocess.run(['mkvmerge', f'@{temp_file.name}'], check=True)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', metavar='FILE_PATH', default='config.toml')
+    parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
@@ -94,7 +99,7 @@ def main():
                         uid=mkv_props['uid'],
                         score=0,
                         language=mkv_props['language'],
-                        codec=mkv_track['codec'],
+                        codec=mkv_props['codec'],
                         channels=mkv_props.get('audio_channels', 0),
                         default=mkv_props['default_track'],
                         enabled=mkv_props['enabled_track'],
@@ -118,7 +123,8 @@ def main():
                                     track_record.score += value
 
                         audio_tracks.append(track_record)
-                        pprint.pp(track_record)  # TODO remove; used for debugging
+                        if args.dry_run:
+                            pprint.pp(track_record)
 
                     elif track_record.track_type == 'subtitles':
                         subtitle_languages = config.get('subtitle_languages', {})
@@ -134,7 +140,8 @@ def main():
                                     track_record.score += value
 
                         subtitle_tracks.append(track_record)
-                        pprint.pp(track_record)  # TODO remove; used for debugging
+                        if args.dry_run:
+                            pprint.pp(track_record)
 
                 # audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
                 for tracks in (audio_tracks, subtitle_tracks):
@@ -247,7 +254,7 @@ def main():
                             ]
 
                 if mkv_args:
-                    mkv_modify(file_path, mkv_args)
+                    mkv_modify(file_path, mkv_args, dry_run=args.dry_run)
 
                 # if audio_first:
                 #     track_order = []
@@ -266,7 +273,7 @@ def main():
                 #         '--track-order',
                 #         ','.join(track_order),
                 #     ]
-                #     mkv_multiplex(file_path, mkv_args)
+                #     mkv_multiplex(file_path, mkv_args, dry_run=args.dry_run)
 
 
 if __name__ == '__main__':
