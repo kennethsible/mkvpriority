@@ -28,40 +28,49 @@ def mkv_identify(file_path: str):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', file_path], temp_file)
         temp_file.flush()
-        result = subprocess.run(
-            ['mkvmerge', f'@{temp_file.name}'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding='utf-8',
-            check=True,
-        )
+        try:
+            result = subprocess.run(
+                ['mkvmerge', f'@{temp_file.name}'],
+                capture_output=True,
+                encoding='utf-8',
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            print(e.stderr)
         return json.loads(result.stdout)
 
 
-def mkv_modify(mkv_args: list[str], *, dry_run: bool = False):
-    if dry_run:
-        print('mkvpropedit ' + ' '.join(mkv_args))
+def mkv_modify(mkv_args: list[str]):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(mkv_args, temp_file)
         temp_file.flush()
-        if not dry_run:
-            subprocess.run(['mkvpropedit', f'@{temp_file.name}'], check=True)
+        try:
+            result = subprocess.run(
+                ['mkvpropedit', f'@{temp_file.name}'], capture_output=True, check=True
+            )
+            print(result.stdout)
+        except subprocess.CalledProcessError as e:
+            print(e.stderr)
 
 
-def mkv_multiplex(mkv_args: list[str], *, dry_run: bool = False):
-    if dry_run:
-        print('mkvmerge ' + ' '.join(mkv_args))
+def mkv_multiplex(mkv_args: list[str]):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(mkv_args, temp_file)
         temp_file.flush()
-        if not dry_run:
-            subprocess.run(['mkvmerge', f'@{temp_file.name}'], check=True)
+        try:
+            result = subprocess.run(
+                ['mkvmerge', f'@{temp_file.name}'], capture_output=True, check=True
+            )
+            print(result.stdout)
+        except subprocess.CalledProcessError as e:
+            print(e.stderr)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', metavar='FILE_PATH', default='config.toml')
     parser.add_argument('--dry-run', action='store_true', help='leaves tracks unchanged')
+    parser.add_argument('--verbose', action='store_true', help='outputs track information')
     parser.add_argument('--reorder', action='store_true', help='reorders tracks by score')
     parser.add_argument('--strip', action='store_true', help='strips unwanted tracks')
     parser.add_argument('input_dirs', nargs='*', default=[])
@@ -88,8 +97,7 @@ def main():
                 file_path = os.path.join(root_path, filename)
                 if not os.path.isfile(file_path):
                     continue
-                if args.dry_run:
-                    print(file_path)
+                print('[mkvpriority] ' + file_path)
 
                 mkv_tracks = mkv_identify(file_path)['tracks']
                 audio_tracks, subtitle_tracks = [], []
@@ -127,7 +135,7 @@ def main():
                                     record.score += value
 
                         audio_tracks.append(record)
-                        if args.dry_run:
+                        if args.verbose:
                             pprint.pp(record)
 
                     elif record.track_type == 'subtitles':
@@ -144,7 +152,7 @@ def main():
                                     record.score += value
 
                         subtitle_tracks.append(record)
-                        if args.dry_run:
+                        if args.verbose:
                             pprint.pp(record)
 
                 if args.reorder or args.strip:
@@ -227,8 +235,9 @@ def main():
                 set_default(subtitle_tracks, subtitle_mode)
                 set_forced(subtitle_tracks, subtitle_mode)
 
-                if len(mkv_args) > 1:
-                    mkv_modify(mkv_args, dry_run=args.dry_run)
+                print('[mkvpropedit] ' + ' '.join(mkv_args))
+                if not args.dry_run and len(mkv_args) > 1:
+                    mkv_modify(mkv_args)
 
                 def process_records(
                     records: list[TrackRecord],
@@ -272,8 +281,10 @@ def main():
                         for id_a, id_b in zip(track_order, track_order[1:])
                     ):
                         mkv_args += ['--track-order', ','.join(track_order)]
-                    if len(mkv_args) > 3:
-                        mkv_multiplex(mkv_args, dry_run=args.dry_run)
+
+                    print('[mkvmerge] ' + ' '.join(mkv_args))
+                    if not args.dry_run and len(mkv_args) > 3:
+                        mkv_multiplex(mkv_args)
 
 
 if __name__ == '__main__':
