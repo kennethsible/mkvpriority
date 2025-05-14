@@ -74,3 +74,7 @@ A_AC3 = 4       # Dolby Digital (AC-3)
 A_AAC = 3       # Advanced Audio Coding
 "A_MPEG/L3" = 2 # MP3 (MPEG Layer III)
 ```
+
+## Acknowledgments
+
+This Python script was originally adapted from a Ruby script available on GitHub ([Andy2244/subby](https://github.com/Andy2244/subby)), updated for my specific use cases, and packaged into a convenient Docker image.
