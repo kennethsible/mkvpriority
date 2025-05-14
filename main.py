@@ -61,9 +61,9 @@ def mkv_multiplex(mkv_args: list[str], *, dry_run: bool = False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', metavar='FILE_PATH', default='config.toml')
-    parser.add_argument('--dry-run', action='store_true')
-    parser.add_argument('--reorder', action='store_true')
-    parser.add_argument('--strip', action='store_true')
+    parser.add_argument('--dry-run', action='store_true', help='leaves tracks unchanged')
+    parser.add_argument('--reorder', action='store_true', help='reorders tracks by score')
+    parser.add_argument('--strip', action='store_true', help='strips unwanted tracks')
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
@@ -96,7 +96,7 @@ def main():
 
                 for mkv_track in mkv_tracks:
                     mkv_props = mkv_track['properties']
-                    track_record = TrackRecord(
+                    record = TrackRecord(
                         track_id=mkv_track['id'],
                         track_type=mkv_track['type'],
                         track_name=mkv_props.get('track_name'),
@@ -110,42 +110,42 @@ def main():
                         forced=mkv_props['forced_track'],
                     )
 
-                    if track_record.track_type == 'audio':
+                    if record.track_type == 'audio':
                         audio_languages = config.get('audio_languages', {})
-                        track_record.score += audio_languages.get(track_record.language, 0)
+                        record.score += audio_languages.get(record.language, 0)
 
                         audio_codecs = config.get('audio_codecs', {})
-                        track_record.score += audio_codecs.get(track_record.codec, 0)
+                        record.score += audio_codecs.get(record.codec, 0)
 
                         audio_channels = config.get('audio_channels', {})
-                        track_record.score += audio_channels.get(track_record.channels, 0)
+                        record.score += audio_channels.get(record.channels, 0)
 
-                        if track_record.track_name:
+                        if record.track_name:
                             track_filters = config.get('track_filters', {})
                             for key, value in track_filters.items():
-                                if key in track_record.track_name.lower():
-                                    track_record.score += value
+                                if key in record.track_name.lower():
+                                    record.score += value
 
-                        audio_tracks.append(track_record)
+                        audio_tracks.append(record)
                         if args.dry_run:
-                            pprint.pp(track_record)
+                            pprint.pp(record)
 
-                    elif track_record.track_type == 'subtitles':
+                    elif record.track_type == 'subtitles':
                         subtitle_languages = config.get('subtitle_languages', {})
-                        track_record.score += subtitle_languages.get(track_record.language, 0)
+                        record.score += subtitle_languages.get(record.language, 0)
 
                         subtitle_codecs = config.get('subtitle_codecs', {})
-                        track_record.score += subtitle_codecs.get(track_record.codec, 0)
+                        record.score += subtitle_codecs.get(record.codec, 0)
 
-                        if track_record.track_name:
+                        if record.track_name:
                             track_filters = config.get('track_filters', {})
                             for key, value in track_filters.items():
-                                if key in track_record.track_name.lower():
-                                    track_record.score += value
+                                if key in record.track_name.lower():
+                                    record.score += value
 
-                        subtitle_tracks.append(track_record)
+                        subtitle_tracks.append(record)
                         if args.dry_run:
-                            pprint.pp(track_record)
+                            pprint.pp(record)
 
                 if args.reorder or args.strip:
                     audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
@@ -153,166 +153,116 @@ def main():
                     tracks.sort(reverse=True, key=lambda record: record.score)
                 mkv_args = [file_path]
 
-                if 'default' in audio_mode and len(audio_tracks) > 1:
-                    default_audio = next(
-                        (record for record in audio_tracks if record.default), None
-                    )
-                    if not audio_tracks[0].default:
-                        mkv_args += [
-                            '--edit',
-                            f'track:={audio_tracks[0].uid}',
-                            '--set',
-                            'flag-default=1',
-                        ]
-                        if default_audio:
+                def set_default(records: list[TrackRecord], track_mode: str):
+                    if 'default' in track_mode and len(records) > 1:
+                        default_track = next((record for record in records if record.default), None)
+                        if not records[0].default:
                             mkv_args += [
                                 '--edit',
-                                f'track:={default_audio.uid}',
+                                f'track:={records[0].uid}',
                                 '--set',
-                                'flag-default=0',
+                                'flag-default=1',
                             ]
+                            if default_track:
+                                mkv_args += [
+                                    '--edit',
+                                    f'track:={default_track.uid}',
+                                    '--set',
+                                    'flag-default=0',
+                                ]
 
-                if 'forced' in audio_mode and len(audio_tracks) > 1:
-                    forced_audio = next((record for record in audio_tracks if record.forced), None)
-                    if not audio_tracks[0].forced:
-                        mkv_args += [
-                            '--edit',
-                            f'track:={audio_tracks[0].uid}',
-                            '--set',
-                            'flag-forced=1',
-                        ]
-                        if forced_audio:
+                def set_forced(records: list[TrackRecord], track_mode: str):
+                    if 'forced' in track_mode and len(records) > 1:
+                        forced_track = next((record for record in records if record.forced), None)
+                        if not records[0].forced:
                             mkv_args += [
                                 '--edit',
-                                f'track:={forced_audio.uid}',
+                                f'track:={records[0].uid}',
                                 '--set',
-                                'flag-forced=0',
+                                'flag-forced=1',
                             ]
+                            if forced_track:
+                                mkv_args += [
+                                    '--edit',
+                                    f'track:={forced_track.uid}',
+                                    '--set',
+                                    'flag-forced=0',
+                                ]
 
-                if 'disable' in audio_mode and len(audio_tracks) > 1:
-                    for audio_track in audio_tracks[1:]:
-                        if audio_track.language in audio_languages:
-                            continue
-                        if audio_track.enabled:
+                def set_enabled(records: list[TrackRecord], track_mode: str, languages: list[str]):
+                    if 'disable' in track_mode and len(records) > 1:
+                        for record in records[1:]:
+                            if record.enabled and record.language not in languages:
+                                mkv_args += [
+                                    '--edit',
+                                    f'track:={record.uid}',
+                                    '--set',
+                                    'flag-enabled=0',
+                                ]
+                        if not records[0].enabled:
                             mkv_args += [
                                 '--edit',
-                                f'track:={audio_track.uid}',
-                                '--set',
-                                'flag-enabled=0',
-                            ]
-                    if not audio_tracks[0].enabled:
-                        mkv_args += [
-                            '--edit',
-                            f'track:={audio_tracks[0].uid}',
-                            '--set',
-                            'flag-enabled=1',
-                        ]
-
-                if 'enable' in audio_mode:
-                    for audio_track in audio_tracks:
-                        if not audio_track.enabled:
-                            mkv_args += [
-                                '--edit',
-                                f'track:={audio_track.uid}',
+                                f'track:={records[0].uid}',
                                 '--set',
                                 'flag-enabled=1',
                             ]
 
-                if 'default' in subtitle_mode and len(subtitle_tracks) > 1:
-                    default_subtitle = next(
-                        (record for record in subtitle_tracks if record.default), None
-                    )
-                    if not subtitle_tracks[0].default:
-                        mkv_args += [
-                            '--edit',
-                            f'track:={subtitle_tracks[0].uid}',
-                            '--set',
-                            'flag-default=1',
-                        ]
-                        if default_subtitle:
-                            mkv_args += [
-                                '--edit',
-                                f'track:={default_subtitle.uid}',
-                                '--set',
-                                'flag-default=0',
-                            ]
+                    if 'enable' in track_mode:
+                        for audio_track in records:
+                            if not audio_track.enabled:
+                                mkv_args += [
+                                    '--edit',
+                                    f'track:={audio_track.uid}',
+                                    '--set',
+                                    'flag-enabled=1',
+                                ]
 
-                if 'forced' in subtitle_mode and len(subtitle_tracks) > 1:
-                    forced_subtitle = next(
-                        (record for record in subtitle_tracks if record.forced), None
-                    )
-                    if not subtitle_tracks[0].forced:
-                        mkv_args += [
-                            '--edit',
-                            f'track:={subtitle_tracks[0].uid}',
-                            '--set',
-                            'flag-forced=1',
-                        ]
-                        if forced_subtitle:
-                            mkv_args += [
-                                '--edit',
-                                f'track:={forced_subtitle.uid}',
-                                '--set',
-                                'flag-forced=0',
-                            ]
+                set_default(audio_tracks, audio_mode)
+                set_forced(audio_tracks, audio_mode)
+                set_enabled(audio_tracks, audio_mode, audio_languages)
+
+                set_default(subtitle_tracks, subtitle_mode)
+                set_forced(subtitle_tracks, subtitle_mode)
 
                 if len(mkv_args) > 1:
                     mkv_modify(mkv_args, dry_run=args.dry_run)
 
+                def process_records(
+                    records: list[TrackRecord],
+                    track_order: list[str],
+                    track_strip: list[str],
+                    languages: list[str],
+                ):
+                    for record in records:
+                        if args.reorder and args.strip:
+                            if record.language in languages:
+                                track_order.append(f'0:{record.track_id}')
+                            else:
+                                track_strip.append(f'!{record.track_id}')
+                        elif args.reorder:
+                            track_order.append(f'0:{record.track_id}')
+                        elif args.strip:
+                            if record.language not in languages:
+                                track_strip.append(f'!{record.track_id}')
+
                 if args.reorder or args.strip:
-                    track_order, _audio_tracks, _subtitle_tracks = [], [], []
+                    track_order, audio_strip, subtitle_strip = [], [], []
                     if audio_first:
-                        for audio_track in audio_tracks:
-                            if args.reorder and args.strip:
-                                if audio_track.language in audio_languages:
-                                    track_order.append(f'0:{audio_track.track_id}')
-                                else:
-                                    _audio_tracks.append(f'!{audio_track.track_id}')
-                            elif args.reorder:
-                                track_order.append(f'0:{audio_track.track_id}')
-                            elif args.strip:
-                                if audio_track.language not in audio_languages:
-                                    _audio_tracks.append(f'!{audio_track.track_id}')
-                        for subtitle_track in subtitle_tracks:
-                            if args.reorder and args.strip:
-                                if subtitle_track.language in subtitle_languages:
-                                    track_order.append(f'0:{subtitle_track.track_id}')
-                                else:
-                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
-                            elif args.reorder:
-                                track_order.append(f'0:{subtitle_track.track_id}')
-                            elif args.strip:
-                                if subtitle_track.language not in subtitle_languages:
-                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
+                        process_records(audio_tracks, track_order, audio_strip, audio_languages)
+                        process_records(
+                            subtitle_tracks, track_order, subtitle_strip, subtitle_languages
+                        )
                     else:
-                        for subtitle_track in subtitle_tracks:
-                            if args.reorder and args.strip:
-                                if subtitle_track.language in subtitle_languages:
-                                    track_order.append(f'0:{subtitle_track.track_id}')
-                                else:
-                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
-                            elif args.reorder:
-                                track_order.append(f'0:{subtitle_track.track_id}')
-                            elif args.strip:
-                                if subtitle_track.language not in subtitle_languages:
-                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
-                        for audio_track in audio_tracks:
-                            if args.reorder and args.strip:
-                                if audio_track.language in audio_languages:
-                                    track_order.append(f'0:{audio_track.track_id}')
-                                else:
-                                    _audio_tracks.append(f'!{audio_track.track_id}')
-                            elif args.reorder:
-                                track_order.append(f'0:{audio_track.track_id}')
-                            elif args.strip:
-                                if audio_track.language not in audio_languages:
-                                    _audio_tracks.append(f'!{audio_track.track_id}')
+                        process_records(
+                            subtitle_tracks, track_order, subtitle_strip, subtitle_languages
+                        )
+                        process_records(audio_tracks, track_order, audio_strip, audio_languages)
 
                     mkv_args = ['-o', f'{file_path.split('.mkv')[0]}_multiplex.mkv']
-                    if _audio_tracks:
-                        mkv_args += ['--audio-tracks', ','.join(_audio_tracks)]
-                    if _subtitle_tracks:
-                        mkv_args += ['--subtitle-tracks', ','.join(_subtitle_tracks)]
+                    if audio_strip:
+                        mkv_args += ['--audio-tracks', ','.join(audio_strip)]
+                    if subtitle_strip:
+                        mkv_args += ['--subtitle-tracks', ','.join(subtitle_strip)]
                     mkv_args += [file_path]
                     if track_order and any(
                         int(id_a.split(':')[1]) > int(id_b.split(':')[1])
