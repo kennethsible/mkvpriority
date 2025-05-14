@@ -9,4 +9,4 @@ WORKDIR /app
 COPY main.py .
 COPY config.toml .
 
-CMD ["python", "-u", "main.py"]
+ENTRYPOINT ["python", "-u", "main.py"]

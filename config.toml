@@ -1,7 +1,7 @@
-# === Media Directories ===
+# === Input Directories ===
 # List of directories to scan recursively for MKV files.
 # You can add multiple paths, including network paths.
-media_dirs = ["/anime"]
+input_dirs = []
 
 
 # === Audio Operation Mode ===

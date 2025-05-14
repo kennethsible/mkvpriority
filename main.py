@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import pprint
@@ -54,21 +55,26 @@ def mkv_multiplex(file_path: str, mkv_args: list[str]):
 
 
 def main():
-    with open('config.toml', 'rb') as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', metavar='FILE_PATH', default='config.toml')
+    parser.add_argument('input_dirs', nargs='*', default=[])
+    args = parser.parse_args()
+
+    with open(args.config, 'rb') as f:
         config = tomllib.load(f)
 
-    media_dirs = config.get('media_dirs', [])
-    assert len(media_dirs) > 0
+    input_dirs = config.get('input_dirs', []) + args.input_dirs
+    assert len(input_dirs) > 0
     audio_mode = config.get('audio_mode', [])
     assert 'enable' not in audio_mode or 'disable' not in audio_mode
     subtitle_mode = config.get('subtitle_mode', [])
     assert 'enable' not in subtitle_mode and 'disable' not in subtitle_mode
 
-    for media_dir in media_dirs:
-        if not os.path.isdir(media_dir):
+    for input_dir in input_dirs:
+        if not os.path.isdir(input_dir):
             continue
 
-        for root_path, _, filenames in os.walk(media_dir):
+        for root_path, _, filenames in os.walk(input_dir):
             for filename in filenames:
                 if not filename.lower().endswith('.mkv'):
                     continue
