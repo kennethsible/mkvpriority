@@ -100,7 +100,7 @@ def main():
                         uid=mkv_props['uid'],
                         score=0,
                         language=mkv_props['language'],
-                        codec=mkv_props['codec'],
+                        codec=mkv_props['codec_id'],
                         channels=mkv_props.get('audio_channels', 0),
                         default=mkv_props['default_track'],
                         enabled=mkv_props['enabled_track'],

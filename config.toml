@@ -24,7 +24,7 @@ audio_mode = ["default", "disable"]
 # - 'default' = Sets the preferred subtitle as the default track
 # - 'forced'  = Additionally flags it as "forced" so players will display it automatically
 #
-# Recommended: ['default', 'forced']
+# Recommended: ["default", "forced"]
 # This helps ensure subtitles are shown even if the player isn't configured properly.
 subtitle_mode = ["default", "forced"]
 
@@ -33,32 +33,32 @@ subtitle_mode = ["default", "forced"]
 # Language ranking for audio tracks. Higher values are better.
 # Default: prioritize Japanese audio, with English dubs as a fallback.
 [audio_languages]
-jpn = 120 # Preferred: Japanese audio
-eng = 90  # Acceptable fallback: English dubs
-und = 20  # Use if no language is tagged
+jpn = 100
+eng = 70
+und = 30
 
 
 # === Audio Codec Priorities ===
 # Score audio codecs by quality. Higher values are better.
 # This helps pick higher fidelity audio when multiple options exist.
+
 [audio_codecs]
-DTS-HD.MA = 10
-TrueHD = 9
-FLAC = 8
-DTS = 7
-EAC3 = 6
-AC3 = 5
-AAC = 4
-MP3 = 2
+A_DTSHD_MA = 10
+A_TRUEHD = 9
+A_FLAC = 8
+A_DTS = 7
+A_EAC3 = 6
+A_AC3 = 5
+A_AAC = 4
+"A_MPEG/L3" = 2
 
 
 # === Audio Channel Priorities ===
 # Prefer audio with more channels (e.g. 5.1 surround over stereo).
-# Key = number of channels, Value = priority score.
 [audio_channels]
 8 = 9
 7 = 8
-6 = 10 # Prefer 5.1 audio
+6 = 10 # Prefer 5.1 Surround
 5 = 7
 4 = 6
 3 = 5
@@ -70,48 +70,32 @@ MP3 = 2
 # Rank subtitle languages by preference.
 # 'und' = undefined language, treated as a fallback.
 [subtitle_languages]
-eng = 100 # English subs are preferred
-jpn = 150 # Japanese subs can be useful (e.g. signs for learning)
-und = 30  # Use if no language is tagged
+jpn = 100
+eng = 70
+und = 30
 
 
 # === Track Filters (Subtitle Naming Heuristics) ===
 # Looks at the track *name* to detect its purpose and assign priority.
 # This is especially useful when language or codec alone isn't enough.
-#
-# Positive values = preferred types of subtitles (dialogue)
-# Slightly positive = acceptable types (signs/songs)
-# Negative values = unwanted tracks (commentary, SDH, lyrics, etc.)
-#
-# This section helps distinguish:
-# - Full/dialogue subs (for watching in Japanese)
-# - Signs & songs subs (for English dubs)
-# - Commentary/SDH tracks (which should be ranked last)
+# - Full/Dialogue (for English Subs)
+# - Signs & Songs (for English Dubs)
+# - Commentary/SDH (which should be ranked last)
 [track_filters]
-dialog = 10       # Ideal subtitle: full dialog
-full = 9          # Synonym for full subs
-non_honorific = 2 # Might indicate modified subs (still usable)
-subtitle = 1      # Generic subs, neutral score
-
-# Signs/songs tracks are *valid*, but lower priority than full subs
-sign = 2
-signs = 2
-song = 2
-sing = 2
-
-# Clearly unwanted types
-lyrics = -50
-dub = -50        # Often indicates captions for dubbed lines
-commentar = -199
-shd = -200
-sdh = -200
+dialog = 10
+full = 9
+honorific = 8
+sign = -10
+song = -10
+commentar = -100
+sdh = -100
 
 
 # === Subtitle Codec Preferences ===
 # Ranks subtitle formats by display quality and stylability.
 # ASS (SubStationAlpha) is preferred for anime due to typesetting/styling.
 [subtitle_codecs]
-SubStationAlpha = 2 # Preferred: stylized subtitles (ASS/SSA)
-"SubRip/SRT" = 1    # OK: plain subtitles
-"HDMV PGS" = 0      # Less preferred: image-based (used in Blu-rays)
-VobSub = 0          # Legacy image-based subs
+SubStationAlpha = 2 # stylized subtitles (ASS/SSA)
+"SubRip/SRT" = 1    # plain text subtitles (SRT)
+"HDMV PGS" = 0      # image-based (used in Blu-rays)
+VobSub = 0          # legacy image-based (used in DVDs)
