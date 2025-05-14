@@ -8,14 +8,12 @@ input_dirs = []
 # Determines how the selected audio track will be flagged in the MKV:
 # - 'default' = Sets the chosen track as default (recommended for most players)
 # - 'forced'  = Stronger flag; some players prioritize forced tracks
-# - 'disable_strict' = Disables all other non-selected tracks (optional cleanup)
-# - 'disable' = Disables only non-selected tracks without language rankings
+# - 'disable' = Disables only non-selected tracks for unwanted languages
 # - 'enable'  = Re-enables tracks previously disabled (used to undo 'disable')
 #
 # Recommended: ["default", "disable"]
-# Sets the best-scoring audio track as default and disables some non-selected tracks.
-# Keeps English dubs available for dual-audio use. Do NOT use "disable_strict" if
-# you want to switch audio tracks in your player (e.g., Japanese ↔ English).
+# Sets the best-scoring audio track as default and disables unwanted, non-selected tracks.
+# Keeps English dubs available for dual-audio use. Most players won't respect disabled.
 audio_mode = ["default", "disable"]
 
 

@@ -38,21 +38,21 @@ def mkv_identify(file_path: str):
         return json.loads(result.stdout)
 
 
-def mkv_modify(file_path: str, mkv_args: list[str], dry_run: bool = False):
+def mkv_modify(mkv_args: list[str], *, dry_run: bool = False):
     if dry_run:
         print('mkvpropedit ' + ' '.join(mkv_args))
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump([file_path] + mkv_args, temp_file)
+        json.dump(mkv_args, temp_file)
         temp_file.flush()
         if not dry_run:
             subprocess.run(['mkvpropedit', f'@{temp_file.name}'], check=True)
 
 
-def mkv_multiplex(file_path: str, mkv_args: list[str], dry_run: bool = False):
+def mkv_multiplex(mkv_args: list[str], *, dry_run: bool = False):
     if dry_run:
         print('mkvmerge ' + ' '.join(mkv_args))
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump([file_path] + mkv_args, temp_file)
+        json.dump(mkv_args, temp_file)
         temp_file.flush()
         if not dry_run:
             subprocess.run(['mkvmerge', f'@{temp_file.name}'], check=True)
@@ -63,6 +63,7 @@ def main():
     parser.add_argument('--config', metavar='FILE_PATH', default='config.toml')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--reorder', action='store_true')
+    parser.add_argument('--strip', action='store_true')
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
@@ -146,11 +147,11 @@ def main():
                         if args.dry_run:
                             pprint.pp(track_record)
 
-                if args.reorder:
+                if args.reorder or args.strip:
                     audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
                 for tracks in (audio_tracks, subtitle_tracks):
                     tracks.sort(reverse=True, key=lambda record: record.score)
-                mkv_args = []
+                mkv_args = [file_path]
 
                 if 'default' in audio_mode and len(audio_tracks) > 1:
                     default_audio = next(
@@ -188,13 +189,11 @@ def main():
                                 'flag-forced=0',
                             ]
 
-                disable = 'disable' in audio_mode
-                disable_strict = 'disable_strict' in audio_mode
-                if (disable or disable_strict) and len(audio_tracks) > 1:
+                if 'disable' in audio_mode and len(audio_tracks) > 1:
                     for audio_track in audio_tracks[1:]:
+                        if audio_track.language in audio_languages:
+                            continue
                         if audio_track.enabled:
-                            if disable and audio_track.language in audio_languages:
-                                continue
                             mkv_args += [
                                 '--edit',
                                 f'track:={audio_track.uid}',
@@ -257,28 +256,71 @@ def main():
                                 'flag-forced=0',
                             ]
 
-                if mkv_args:
-                    mkv_modify(file_path, mkv_args, dry_run=args.dry_run)
+                if len(mkv_args) > 1:
+                    mkv_modify(mkv_args, dry_run=args.dry_run)
 
-                if args.reorder:
+                if args.reorder or args.strip:
+                    track_order, _audio_tracks, _subtitle_tracks = [], [], []
                     if audio_first:
-                        track_order = []
-                        for track in audio_tracks + subtitle_tracks:
-                            track_order.append(f'0:{track.track_id}')
+                        for audio_track in audio_tracks:
+                            if args.reorder and args.strip:
+                                if audio_track.language in audio_languages:
+                                    track_order.append(f'0:{audio_track.track_id}')
+                                else:
+                                    _audio_tracks.append(f'!{audio_track.track_id}')
+                            elif args.reorder:
+                                track_order.append(f'0:{audio_track.track_id}')
+                            elif args.strip:
+                                if audio_track.language not in audio_languages:
+                                    _audio_tracks.append(f'!{audio_track.track_id}')
+                        for subtitle_track in subtitle_tracks:
+                            if args.reorder and args.strip:
+                                if subtitle_track.language in subtitle_languages:
+                                    track_order.append(f'0:{subtitle_track.track_id}')
+                                else:
+                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
+                            elif args.reorder:
+                                track_order.append(f'0:{subtitle_track.track_id}')
+                            elif args.strip:
+                                if subtitle_track.language not in subtitle_languages:
+                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
                     else:
-                        track_order = []
-                        for track in subtitle_tracks + audio_tracks:
-                            track_order.append(f'0:{track.track_id}')
-                        mkv_args.append(','.join(track_order))
+                        for subtitle_track in subtitle_tracks:
+                            if args.reorder and args.strip:
+                                if subtitle_track.language in subtitle_languages:
+                                    track_order.append(f'0:{subtitle_track.track_id}')
+                                else:
+                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
+                            elif args.reorder:
+                                track_order.append(f'0:{subtitle_track.track_id}')
+                            elif args.strip:
+                                if subtitle_track.language not in subtitle_languages:
+                                    _subtitle_tracks.append(f'!{subtitle_track.track_id}')
+                        for audio_track in audio_tracks:
+                            if args.reorder and args.strip:
+                                if audio_track.language in audio_languages:
+                                    track_order.append(f'0:{audio_track.track_id}')
+                                else:
+                                    _audio_tracks.append(f'!{audio_track.track_id}')
+                            elif args.reorder:
+                                track_order.append(f'0:{audio_track.track_id}')
+                            elif args.strip:
+                                if audio_track.language not in audio_languages:
+                                    _audio_tracks.append(f'!{audio_track.track_id}')
 
-                    if track_order:
-                        mkv_args = [
-                            '-o',
-                            f'{file_path.split('.mkv')[0]}_multiplex.mkv',
-                            '--track-order',
-                            ','.join(track_order),
-                        ]
-                        mkv_multiplex(file_path, mkv_args, dry_run=args.dry_run)
+                    mkv_args = ['-o', f'{file_path.split('.mkv')[0]}_multiplex.mkv']
+                    if _audio_tracks:
+                        mkv_args += ['--audio-tracks', ','.join(_audio_tracks)]
+                    if _subtitle_tracks:
+                        mkv_args += ['--subtitle-tracks', ','.join(_subtitle_tracks)]
+                    mkv_args += [file_path]
+                    if track_order and any(
+                        int(id_a.split(':')[1]) > int(id_b.split(':')[1])
+                        for id_a, id_b in zip(track_order, track_order[1:])
+                    ):
+                        mkv_args += ['--track-order', ','.join(track_order)]
+                    if len(mkv_args) > 3:
+                        mkv_multiplex(mkv_args, dry_run=args.dry_run)
 
 
 if __name__ == '__main__':
