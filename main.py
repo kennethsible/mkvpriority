@@ -97,7 +97,6 @@ def main():
                 file_path = os.path.join(root_path, filename)
                 if not os.path.isfile(file_path):
                     continue
-                print('[mkvpriority] ' + file_path)
 
                 mkv_tracks = mkv_identify(file_path)['tracks']
                 audio_tracks, subtitle_tracks = [], []
@@ -235,9 +234,10 @@ def main():
                 set_default(subtitle_tracks, subtitle_mode)
                 set_forced(subtitle_tracks, subtitle_mode)
 
-                print('[mkvpropedit] ' + ' '.join(mkv_args))
-                if not args.dry_run and len(mkv_args) > 1:
-                    mkv_modify(mkv_args)
+                if len(mkv_args) > 1:
+                    print('[mkvpropedit] ' + ' '.join(mkv_args))
+                    if not args.dry_run:
+                        mkv_modify(mkv_args)
 
                 def process_records(
                     records: list[TrackRecord],
@@ -282,9 +282,10 @@ def main():
                     ):
                         mkv_args += ['--track-order', ','.join(track_order)]
 
-                    print('[mkvmerge] ' + ' '.join(mkv_args))
-                    if not args.dry_run and len(mkv_args) > 3:
-                        mkv_multiplex(mkv_args)
+                    if len(mkv_args) > 3:
+                        print('[mkvmerge] ' + ' '.join(mkv_args))
+                        if not args.dry_run:
+                            mkv_multiplex(mkv_args)
 
 
 if __name__ == '__main__':
