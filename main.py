@@ -154,6 +154,7 @@ def main():
                 mkv_args = [file_path]
 
                 def set_default(records: list[TrackRecord], track_mode: str):
+                    nonlocal mkv_args
                     if 'default' in track_mode and len(records) > 1:
                         default_track = next((record for record in records if record.default), None)
                         if not records[0].default:
@@ -172,6 +173,7 @@ def main():
                                 ]
 
                 def set_forced(records: list[TrackRecord], track_mode: str):
+                    nonlocal mkv_args
                     if 'forced' in track_mode and len(records) > 1:
                         forced_track = next((record for record in records if record.forced), None)
                         if not records[0].forced:
@@ -190,6 +192,7 @@ def main():
                                 ]
 
                 def set_enabled(records: list[TrackRecord], track_mode: str, languages: list[str]):
+                    nonlocal mkv_args
                     if 'disable' in track_mode and len(records) > 1:
                         for record in records[1:]:
                             if record.enabled and record.language not in languages:
