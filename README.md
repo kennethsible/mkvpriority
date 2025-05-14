@@ -33,18 +33,10 @@ options:
 
 ## Docker Image
 
-A Dockerfile is provided for quick deployment and to simplify the installation process.
-
-### Build the Image
+A Docker image is provided for quick deployment and to simplify the installation process.
 
 ```bash
-docker build -t mkvpriority .
-```
-
-### Run the Container
-
-```bash
-docker run --rm -v /path/to/media:/media mkvpriority /media
+docker run --rm -v /path/to/media:/media ghcr.io/kennethsible/mkvpriority /media
 ```
 
 > [!NOTE]
@@ -58,7 +50,7 @@ To override the default config, use a bind mount:
 docker run --rm \
   -v /path/to/media:/media \
   -v /path/to/custom/config.toml:/app/config.toml \
-  mkvpriority /media
+  ghcr.io/kennethsible/mkvpriority /media
 ```
 
 > [!NOTE]
