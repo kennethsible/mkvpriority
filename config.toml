@@ -80,8 +80,8 @@ und = 30
 # - Signs & Songs (for English Dubs)
 # - Commentary/SDH (which should be ranked last)
 [track_filters]
-dialog = 10      # spoken content subtitles
-full = 9         # dialog subtitles with signs
+full = 10        # dialog subtitles with signs
+dialog = 9       # spoken content subtitles
 honorific = 8    # dialog subtitles with honorifics
 sign = -10       # on-screen text subtitles
 song = -10       # lyrics or karaoke subtitles
