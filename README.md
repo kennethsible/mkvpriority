@@ -16,17 +16,18 @@ A fast, configuration-driven tool designed to prioritize audio and subtitle trac
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed and available in `PATH` for `mkvpropedit` and `mkvmerge` (optional).
 
 ```bash
-usage: main.py [-h] [--config FILE_PATH] [--dry-run] [--verbose] [--reorder] [--strip] [input_dirs ...]
+usage: main.py [-h] [-c FILE_PATH] [-d] [-q] [-v] [-r] [-s] [input_dirs ...]
 
 positional arguments:
   input_dirs
 
 options:
-  --config FILE_PATH
-  --dry-run           leaves tracks unchanged
-  --verbose           outputs track information
-  --reorder           reorders tracks by score
-  --strip             strips unwanted tracks
+  -c FILE_PATH, --config FILE_PATH
+  -d, --dry-run         leaves tracks unchanged
+  -q, --quiet           disables output (stdout)
+  -v, --verbose         outputs track information
+  -r, --reorder         reorders tracks by score
+  -s, --strip           strips unwanted tracks
 ````
 
 > [!WARNING]
