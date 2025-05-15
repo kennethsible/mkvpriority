@@ -16,18 +16,19 @@ A fast, configuration-driven tool designed to prioritize audio and subtitle trac
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed and available in `PATH` for `mkvpropedit` and `mkvmerge` (optional).
 
 ```bash
-usage: main.py [-h] [-c FILE_PATH] [-d] [-q] [-v] [-r] [-s] [input_dirs ...]
+usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-n] [-q] [-v] [-r] [-s] [input_dirs ...]
 
 positional arguments:
   input_dirs
 
 options:
   -c FILE_PATH, --config FILE_PATH
-  -d, --dry-run         leaves tracks unchanged
-  -q, --quiet           disables output (stdout)
-  -v, --verbose         outputs track information
-  -r, --reorder         reorders tracks by score
-  -s, --strip           strips unwanted tracks
+  -a FILE_PATH, --archive FILE_PATH
+  -n, --dry-run         leave tracks unchanged
+  -q, --quiet           suppress standard output
+  -v, --verbose         print detailed information
+  -r, --reorder         reorder tracks by score
+  -s, --strip           remove unwanted tracks
 ````
 
 > [!WARNING]
@@ -51,12 +52,26 @@ To override the default config, use a bind mount:
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/custom/config.toml:/app/config.toml \
+  -v /path/to/config/config.toml:/app/config.toml \
   ghcr.io/kennethsible/mkvpriority /media
 ```
 
 > [!NOTE]
 > `/media` can be included in `config.toml` or passed as an argument.
+
+### Use an Archive Database
+
+To keep track of processed files, use a database:
+
+```bash
+docker run --rm \
+  -v /path/to/media:/media \
+  -v /path/to/database/archive.db:/app/archive.db \
+  ghcr.io/kennethsible/mkvpriority /media
+```
+
+> [!NOTE]
+> A cron job paired with an archive can be used to schedule periodic runs.
 
 ## Configuration (`config.toml`)
 
@@ -79,4 +94,4 @@ A_AAC = 3       # Advanced Audio Coding
 
 ## Acknowledgments
 
-This Python script was originally adapted from a Ruby script available on GitHub ([Andy2244/subby](https://github.com/Andy2244/subby)), updated for my specific use cases, and packaged into a convenient Docker image.
+This Python script was originally adapted from a Ruby script ([Andy2244/subby](https://github.com/Andy2244/subby)), updated for my specific use cases, and packaged into a convenient Docker image.
