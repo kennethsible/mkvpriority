@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import pprint
+import sqlite3
 import subprocess
 from dataclasses import dataclass
 from tempfile import NamedTemporaryFile
@@ -34,9 +35,10 @@ def mkv_identify(file_path: str):
                 capture_output=True,
                 encoding='utf-8',
                 check=True,
+                text=True,
             )
         except subprocess.CalledProcessError as e:
-            print(e.stderr)
+            print(e.stdout.rstrip())
         return json.loads(result.stdout)
 
 
@@ -46,12 +48,12 @@ def mkv_modify(mkv_args: list[str], *, suppress_output: bool = False):
         temp_file.flush()
         try:
             result = subprocess.run(
-                ['mkvpropedit', f'@{temp_file.name}'], capture_output=True, check=True
+                ['mkvpropedit', f'@{temp_file.name}'], capture_output=True, check=True, text=True
             )
             if not suppress_output:
                 print(result.stdout)
         except subprocess.CalledProcessError as e:
-            print(e.stderr)
+            print(e.stdout.rstrip())
 
 
 def mkv_multiplex(mkv_args: list[str], *, suppress_output: bool = False):
@@ -60,25 +62,30 @@ def mkv_multiplex(mkv_args: list[str], *, suppress_output: bool = False):
         temp_file.flush()
         try:
             result = subprocess.run(
-                ['mkvmerge', f'@{temp_file.name}'], capture_output=True, check=True
+                ['mkvmerge', f'@{temp_file.name}'], capture_output=True, check=True, text=True
             )
             if not suppress_output:
                 print(result.stdout)
         except subprocess.CalledProcessError as e:
-            print(e.stderr)
+            print(e.stdout.rstrip())
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', metavar='FILE_PATH', default='config.toml')
-    parser.add_argument('-d', '--dry-run', action='store_true', help='leaves tracks unchanged')
-    parser.add_argument('-q', '--quiet', action='store_true', help='disables output (stdout)')
-    parser.add_argument('-v', '--verbose', action='store_true', help='outputs track information')
-    parser.add_argument('-r', '--reorder', action='store_true', help='reorders tracks by score')
-    parser.add_argument('-s', '--strip', action='store_true', help='strips unwanted tracks')
+    parser.add_argument('-a', '--archive', metavar='FILE_PATH', default='archive.db')
+    parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
+    parser.add_argument('-q', '--quiet', action='store_true', help='suppress standard output')
+    parser.add_argument('-v', '--verbose', action='store_true', help='print detailed information')
+    parser.add_argument('-r', '--reorder', action='store_true', help='reorder tracks by score')
+    parser.add_argument('-s', '--strip', action='store_true', help='remove unwanted tracks')
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
+    if not os.path.isfile(args.config):
+        args.config = 'config.toml'
+        if not args.quiet:
+            print(f'[mkvpriority] \'{args.config}\' not found; using default')
     with open(args.config, 'rb') as f:
         config = tomllib.load(f)
 
@@ -88,6 +95,26 @@ def main():
     assert 'enable' not in audio_mode or 'disable' not in audio_mode
     subtitle_mode = config.get('subtitle_mode', [])
     assert 'enable' not in subtitle_mode and 'disable' not in subtitle_mode
+
+    use_archive = os.path.isfile(args.archive)
+    if use_archive:
+        con = sqlite3.connect(args.archive)
+        cur = con.cursor()
+        cur.execute('CREATE TABLE IF NOT EXISTS archive(file_path TEXT PRIMARY KEY, mtime REAL)')
+    elif not args.quiet:
+        print(f'[mkvpriority] \'{args.archive}\' not found; skipping')
+
+    def is_archived(file_path: str) -> bool:
+        nonlocal cur
+        mtime = os.path.getmtime(file_path)
+        cur.execute('SELECT 1 FROM archive WHERE file_path = ? AND mtime = ?', (file_path, mtime))
+        return cur.fetchone() is not None
+
+    def mkv_archive(file_path: str):
+        nonlocal cur, con
+        mtime = os.path.getmtime(file_path)
+        cur.execute('REPLACE INTO archive (file_path, mtime) VALUES (?, ?)', (file_path, mtime))
+        con.commit()
 
     for input_dir in input_dirs:
         if not os.path.isdir(input_dir):
@@ -99,6 +126,10 @@ def main():
                     continue
                 file_path = os.path.join(root_path, filename)
                 if not os.path.isfile(file_path):
+                    continue
+                if use_archive and is_archived(file_path):
+                    if not args.quiet:
+                        print(f'[mkvpriority] skipping {file_path}')
                     continue
 
                 mkv_tracks = mkv_identify(file_path)['tracks']
@@ -241,7 +272,9 @@ def main():
                     if not args.quiet:
                         print('[mkvpropedit] ' + ' '.join(mkv_args))
                     if not args.dry_run:
-                        mkv_modify(mkv_args, suppress_output=args.quiet)
+                        mkv_modify(mkv_args, suppress_output=args.quiet or not args.verbose)
+                        if use_archive:
+                            mkv_archive(file_path)
 
                 def process_records(
                     records: list[TrackRecord],
@@ -274,7 +307,7 @@ def main():
                         )
                         process_records(audio_tracks, track_order, audio_strip, audio_languages)
 
-                    mkv_args = ['-o', f'{file_path.split('.mkv')[0]}_multiplex.mkv']
+                    mkv_args = ['-o', f'{file_path.split('.mkv')[0]}_remux.mkv']
                     if audio_strip:
                         mkv_args += ['--audio-tracks', ','.join(audio_strip)]
                     if subtitle_strip:
@@ -290,7 +323,9 @@ def main():
                         if not args.quiet:
                             print('[mkvmerge] ' + ' '.join(mkv_args))
                         if not args.dry_run:
-                            mkv_multiplex(mkv_args, suppress_output=args.quiet)
+                            mkv_multiplex(mkv_args, suppress_output=args.quiet or not args.verbose)
+                            if use_archive:
+                                mkv_archive(mkv_args[1])
 
 
 if __name__ == '__main__':
