@@ -1,15 +1,16 @@
 # MKVPriority - MKV Track Prioritizer
 
-A fast, configuration-driven tool designed to prioritize audio and subtitle tracks in MKV files. It was originally created to prioritize Japanese audio tracks with ASS subtitles for watching anime.
+**MKVPriority** assigns configurable priority scores to audio and subtitle tracks, similar to custom formats in Radarr/Sonarr. MKV flags, such as default and forced, are automatically set for the highest-priority tracks (e.g., 5.1 surround and ASS subtitles), while lower-priority tracks (e.g., stereo audio and PGS subtitles) are deprioritized.
 
 > [!IMPORTANT]
-> MKVPriority **modifies track flags in-place** using `mkvpropedit` (no remuxing, non-destructive), allowing media players to automatically select the best audio and subtitle tracks according to your preferences.
+> MKVPriority modifies track flags in place using `mkvpropedit` (**no remuxing, non-destructive**), allowing media players to automatically select the best audio and subtitle tracks according to your preferences.
 
 ## Features
 
-- Assigns configurable priority scores to audio and subtitle tracks (similar to custom formats in Radarr/Sonarr)
-- Automatically sets default/forced flags for the highest priority tracks (e.g., Japanese audio and ASS subtitles)
-- Deprioritizes unwanted audio and subtitle tracks (e.g., English dubs, commentary tracks, signs/songs)
+- Assigns **configurable priority scores** to audio and subtitle tracks (similar to **custom formats** in Radarr/Sonarr)
+- Automatically sets **default/forced flags** for the highest priority tracks (e.g., Japanese audio and ASS subtitles)
+- Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
+- Periodically scans your media library and processes new MKV files (using a cron job with **archive mode**)
 
 ## CLI Usage
 
@@ -43,11 +44,11 @@ docker run --rm -v /path/to/media:/media ghcr.io/kennethsible/mkvpriority /media
 ```
 
 > [!NOTE]
-> This will use the default `config.toml` inside the Docker image.
+> This will use the default `config.toml` inside the image. See below for using a custom config.
 
 ### Use a Custom Config
 
-To override the default config, use a bind mount:
+You can specify your own preferences by creating a custom TOML config that defines track filters by name and assigns scores by property. To override the default config, use a bind mount:
 
 ```bash
 docker run --rm \
@@ -57,11 +58,11 @@ docker run --rm \
 ```
 
 > [!NOTE]
-> `/media` can be included in `config.toml` or passed as an argument.
+> Media directories can be included in `config.toml` or specified as command-line arguments.
 
 ### Use an Archive Database
 
-To keep track of processed files, use a database:
+You can periodically process your media library using a cron job with archive mode. To keep track of processed files, create an SQLite database (e.g., `archive.db`) and use a bind mount:
 
 ```bash
 docker run --rm \
@@ -69,9 +70,6 @@ docker run --rm \
   -v /path/to/database/archive.db:/app/archive.db \
   ghcr.io/kennethsible/mkvpriority /media
 ```
-
-> [!NOTE]
-> A cron job paired with an archive can be used to schedule periodic runs.
 
 ## Configuration (`config.toml`)
 
@@ -94,4 +92,4 @@ A_AAC = 3       # Advanced Audio Coding
 
 ## Acknowledgments
 
-This Python script was originally adapted from a Ruby script ([Andy2244/subby](https://github.com/Andy2244/subby)), updated for my specific use cases, and packaged into a convenient Docker image.
+I've been using the excellent script from [TheCaptain989/radarr-striptracks](https://github.com/TheCaptain989/radarr-striptracks) to remove unwanted audio and subtitle tracks. However, I've always wanted a solution that automatically sets my preferred tracks as default/forced and doesn't require remuxing. After searching GitHub, I found an unmaintained project ([Andy2244/subby](https://github.com/Andy2244/subby)) that I decided to revive and package into a Docker image.
