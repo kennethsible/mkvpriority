@@ -3,7 +3,7 @@
 **MKVPriority** assigns configurable priority scores to audio and subtitle tracks, similar to custom formats in Radarr/Sonarr. MKV flags, such as default and forced, are automatically set for the highest-priority tracks (e.g., 5.1 surround and ASS subtitles), while lower-priority tracks (e.g., stereo audio and PGS subtitles) are deprioritized.
 
 > [!IMPORTANT]
-> MKVPriority modifies track flags in place using `mkvpropedit` (**no remuxing, non-destructive**), allowing media players to automatically select the best audio and subtitle tracks according to your preferences.
+> MKVPriority modifies track flags in place using `mkvpropedit` (**no remuxing**), allowing media players to automatically select the best audio and subtitle tracks according to your preferences.
 
 ## Features
 
@@ -14,9 +14,9 @@
 
 ## CLI Usage
 
-[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed and available in `PATH` for `mkvpropedit` and `mkvmerge` (optional).
+[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
-```bash
+```text
 usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-n] [-q] [-v] [-r] [-s] [input_dirs ...]
 
 positional arguments:
@@ -30,14 +30,14 @@ options:
   -v, --verbose         print detailed information
   -r, --reorder         reorder tracks by score
   -s, --strip           remove unwanted tracks
-````
+```
 
 > [!WARNING]
-> `--reorder` and `--strip` are optional arguments that use `mkvmerge` to reorder and strip tracks, respectively. `mkvmerge`, in contrast to `mkvpropedit`, outputs a remux instead of modifying in-place since reordering and/or stripping tracks requires changing the container format.
+> `--reorder` and `--strip` are optional features that use `mkvmerge`, which, unlike `mkvpropedit`, outputs a remux because reordering and/or stripping tracks requires changing the container format.
 
 ## Docker Image
 
-A Docker image is provided for quick deployment and to simplify the installation process.
+A Docker image is provided to simplify the installation process and enable quick deployment.
 
 ```bash
 docker run --rm -v /path/to/media:/media ghcr.io/kennethsible/mkvpriority /media
@@ -62,7 +62,7 @@ docker run --rm \
 
 ### Use an Archive Database
 
-You can periodically process your media library using a cron job with archive mode. To keep track of processed files, create an SQLite database (e.g., `archive.db`) and use a bind mount:
+You can periodically process your media library using a cron job and an archive database. To keep track of processed files, create an `archive.db` file and use a bind mount:
 
 ```bash
 docker run --rm \
@@ -89,6 +89,10 @@ A_AC3 = 4       # Dolby Digital (AC-3)
 A_AAC = 3       # Advanced Audio Coding
 "A_MPEG/L3" = 2 # MP3 (MPEG Layer III)
 ```
+
+## Limitations
+
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects [hardlinks](https://trash-guides.info/File-and-Folder-Structure/Hardlinks-and-Instant-Moves/) since the metadata is modified.
 
 ## Acknowledgments
 
