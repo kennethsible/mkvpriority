@@ -197,7 +197,6 @@ def main():
                 def set_default(records: list[TrackRecord], track_mode: str):
                     nonlocal mkv_args
                     if 'default' in track_mode and len(records) > 1:
-                        default_track = next((record for record in records if record.default), None)
                         if not records[0].default:
                             mkv_args += [
                                 '--edit',
@@ -205,10 +204,11 @@ def main():
                                 '--set',
                                 'flag-default=1',
                             ]
-                            if default_track:
+                        for record in records[1:]:
+                            if record.default:
                                 mkv_args += [
                                     '--edit',
-                                    f'track:={default_track.uid}',
+                                    f'track:={record.uid}',
                                     '--set',
                                     'flag-default=0',
                                 ]
@@ -216,7 +216,6 @@ def main():
                 def set_forced(records: list[TrackRecord], track_mode: str):
                     nonlocal mkv_args
                     if 'forced' in track_mode and len(records) > 1:
-                        forced_track = next((record for record in records if record.forced), None)
                         if not records[0].forced:
                             mkv_args += [
                                 '--edit',
@@ -224,10 +223,11 @@ def main():
                                 '--set',
                                 'flag-forced=1',
                             ]
-                            if forced_track:
+                        for record in records[1:]:
+                            if record.forced:
                                 mkv_args += [
                                     '--edit',
-                                    f'track:={forced_track.uid}',
+                                    f'track:={record.uid}',
                                     '--set',
                                     'flag-forced=0',
                                 ]
@@ -235,6 +235,13 @@ def main():
                 def set_enabled(records: list[TrackRecord], track_mode: str, languages: list[str]):
                     nonlocal mkv_args
                     if 'disable' in track_mode and len(records) > 1:
+                        if not records[0].enabled:
+                            mkv_args += [
+                                '--edit',
+                                f'track:={records[0].uid}',
+                                '--set',
+                                'flag-enabled=1',
+                            ]
                         for record in records[1:]:
                             if record.enabled and record.language not in languages:
                                 mkv_args += [
@@ -243,14 +250,6 @@ def main():
                                     '--set',
                                     'flag-enabled=0',
                                 ]
-                        if not records[0].enabled:
-                            mkv_args += [
-                                '--edit',
-                                f'track:={records[0].uid}',
-                                '--set',
-                                'flag-enabled=1',
-                            ]
-
                     if 'enable' in track_mode:
                         for audio_track in records:
                             if not audio_track.enabled:
