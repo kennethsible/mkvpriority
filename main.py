@@ -39,6 +39,7 @@ def mkv_identify(file_path: str):
             )
         except subprocess.CalledProcessError as e:
             print(e.stdout.rstrip())
+            raise
         return json.loads(result.stdout)
 
 
@@ -54,6 +55,7 @@ def mkv_modify(mkv_args: list[str], *, suppress_output: bool = False):
                 print(result.stdout)
         except subprocess.CalledProcessError as e:
             print(e.stdout.rstrip())
+            raise
 
 
 def mkv_multiplex(mkv_args: list[str], *, suppress_output: bool = False):
@@ -68,6 +70,7 @@ def mkv_multiplex(mkv_args: list[str], *, suppress_output: bool = False):
                 print(result.stdout)
         except subprocess.CalledProcessError as e:
             print(e.stdout.rstrip())
+            raise
 
 
 def main():
@@ -76,9 +79,10 @@ def main():
     parser.add_argument('-a', '--archive', metavar='FILE_PATH', default='archive.db')
     parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress standard output')
-    parser.add_argument('-v', '--verbose', action='store_true', help='print detailed information')
+    parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
     parser.add_argument('-r', '--reorder', action='store_true', help='reorder tracks by score')
     parser.add_argument('-s', '--strip', action='store_true', help='remove unwanted tracks')
+    parser.add_argument('--restore', action='store_true', help='restore original flags')
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
@@ -97,24 +101,77 @@ def main():
     assert 'enable' not in subtitle_mode and 'disable' not in subtitle_mode
 
     use_archive = os.path.isfile(args.archive)
+    assert not (args.restore and (args.reorder or args.strip))
     if use_archive:
         con = sqlite3.connect(args.archive)
         cur = con.cursor()
-        cur.execute('CREATE TABLE IF NOT EXISTS archive(file_path TEXT PRIMARY KEY, mtime REAL)')
+        cur.execute('PRAGMA foreign_keys = ON')
+        cur.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS archive (
+                file_path TEXT PRIMARY KEY
+            )
+        '''
+        )
+        cur.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS records (
+                file_path TEXT,
+                track_uid TEXT,
+                default_flag INTEGER,
+                forced_flag INTEGER,
+                enabled_flag INTEGER,
+                PRIMARY KEY (file_path, track_uid),
+                FOREIGN KEY(file_path) REFERENCES archive(file_path) ON DELETE CASCADE
+            )
+        '''
+        )
     elif not args.quiet:
         print(f'[mkvpriority] \'{args.archive}\' not found; skipping')
 
     def is_archived(file_path: str) -> bool:
         nonlocal cur
-        mtime = os.path.getmtime(file_path)
-        cur.execute('SELECT 1 FROM archive WHERE file_path = ? AND mtime = ?', (file_path, mtime))
+        cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (file_path,))
         return cur.fetchone() is not None
 
-    def mkv_archive(file_path: str):
+    def insert_entry(file_path: str, records: list[TrackRecord]):
         nonlocal cur, con
-        mtime = os.path.getmtime(file_path)
-        cur.execute('REPLACE INTO archive (file_path, mtime) VALUES (?, ?)', (file_path, mtime))
+        cur.execute('REPLACE INTO archive (file_path) VALUES (?)', (file_path,))
+        for record in records:
+            cur.execute(
+                '''
+                REPLACE INTO records (
+                    file_path,
+                    track_uid,
+                    default_flag,
+                    forced_flag,
+                    enabled_flag
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ''',
+                (
+                    file_path,
+                    str(record.uid),
+                    int(record.default),
+                    int(record.forced),
+                    int(record.enabled),
+                ),
+            )
         con.commit()
+
+    def delete_entry(file_path: str):
+        cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
+        con.commit()
+
+    def restore_track(file_path: str, record: TrackRecord):
+        nonlocal cur
+        cur.execute(
+            'SELECT default_flag, forced_flag, enabled_flag FROM records WHERE file_path = ? AND track_uid = ?',
+            (file_path, str(record.uid)),
+        )
+        result = cur.fetchone()
+        if result:
+            record.default, record.forced, record.enabled = map(bool, result)
 
     for input_dir in input_dirs:
         if not os.path.isdir(input_dir):
@@ -127,7 +184,7 @@ def main():
                 file_path = os.path.join(root_path, filename)
                 if not os.path.isfile(file_path):
                     continue
-                if use_archive and is_archived(file_path):
+                if use_archive and is_archived(file_path) and not args.restore:
                     if not args.quiet:
                         print(f'[mkvpriority] skipping {file_path}')
                     continue
@@ -150,6 +207,17 @@ def main():
                         enabled=mkv_props['enabled_track'],
                         forced=mkv_props['forced_track'],
                     )
+
+                    if use_archive and args.restore:
+                        if args.verbose and not args.quiet:
+                            pprint.pp(record)
+                        if record.track_type == 'audio':
+                            restore_track(file_path, record)
+                            audio_tracks.append(record)
+                        elif record.track_type == 'subtitles':
+                            restore_track(file_path, record)
+                            subtitle_tracks.append(record)
+                        continue
 
                     if record.track_type == 'audio':
                         audio_languages = config.get('audio_languages', {})
@@ -188,11 +256,31 @@ def main():
                         if args.verbose and not args.quiet:
                             pprint.pp(record)
 
+                if use_archive and args.restore:
+                    mkv_args = [file_path]
+                    for record in audio_tracks + subtitle_tracks:
+                        mkv_args += [
+                            '--edit',
+                            f'track:={record.uid}',
+                            '--set',
+                            f'flag-default={int(record.default)}',
+                            '--set',
+                            f'flag-forced={int(record.forced)}',
+                            '--set',
+                            f'flag-enabled={int(record.enabled)}',
+                        ]
+                    if not args.quiet:
+                        print('[mkvpropedit] ' + ' '.join(mkv_args))
+                    if not args.dry_run:
+                        mkv_modify(mkv_args, suppress_output=args.quiet or not args.verbose)
+                        delete_entry(file_path)
+                    return
+
                 if args.reorder or args.strip:
                     audio_first = audio_tracks[0].track_id < subtitle_tracks[0].track_id
                 for tracks in (audio_tracks, subtitle_tracks):
                     tracks.sort(reverse=True, key=lambda record: record.score)
-                mkv_args = [file_path]
+                mkv_args, archive_records = [file_path], []
 
                 def set_default(records: list[TrackRecord], track_mode: str):
                     nonlocal mkv_args
@@ -204,6 +292,7 @@ def main():
                                 '--set',
                                 'flag-default=1',
                             ]
+                            archive_records.append(records[0])
                         for record in records[1:]:
                             if record.default:
                                 mkv_args += [
@@ -212,6 +301,7 @@ def main():
                                     '--set',
                                     'flag-default=0',
                                 ]
+                                archive_records.append(record)
 
                 def set_forced(records: list[TrackRecord], track_mode: str):
                     nonlocal mkv_args
@@ -223,6 +313,7 @@ def main():
                                 '--set',
                                 'flag-forced=1',
                             ]
+                            archive_records.append(records[0])
                         for record in records[1:]:
                             if record.forced:
                                 mkv_args += [
@@ -231,6 +322,7 @@ def main():
                                     '--set',
                                     'flag-forced=0',
                                 ]
+                                archive_records.append(record)
 
                 def set_enabled(records: list[TrackRecord], track_mode: str, languages: list[str]):
                     nonlocal mkv_args
@@ -242,6 +334,7 @@ def main():
                                 '--set',
                                 'flag-enabled=1',
                             ]
+                            archive_records.append(records[0])
                         for record in records[1:]:
                             if record.enabled and record.language not in languages:
                                 mkv_args += [
@@ -250,15 +343,17 @@ def main():
                                     '--set',
                                     'flag-enabled=0',
                                 ]
+                                archive_records.append(record)
                     if 'enable' in track_mode:
-                        for audio_track in records:
-                            if not audio_track.enabled:
+                        for record in records:
+                            if not record.enabled:
                                 mkv_args += [
                                     '--edit',
-                                    f'track:={audio_track.uid}',
+                                    f'track:={record.uid}',
                                     '--set',
                                     'flag-enabled=1',
                                 ]
+                                archive_records.append(record)
 
                 set_default(audio_tracks, audio_mode)
                 set_forced(audio_tracks, audio_mode)
@@ -273,7 +368,7 @@ def main():
                     if not args.dry_run:
                         mkv_modify(mkv_args, suppress_output=args.quiet or not args.verbose)
                         if use_archive:
-                            mkv_archive(file_path)
+                            insert_entry(file_path, archive_records)
 
                 def process_records(
                     records: list[TrackRecord],
@@ -324,7 +419,7 @@ def main():
                         if not args.dry_run:
                             mkv_multiplex(mkv_args, suppress_output=args.quiet or not args.verbose)
                             if use_archive:
-                                mkv_archive(mkv_args[1])
+                                insert_entry(mkv_args[1], [])
 
 
 if __name__ == '__main__':

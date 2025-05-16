@@ -129,7 +129,7 @@ Dummy Subtitle
     }
 
 
-def mkv_multiplex(output_path: Path, tracks: dict[str, Path]):
+def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
     subprocess.run(
         [
             'mkvmerge',
@@ -221,12 +221,12 @@ def get_records(file_path: Path) -> list[main.TrackRecord]:
     return records
 
 
-def test_mkvpriority():
+def test_priority():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
         tracks = create_tracks(temp_path)
-        mkv_multiplex(file_path, tracks)
+        multiplex_tracks(file_path, tracks)
 
         for record in get_records(file_path):
             match record.track_name:
@@ -248,3 +248,36 @@ def test_mkvpriority():
                     assert record.default and record.forced
                 case _:
                     assert not record.default and not record.forced
+
+
+def test_restore():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        tracks = create_tracks(temp_path)
+        multiplex_tracks(file_path, tracks)
+
+        with tempfile.NamedTemporaryFile() as archive_file:
+            sys.argv = ['main.py', '-q', '-a', archive_file.name, temp_dir]
+            main.main()
+
+            for record in get_records(file_path):
+                match record.track_name:
+                    case '5.1 FLAC (Japanese)':
+                        assert record.default
+                    case 'Full Subtitles [FanSub]':
+                        assert record.default and record.forced
+                    case _:
+                        assert not record.default and not record.forced
+
+            sys.argv = ['main.py', '-q', '-a', archive_file.name, temp_dir, '--restore']
+            main.main()
+
+            for record in get_records(file_path):
+                match record.track_name:
+                    case 'Stereo AAC (English)':
+                        assert record.default
+                    case 'Signs & Songs [FanSub]':
+                        assert record.forced
+                    case _:
+                        assert not record.default and not record.forced
