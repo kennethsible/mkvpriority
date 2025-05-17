@@ -244,6 +244,7 @@ def mkvpropedit(
         if not dry_run:
             modify(mkv_args)
             database.delete(file_path)
+            logger.info(f'[mkvpriority] \'{file_path}\' restored; removed from archive')
         return
 
     archive_tracks: list[Track] = []
@@ -411,7 +412,7 @@ def main():
     logger.addHandler(logging.StreamHandler(sys.stdout))
 
     if not os.path.isfile(args.config):
-        logger.info(f'\'{args.config}\' not found; using default')
+        logger.info(f'[mkvpriority] \'{args.config}\' not found; using default')
         args.config = 'config.toml'
     with open(args.config, 'rb') as f:
         toml_file = tomllib.load(f)
@@ -429,13 +430,13 @@ def main():
 
     input_dirs = toml_file.get('input_dirs', []) + args.input_dirs
     if len(input_dirs) == 0:
-        parser.error('at least one directory must be provided')
+        parser.error('at least one input_dirs must be provided')
     if args.restore and (args.reorder or args.strip):
-        parser.error('restore mode is incompatible with reorder/strip')
+        parser.error('--restore is incompatible with --reorder and --strip')
     if 'enable' in config.audio_mode and 'disable' in config.audio_mode:
-        parser.error('audio_mode cannot contain both enable and disable')
+        parser.error('--enable and --disable cannot be used simultaneously')
     if 'enable' in config.subtitle_mode or 'disable' in config.subtitle_mode:
-        parser.error('enable and disable are unsupported for subtitle_mode')
+        parser.error('--enable and --disable are unsupported for subtitle_mode')
 
     archive_mode = os.path.isfile(args.archive)
     restore_mode = archive_mode and args.restore
@@ -443,7 +444,9 @@ def main():
     if archive_mode:
         database = Database(args.archive)
     else:
-        logger.info(f'\'{args.archive}\' not found; skipping')
+        logger.info(f'[mkvpriority] \'{args.archive}\' not found; skipping')
+        if args.restore:
+            parser.error('cannot use --restore without --archive (database required)')
         database = None
 
     for input_dir in input_dirs:
@@ -457,9 +460,14 @@ def main():
                 file_path = os.path.join(root_path, filename)
                 if not os.path.isfile(file_path):
                     continue
-                if archive_mode and not restore_mode and database.contains(file_path):
-                    logger.info(f'\'{file_path}\' archived; skipping')
-                    continue
+                if archive_mode:
+                    is_archived = database.contains(file_path)
+                    if restore_mode and not is_archived:
+                        logger.info(f'[mkvpriority] \'{file_path}\' not archived; cannot restore')
+                        continue
+                    if not restore_mode and is_archived:
+                        logger.info(f'[mkvpriority] \'{file_path}\' archived; skipping')
+                        continue
 
                 process_file(
                     file_path,
