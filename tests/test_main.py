@@ -94,7 +94,8 @@ def create_tracks(temp_dir: Path) -> dict[str, Path]:
     # 5. English Subtitles ASS/SRT
     sub1_path = temp_dir / 'full_subs.ass'
     sub2_path = temp_dir / 'signs_songs.ass'
-    sub3_path = temp_dir / 'dialogue.srt'
+    sub3_path = temp_dir / 'dialogue_eng.srt'
+    sub4_path = temp_dir / 'dialogue_ger.srt'
 
     ass_template = '''
 [Script Info]
@@ -117,6 +118,7 @@ Dummy Subtitle
     sub1_path.write_text(ass_template.strip())
     sub2_path.write_text(ass_template.strip())
     sub3_path.write_text(srt_template.strip())
+    sub4_path.write_text(srt_template.strip())
 
     return {
         'video': video_path,
@@ -126,6 +128,7 @@ Dummy Subtitle
         'subs1': sub1_path,
         'subs2': sub2_path,
         'subs3': sub3_path,
+        'subs4': sub4_path,
     }
 
 
@@ -141,14 +144,6 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '--default-track',
             '0:no',
             str(tracks['video']),
-            # Japanese Audio FLAC
-            '--language',
-            '0:jpn',
-            '--track-name',
-            '0:5.1 FLAC (Japanese)',
-            '--default-track',
-            '0:no',
-            str(tracks['audio1']),
             # Japanese Audio AAC
             '--language',
             '0:jpn',
@@ -165,6 +160,14 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '--default-track',
             '0:yes',
             str(tracks['audio3']),
+            # Japanese Audio FLAC
+            '--language',
+            '0:jpn',
+            '--track-name',
+            '0:5.1 FLAC (Japanese)',
+            '--default-track',
+            '0:no',
+            str(tracks['audio1']),
             # English Subtitles ASS
             '--language',
             '0:eng',
@@ -183,6 +186,14 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '--forced-track',
             '0:yes',
             str(tracks['subs2']),
+            # German Subtitles SRT
+            '--language',
+            '0:ger',
+            '--track-name',
+            '0:Dialogue [Blu-ray]',
+            '--default-track',
+            '0:no',
+            str(tracks['subs4']),
             # English Subtitles SRT
             '--language',
             '0:eng',
@@ -250,7 +261,43 @@ def test_mkvpropedit():
 
 
 def test_mkvmerge():
-    pass
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        tracks = create_tracks(temp_path)
+        multiplex_tracks(file_path, tracks)
+
+        count_i = 0
+        for track in extract_tracks(file_path):
+            match track.track_name:
+                case '5.1 FLAC (Japanese)':
+                    assert track.track_id == 3
+                case 'Stereo AAC (English)':
+                    assert track.default and track.track_id == 2
+                case 'Signs & Songs [FanSub]':
+                    assert track.forced and track.track_id == 5
+                case _:
+                    assert not track.default and not track.forced
+            count_i += 1
+
+        sys.argv = ['main.py', '-q', '-r', '-s', temp_dir]
+        main.main()
+
+        count_f, ger_srt = 0, False
+        for track in extract_tracks(temp_path / 'dummy_remux.mkv'):
+            match track.track_name:
+                case 'Dummy Video':
+                    assert track.track_id == 0
+                case '5.1 FLAC (Japanese)':
+                    assert track.default and track.track_id == 1
+                case 'Full Subtitles [FanSub]':
+                    assert track.default and track.forced and track.track_id == 4
+                case _:
+                    assert not track.default and not track.forced
+            if track.language == 'ger':
+                ger_srt = True
+            count_f += 1
+        assert not ger_srt and count_i == count_f + 1
 
 
 def test_restore():
