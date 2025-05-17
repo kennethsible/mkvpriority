@@ -198,56 +198,59 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
     )
 
 
-def get_records(file_path: Path) -> list[main.TrackRecord]:
-    mkv_tracks = main.mkv_identify(str(file_path))['tracks']
-    records = []
-    for mkv_track in mkv_tracks:
-        mkv_props = mkv_track['properties']
-        records.append(
-            main.TrackRecord(
-                track_id=mkv_track['id'],
-                track_type=mkv_track['type'],
-                track_name=mkv_props.get('track_name'),
-                uid=mkv_props['uid'],
+def extract_tracks(file_path: Path) -> list[main.Track]:
+    tracks = []
+    for metadata in main.identify(str(file_path))['tracks']:
+        properties = metadata['properties']
+        tracks.append(
+            main.Track(
+                track_id=metadata['id'],
+                track_type=metadata['type'],
+                track_name=properties.get('track_name'),
+                uid=properties['uid'],
                 score=0,
-                language=mkv_props['language'],
-                codec=mkv_props['codec_id'],
-                channels=mkv_props.get('audio_channels', 0),
-                default=mkv_props['default_track'],
-                enabled=mkv_props['enabled_track'],
-                forced=mkv_props['forced_track'],
+                language=properties['language'],
+                codec=properties['codec_id'],
+                channels=properties.get('audio_channels', 0),
+                default=properties['default_track'],
+                enabled=properties['enabled_track'],
+                forced=properties['forced_track'],
             )
         )
-    return records
+    return tracks
 
 
-def test_priority():
+def test_mkvpropedit():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
         tracks = create_tracks(temp_path)
         multiplex_tracks(file_path, tracks)
 
-        for record in get_records(file_path):
-            match record.track_name:
+        for track in extract_tracks(file_path):
+            match track.track_name:
                 case 'Stereo AAC (English)':
-                    assert record.default
+                    assert track.default
                 case 'Signs & Songs [FanSub]':
-                    assert record.forced
+                    assert track.forced
                 case _:
-                    assert not record.default and not record.forced
+                    assert not track.default and not track.forced
 
         sys.argv = ['main.py', '-q', temp_dir]
         main.main()
 
-        for record in get_records(file_path):
-            match record.track_name:
+        for track in extract_tracks(file_path):
+            match track.track_name:
                 case '5.1 FLAC (Japanese)':
-                    assert record.default
+                    assert track.default
                 case 'Full Subtitles [FanSub]':
-                    assert record.default and record.forced
+                    assert track.default and track.forced
                 case _:
-                    assert not record.default and not record.forced
+                    assert not track.default and not track.forced
+
+
+def test_mkvmerge():
+    pass
 
 
 def test_restore():
@@ -261,23 +264,23 @@ def test_restore():
             sys.argv = ['main.py', '-q', '-a', archive_file.name, temp_dir]
             main.main()
 
-            for record in get_records(file_path):
-                match record.track_name:
+            for track in extract_tracks(file_path):
+                match track.track_name:
                     case '5.1 FLAC (Japanese)':
-                        assert record.default
+                        assert track.default
                     case 'Full Subtitles [FanSub]':
-                        assert record.default and record.forced
+                        assert track.default and track.forced
                     case _:
-                        assert not record.default and not record.forced
+                        assert not track.default and not track.forced
 
             sys.argv = ['main.py', '-q', '-a', archive_file.name, temp_dir, '--restore']
             main.main()
 
-            for record in get_records(file_path):
-                match record.track_name:
+            for track in extract_tracks(file_path):
+                match track.track_name:
                     case 'Stereo AAC (English)':
-                        assert record.default
+                        assert track.default
                     case 'Signs & Songs [FanSub]':
-                        assert record.forced
+                        assert track.forced
                     case _:
-                        assert not record.default and not record.forced
+                        assert not track.default and not track.forced
