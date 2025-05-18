@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import os
-import pprint
 import sqlite3
 import subprocess
 import sys
@@ -12,6 +11,7 @@ from tempfile import NamedTemporaryFile
 import tomllib
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 @dataclass
@@ -178,8 +178,7 @@ def extract_tracks(
         )
 
         if restore_mode:
-            if logger.level == logging.DEBUG:
-                pprint.pp(track)
+            logger.debug(f'[mkvpriority] {track}')
             if track.track_type == 'audio':
                 database.restore_track(file_path, track)
                 audio_tracks.append(track)
@@ -200,8 +199,7 @@ def extract_tracks(
                     if key in track.track_name.lower():
                         track.score += value
             audio_tracks.append(track)
-            if logger.level == logging.DEBUG:
-                pprint.pp(track)
+            logger.debug(f'[mkvpriority] {track}')
 
         elif track.track_type == 'subtitles':
             track.score += config.subtitle_languages.get(track.language, 0)
@@ -211,8 +209,7 @@ def extract_tracks(
                     if key in track.track_name.lower():
                         track.score += value
             subtitle_tracks.append(track)
-            if logger.level == logging.DEBUG:
-                pprint.pp(track)
+            logger.debug(f'[mkvpriority] {track}')
 
     return video_tracks, audio_tracks, subtitle_tracks
 
@@ -409,7 +406,6 @@ def main():
     logger.setLevel(
         logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
     )
-    logger.addHandler(logging.StreamHandler(sys.stdout))
 
     if not os.path.isfile(args.config):
         logger.info(f'[mkvpriority] \'{args.config}\' not found; using default')
