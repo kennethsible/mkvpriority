@@ -10,7 +10,8 @@
 - Assigns **configurable priority scores** to audio and subtitle tracks (similar to **custom formats** in Radarr/Sonarr)
 - Automatically sets **default/forced flags** for the highest priority tracks (e.g., Japanese audio and ASS subtitles)
 - Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
-- Periodically scans your media library and processes new MKV files (using a cron job with **archive mode**)
+- Periodically scans your media library and processes new MKV files when using a cron job with **archive mode**
+- Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
 
 ## CLI Usage
 
@@ -71,6 +72,29 @@ docker run --rm \
   -v /path/to/database/archive.db:/app/archive.db \
   ghcr.io/kennethsible/mkvpriority /media
 ```
+
+## Radarr/Sonarr Integration
+
+You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting "On File Import." For Radarr/Sonarr to recognize the custom script, place a copy of it in one of their mounted directories.
+
+```yaml
+mkvpriority:
+  image: ghcr.io/kennethsible/mkvpriority
+  container_name: mkvpriority
+  environment:
+    - SONARR_URL=http://sonarr:8989
+    - SONARR_API_KEY=${SONARR_API_KEY}
+    - RADARR_URL=http://radarr:7878
+    - RADARR_API_KEY=${RADARR_API_KEY}
+    - MKVPRIORITY_ARGS=
+  volumes:
+    - /path/to/media/anime:/anime
+    - /path/to/database/archive.db:/app/archive.db
+  restart: unless-stopped
+```
+
+> [!NOTE]
+> To add a custom script to Radarr/Sonarr, go to Settings > Connect > Add Connection > Custom Script.
 
 ## Configuration (`config.toml`)
 

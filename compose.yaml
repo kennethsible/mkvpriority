@@ -1,0 +1,28 @@
+services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr
+    container_name: sonarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /path/to/media/anime:/anime
+      # copy mkvpriority.sh to /config
+      - /path/to/sonarr/config:/config
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  mkvpriority:
+    image: ghcr.io/kennethsible/mkvpriority
+    container_name: mkvpriority
+    environment:
+      - SONARR_URL=http://sonarr:8989
+      - SONARR_API_KEY=${SONARR_API_KEY}
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY=${RADARR_API_KEY}
+      - MKVPRIORITY_ARGS=
+    volumes:
+      - /path/to/media/anime:/anime
+      - /path/to/database/archive.db:/app/archive.db
+    restart: unless-stopped

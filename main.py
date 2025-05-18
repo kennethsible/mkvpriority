@@ -440,16 +440,42 @@ def main():
 
     archive_mode = os.path.isfile(args.archive)
     restore_mode = archive_mode and args.restore
-    reorder_mode, strip_mode = args.reorder, args.strip
     if archive_mode:
         database = Database(args.archive)
     else:
-        logger.info(f'[mkvpriority] \'{args.archive}\' not found; skipping')
+        logger.info(f'[mkvpriority] \'{args.archive}\' not found; disabling database')
         if args.restore:
             parser.error('cannot use --restore without --archive (database required)')
         database = None
 
     for input_dir in input_dirs:
+        if os.path.isfile(input_dir):
+            file_path = input_dir
+            filename = os.path.basename(file_path)
+            if not filename.lower().endswith('.mkv'):
+                continue
+            if archive_mode:
+                is_archived = database.contains(file_path)
+                if not restore_mode and is_archived:
+                    logger.info(f'[mkvpriority] \'{file_path}\' archived; skipping file')
+                    continue
+                if restore_mode and not is_archived:
+                    logger.info(f'[mkvpriority] \'{file_path}\' not archived; cannot restore')
+                    continue
+
+            process_file(
+                file_path,
+                config,
+                database,
+                archive_mode,
+                restore_mode,
+                args.reorder,
+                args.strip,
+                args.dry_run,
+            )
+
+            continue
+
         if not os.path.isdir(input_dir):
             continue
 
@@ -462,11 +488,11 @@ def main():
                     continue
                 if archive_mode:
                     is_archived = database.contains(file_path)
+                    if not restore_mode and is_archived:
+                        logger.info(f'[mkvpriority] \'{file_path}\' archived; skipping file')
+                        continue
                     if restore_mode and not is_archived:
                         logger.info(f'[mkvpriority] \'{file_path}\' not archived; cannot restore')
-                        continue
-                    if not restore_mode and is_archived:
-                        logger.info(f'[mkvpriority] \'{file_path}\' archived; skipping')
                         continue
 
                 process_file(
@@ -475,8 +501,8 @@ def main():
                     database,
                     archive_mode,
                     restore_mode,
-                    reorder_mode,
-                    strip_mode,
+                    args.reorder,
+                    args.strip,
                     args.dry_run,
                 )
 
