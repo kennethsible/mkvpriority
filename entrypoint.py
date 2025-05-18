@@ -11,7 +11,6 @@ from aiohttp import web
 import main
 
 logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler(sys.stdout))
 
 processing_queue: asyncio.Queue[tuple[str, str, int]] = asyncio.Queue()
 
@@ -22,18 +21,16 @@ RADARR_API_KEY = os.getenv('RADARR_API_KEY')
 MKVPRIORITY_ARGS = os.getenv('MKVPRIORITY_ARGS', '')
 
 
-async def trigger_rescan(arr_name: str, item_id: int):
+async def rescan_folder(arr_name: str, media_id: int):
     match arr_name:
         case 'Sonarr':
-            command_name, id_name = 'RescanSeries', 'seriesId'
             if SONARR_URL is None or SONARR_API_KEY is None:
-                logger.error('[mkvpriority] SONARR_URL/SONARR_API_KEY is missing; skipping rescan')
+                logger.error('SONARR_URL/SONARR_API_KEY is missing; skipping rescan')
                 return
             api_url, api_key = SONARR_URL + '/api/v3/command', SONARR_API_KEY
         case 'Radarr':
-            command_name, id_name = 'RescanMovie', 'movieId'
             if RADARR_URL is None or RADARR_API_KEY is None:
-                logger.error('[mkvpriority] RADARR_URL/RADARR_API_KEY is missing; skipping rescan')
+                logger.error('RADARR_URL/RADARR_API_KEY is missing; skipping rescan')
                 return
             api_url, api_key = RADARR_URL + '/api/v3/command', RADARR_API_KEY
         case _:
@@ -41,24 +38,27 @@ async def trigger_rescan(arr_name: str, item_id: int):
 
     headers = {'X-Api-Key': api_key}
     async with aiohttp.ClientSession() as session:
-        payload = {'name': command_name, id_name: item_id}
+        payload = {
+            'name': 'RescanSeries' if arr_name == 'Sonarr' else 'RescanMovie',
+            'seriesId' if arr_name == 'Sonarr' else 'movieId': media_id,
+        }
         async with session.post(api_url, json=payload, headers=headers) as response:
             if response.status != 201:
-                logger.error(f'[mkvpriority] {command_name} failed; status {response.status}')
+                logger.error(f'{payload['name']} failed; status {response.status}')
 
 
 async def queue_worker():
     while True:
-        file_path, arr_name, item_id = await processing_queue.get()
+        file_path, arr_name, media_id = await processing_queue.get()
         try:
             sys.argv = ['main.py', *MKVPRIORITY_ARGS.split(), file_path]
             await asyncio.get_event_loop().run_in_executor(None, main.main)
             try:
-                await trigger_rescan(arr_name, item_id)
+                await rescan_folder(arr_name, media_id)
             except aiohttp.ClientConnectorError:
-                logger.error(f'[mkvpriority] {arr_name} API is unreachable; skipping rescan')
+                logger.error(f'{arr_name} API is unreachable; skipping rescan')
         except subprocess.CalledProcessError:
-            logger.error(f'[mkvpriority] \'{file_path}\' error occurred; skipping file')
+            logger.error(f'error occurred; skipping file: \'{file_path}\'')
         finally:
             processing_queue.task_done()
 
@@ -67,9 +67,9 @@ async def preprocess_handler(request: web.Request) -> web.Response:
     args = await request.json()
     arr_name = args.get('arr_name')
     file_path = args.get('file_path')
-    item_id = int(args.get('item_id'))
+    media_id = int(args.get('media_id'))
 
-    await processing_queue.put((file_path, arr_name, item_id))
+    await processing_queue.put((file_path, arr_name, media_id))
     return web.json_response({'message': f'\'{file_path}\' recieved from {arr_name}'})
 
 
@@ -94,6 +94,10 @@ def start_api():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
     if SONARR_URL or RADARR_URL:
         start_api()
     else:

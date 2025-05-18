@@ -19,8 +19,10 @@ audio_mode = ["default", "disable"]
 
 # === Subtitle Operation Mode ===
 # Similar to audio_mode, this controls subtitle flags:
-# - 'default' = Sets the preferred subtitle as the default track
-# - 'forced'  = Additionally flags it as "forced" so players will display it automatically
+# - 'default' = Sets the chosen track as default (recommended for most players)
+# - 'forced'  = Stronger flag; some players prioritize forced tracks
+# - 'disable' = Disables only non-selected tracks for unwanted languages
+# - 'enable'  = Re-enables tracks previously disabled (used to undo 'disable')
 #
 # Recommended: ["default", "forced"]
 # This helps ensure subtitles are shown even if the player isn't configured properly.

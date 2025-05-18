@@ -10,8 +10,9 @@ from tempfile import NamedTemporaryFile
 
 import tomllib
 
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler(sys.stdout))
+mkvpriority_logger = logging.getLogger('mkvpriority')
+mkvpropedit_logger = logging.getLogger('mkvpropedit')
+mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
 @dataclass
@@ -109,7 +110,7 @@ class Database:
             track.default, track.forced, track.enabled = map(bool, result)
 
 
-def identify(file_path: str):
+def identify_tracks(file_path: str):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', file_path], temp_file)
         temp_file.flush()
@@ -122,12 +123,12 @@ def identify(file_path: str):
                 text=True,
             )
         except subprocess.CalledProcessError as e:
-            logger.error(e.stdout.rstrip())
+            mkvmerge_logger.error(e.stdout.rstrip())
             raise
         return json.loads(result.stdout)
 
 
-def modify(mkv_args: list[str]):
+def modify_tracks(mkv_args: list[str]):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(mkv_args, temp_file)
         temp_file.flush()
@@ -135,13 +136,13 @@ def modify(mkv_args: list[str]):
             result = subprocess.run(
                 ['mkvpropedit', f'@{temp_file.name}'], capture_output=True, check=True, text=True
             )
-            logger.debug(result.stdout)
+            mkvpropedit_logger.debug(result.stdout)
         except subprocess.CalledProcessError as e:
-            logger.error(e.stdout.rstrip())
+            mkvpropedit_logger.error(e.stdout.rstrip())
             raise
 
 
-def multiplex(mkv_args: list[str]):
+def multiplex_tracks(mkv_args: list[str]):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(mkv_args, temp_file)
         temp_file.flush()
@@ -149,18 +150,21 @@ def multiplex(mkv_args: list[str]):
             result = subprocess.run(
                 ['mkvmerge', f'@{temp_file.name}'], capture_output=True, check=True, text=True
             )
-            logger.debug(result.stdout)
+            mkvmerge_logger.debug(result.stdout)
         except subprocess.CalledProcessError as e:
-            logger.error(e.stdout.rstrip())
+            mkvmerge_logger.error(e.stdout.rstrip())
             raise
 
 
 def extract_tracks(
-    file_path: str, config: Config, database: Database, restore_mode: bool
+    file_path: str,
+    config: Config | None = None,
+    database: Database | None = None,
+    restore: bool = False,
 ) -> tuple[list[Track], list[Track], list[Track]]:
     video_tracks, audio_tracks, subtitle_tracks = [], [], []
 
-    for metadata in identify(file_path)['tracks']:
+    for metadata in identify_tracks(file_path)['tracks']:
         properties = metadata['properties']
 
         track = Track(
@@ -177,8 +181,11 @@ def extract_tracks(
             forced=properties['forced_track'],
         )
 
-        if restore_mode:
-            logger.debug(f'[mkvpriority] {track}')
+        if config and restore:
+            if database is None:
+                mkvpriority_logger.error('cannot restore without archive (database)')
+                return [], [], []
+            mkvpriority_logger.debug(str(track))
             if track.track_type == 'audio':
                 database.restore_track(file_path, track)
                 audio_tracks.append(track)
@@ -191,42 +198,46 @@ def extract_tracks(
             video_tracks.append(track)
 
         elif track.track_type == 'audio':
-            track.score += config.audio_languages.get(track.language, 0)
-            track.score += config.audio_codecs.get(track.codec, 0)
-            track.score += config.audio_channels.get(track.channels, 0)
-            if track.track_name:
-                for key, value in config.track_filters.items():
-                    if key in track.track_name.lower():
-                        track.score += value
+            if config:
+                track.score += config.audio_languages.get(track.language, 0)
+                track.score += config.audio_codecs.get(track.codec, 0)
+                track.score += config.audio_channels.get(track.channels, 0)
+                if track.track_name:
+                    for key, value in config.track_filters.items():
+                        if key in track.track_name.lower():
+                            track.score += value
             audio_tracks.append(track)
-            logger.debug(f'[mkvpriority] {track}')
+            mkvpriority_logger.debug(str(track))
 
         elif track.track_type == 'subtitles':
-            track.score += config.subtitle_languages.get(track.language, 0)
-            track.score += config.subtitle_codecs.get(track.codec, 0)
-            if track.track_name:
-                for key, value in config.track_filters.items():
-                    if key in track.track_name.lower():
-                        track.score += value
+            if config:
+                track.score += config.subtitle_languages.get(track.language, 0)
+                track.score += config.subtitle_codecs.get(track.codec, 0)
+                if track.track_name:
+                    for key, value in config.track_filters.items():
+                        if key in track.track_name.lower():
+                            track.score += value
             subtitle_tracks.append(track)
-            logger.debug(f'[mkvpriority] {track}')
+            mkvpriority_logger.debug(str(track))
 
     return video_tracks, audio_tracks, subtitle_tracks
 
 
 def mkvpropedit(
     file_path: str,
-    config: Config,
-    database: Database,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
-    archive_mode: bool,
-    restore_mode: bool,
-    dry_run: bool,
+    config: Config,
+    database: Database | None = None,
+    restore: bool = False,
+    dry_run: bool = False,
 ):
-    if restore_mode:
+    if restore:
+        if database is None:
+            mkvpriority_logger.error('cannot restore without archive (database)')
+            return
         mkv_args = [file_path]
-        for track in audio_tracks + subtitle_tracks:
+        for track in [*audio_tracks, *subtitle_tracks]:
             mkv_args += [
                 '--edit',
                 f'track:={track.uid}',
@@ -237,11 +248,11 @@ def mkvpropedit(
                 '--set',
                 f'flag-enabled={int(track.enabled)}',
             ]
-        logger.info('[mkvpropedit] ' + ' '.join(mkv_args))
+        mkvpropedit_logger.info(' '.join(mkv_args))
         if not dry_run:
-            modify(mkv_args)
+            modify_tracks(mkv_args)
             database.delete(file_path)
-            logger.info(f'[mkvpriority] \'{file_path}\' restored; removed from archive')
+            mkvpriority_logger.info(f'file restored; removed from archive: \'{file_path}\'')
         return
 
     archive_tracks: list[Track] = []
@@ -283,24 +294,23 @@ def mkvpropedit(
     process_tracks(subtitle_tracks, config.subtitle_mode, config.subtitle_languages)
 
     if len(mkv_args) > 1:
-        logger.info('[mkvpropedit] ' + ' '.join(mkv_args))
+        mkvpropedit_logger.info(' '.join(mkv_args))
         if not dry_run:
-            modify(mkv_args)
-            if archive_mode:
+            modify_tracks(mkv_args)
+            if database is not None:
                 database.insert(file_path, archive_tracks)
 
 
 def mkvmerge(
     file_path: str,
-    config: Config,
-    database: Database,
     video_tracks: list[Track],
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
-    archive_mode: bool,
-    reorder_mode: bool,
-    strip_mode: bool,
-    dry_run: bool,
+    config: Config,
+    database: Database | None = None,
+    reorder: bool = False,
+    strip: bool = False,
+    dry_run: bool = False,
 ):
     track_order: list[str] = []
     audio_strip: list[str] = []
@@ -313,14 +323,14 @@ def mkvmerge(
         track_langs: dict[str, int],
     ):
         for track in tracks:
-            if reorder_mode and strip_mode:
+            if reorder and strip:
                 if track.language in track_langs:
                     track_order.append(f'0:{track.track_id}')
                 else:
                     track_strip.append(f'!{track.track_id}')
-            elif reorder_mode:
+            elif reorder:
                 track_order.append(f'0:{track.track_id}')
-            elif strip_mode:
+            elif strip:
                 if track.language not in track_langs:
                     track_strip.append(f'!{track.track_id}')
 
@@ -342,52 +352,78 @@ def mkvmerge(
         mkv_args += ['--track-order', ','.join(track_order)]
 
     if len(mkv_args) > 3:
-        logger.info('[mkvmerge] ' + ' '.join(mkv_args))
+        mkvmerge_logger.info(' '.join(mkv_args))
         if not dry_run:
-            multiplex(mkv_args)
-            if archive_mode:
+            multiplex_tracks(mkv_args)
+            if database is not None:
                 database.insert(mkv_args[1], [])
 
 
 def process_file(
     file_path: str,
     config: Config,
-    database: Database,
-    archive_mode: bool,
-    restore_mode: bool,
-    reorder_mode: bool,
-    strip_mode: bool,
-    dry_run: bool,
+    database: Database | None = None,
+    reorder: bool = False,
+    strip: bool = False,
+    restore: bool = False,
+    dry_run: bool = False,
 ):
     video_tracks, audio_tracks, subtitle_tracks = extract_tracks(
-        file_path, config, database, restore_mode
+        file_path, config, database, restore
     )
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
 
-    mkvpropedit(
-        file_path,
-        config,
-        database,
-        audio_tracks,
-        subtitle_tracks,
-        archive_mode,
-        restore_mode,
-        dry_run,
-    )
-    if reorder_mode or strip_mode:
+    mkvpropedit(file_path, audio_tracks, subtitle_tracks, config, database, restore, dry_run)
+    if reorder or strip:
+        if restore:
+            mkvpriority_logger.error('restore is incompatible with reorder/strip')
+            return
         mkvmerge(
             file_path,
-            config,
-            database,
             video_tracks,
             audio_tracks,
             subtitle_tracks,
-            archive_mode,
-            reorder_mode,
-            strip_mode,
+            config,
+            database,
+            reorder,
+            strip,
             dry_run,
         )
+
+
+def load_config_and_database(
+    toml_path: str | None = None, db_path: str | None = None
+) -> tuple[Config, Database | None]:
+    if toml_path is None or not os.path.isfile(toml_path):
+        mkvpriority_logger.info('config not found; using default')
+        toml_path = 'config.toml'
+    with open(toml_path, 'rb') as f:
+        toml_file = tomllib.load(f)
+
+    config = Config(
+        audio_mode=toml_file.get('audio_mode', []),
+        subtitle_mode=toml_file.get('subtitle_mode', []),
+        audio_languages=toml_file.get('audio_languages', {}),
+        audio_codecs=toml_file.get('audio_codecs', {}),
+        audio_channels=toml_file.get('audio_channels', {}),
+        subtitle_languages=toml_file.get('subtitle_languages', {}),
+        subtitle_codecs=toml_file.get('subtitle_codecs', {}),
+        track_filters=toml_file.get('track_filters', {}),
+    )
+
+    if 'enable' in config.audio_mode and 'disable' in config.audio_mode:
+        mkvpriority_logger.error('\'enable\' and \'disable\' are mutually exclusive')
+    if 'enable' in config.subtitle_mode or 'disable' in config.subtitle_mode:
+        mkvpriority_logger.error('\'enable\' and \'disable\' are mutually exclusive')
+
+    if db_path and os.path.isfile(db_path):
+        database = Database(db_path)
+    else:
+        mkvpriority_logger.info('database not found; ignoring archive')
+        database = None
+
+    return config, database
 
 
 def main():
@@ -403,105 +439,55 @@ def main():
     parser.add_argument('input_dirs', nargs='*', default=[])
     args = parser.parse_args()
 
-    logger.setLevel(
-        logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
-    )
+    log_level = logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
+    mkvpriority_logger.setLevel(log_level)
+    mkvpropedit_logger.setLevel(log_level)
+    mkvmerge_logger.setLevel(log_level)
 
-    if not os.path.isfile(args.config):
-        logger.info(f'[mkvpriority] \'{args.config}\' not found; using default')
-        args.config = 'config.toml'
     with open(args.config, 'rb') as f:
-        toml_file = tomllib.load(f)
+        input_dirs = tomllib.load(f).get('input_dirs', []) + args.input_dirs
+    config, database = load_config_and_database(args.config, args.archive)
+    archive_mode, restore_mode = database is not None, args.restore
 
-    config = Config(
-        audio_mode=toml_file.get('audio_mode', []),
-        subtitle_mode=toml_file.get('subtitle_mode', []),
-        audio_languages=toml_file.get('audio_languages', {}),
-        audio_codecs=toml_file.get('audio_codecs', {}),
-        audio_channels=toml_file.get('audio_channels', {}),
-        subtitle_languages=toml_file.get('subtitle_languages', {}),
-        subtitle_codecs=toml_file.get('subtitle_codecs', {}),
-        track_filters=toml_file.get('track_filters', {}),
-    )
-
-    input_dirs = toml_file.get('input_dirs', []) + args.input_dirs
     if len(input_dirs) == 0:
         parser.error('at least one input_dirs must be provided')
-    if args.restore and (args.reorder or args.strip):
-        parser.error('--restore is incompatible with --reorder and --strip')
-    if 'enable' in config.audio_mode and 'disable' in config.audio_mode:
-        parser.error('--enable and --disable cannot be used simultaneously')
-    if 'enable' in config.subtitle_mode or 'disable' in config.subtitle_mode:
-        parser.error('--enable and --disable are unsupported for subtitle_mode')
-
-    archive_mode = os.path.isfile(args.archive)
-    restore_mode = archive_mode and args.restore
-    if archive_mode:
-        database = Database(args.archive)
-    else:
-        logger.info(f'[mkvpriority] \'{args.archive}\' not found; disabling database')
+    if args.restore and not archive_mode:
+        parser.error('cannot use --restore without --archive (database required)')
+    if args.reorder or args.strip:
+        mkvpriority_logger.warning('reorder/strip will be deprecated in an upcoming release')
         if args.restore:
-            parser.error('cannot use --restore without --archive (database required)')
-        database = None
+            parser.error('--restore is incompatible with --reorder and/or --strip')
 
     for input_dir in input_dirs:
-        if os.path.isfile(input_dir):
-            file_path = input_dir
-            filename = os.path.basename(file_path)
-            if not filename.lower().endswith('.mkv'):
+        file_paths = []
+        if os.path.isdir(input_dir):
+            for root, _, files in os.walk(input_dir):
+                file_paths.extend(os.path.join(root, f) for f in files)
+        elif os.path.isfile(input_dir):
+            file_paths.append(input_dir)
+
+        for file_path in file_paths:
+            if not os.path.isfile(file_path):
+                continue
+            if not file_path.lower().endswith('.mkv'):
                 continue
             if archive_mode:
                 is_archived = database.contains(file_path)
                 if not restore_mode and is_archived:
-                    logger.info(f'[mkvpriority] \'{file_path}\' archived; skipping file')
+                    mkvpriority_logger.info(f'already archived; skipping file: \'{file_path}\'')
                     continue
                 if restore_mode and not is_archived:
-                    logger.info(f'[mkvpriority] \'{file_path}\' not archived; cannot restore')
+                    mkvpriority_logger.info(f'file not archived; cannot restore: \'{file_path}\'')
                     continue
 
             process_file(
-                file_path,
-                config,
-                database,
-                archive_mode,
-                restore_mode,
-                args.reorder,
-                args.strip,
-                args.dry_run,
+                file_path, config, database, args.reorder, args.strip, args.restore, args.dry_run
             )
-
-            continue
-
-        if not os.path.isdir(input_dir):
-            continue
-
-        for root_path, _, filenames in os.walk(input_dir):
-            for filename in filenames:
-                if not filename.lower().endswith('.mkv'):
-                    continue
-                file_path = os.path.join(root_path, filename)
-                if not os.path.isfile(file_path):
-                    continue
-                if archive_mode:
-                    is_archived = database.contains(file_path)
-                    if not restore_mode and is_archived:
-                        logger.info(f'[mkvpriority] \'{file_path}\' archived; skipping file')
-                        continue
-                    if restore_mode and not is_archived:
-                        logger.info(f'[mkvpriority] \'{file_path}\' not archived; cannot restore')
-                        continue
-
-                process_file(
-                    file_path,
-                    config,
-                    database,
-                    archive_mode,
-                    restore_mode,
-                    args.reorder,
-                    args.strip,
-                    args.dry_run,
-                )
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
     main()

@@ -1,12 +1,15 @@
+import logging
 import subprocess
-import sys
 import tempfile
+from itertools import chain
 from pathlib import Path
 
-import main
+from main import extract_tracks, load_config_and_database, process_file
+
+logging.basicConfig(level=logging.ERROR)
 
 
-def create_tracks(temp_dir: Path) -> dict[str, Path]:
+def create_dummy(temp_dir: Path) -> dict[str, Path]:
     # 1. Black Screen Video MP4
     video_path = temp_dir / 'video.mp4'
     subprocess.run(
@@ -132,7 +135,7 @@ Dummy Subtitle
     }
 
 
-def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
+def multiplex_dummy(output_path: Path, track_files: dict[str, Path]):
     subprocess.run(
         [
             'mkvmerge',
@@ -143,7 +146,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:Dummy Video',
             '--default-track',
             '0:no',
-            str(tracks['video']),
+            str(track_files['video']),
             # Japanese Audio AAC
             '--language',
             '0:jpn',
@@ -151,7 +154,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:Stereo AAC (Japanese)',
             '--default-track',
             '0:no',
-            str(tracks['audio2']),
+            str(track_files['audio2']),
             # English Audio AAC
             '--language',
             '0:eng',
@@ -159,7 +162,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:Stereo AAC (English)',
             '--default-track',
             '0:yes',
-            str(tracks['audio3']),
+            str(track_files['audio3']),
             # Japanese Audio FLAC
             '--language',
             '0:jpn',
@@ -167,7 +170,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:5.1 FLAC (Japanese)',
             '--default-track',
             '0:no',
-            str(tracks['audio1']),
+            str(track_files['audio1']),
             # English Subtitles ASS
             '--language',
             '0:eng',
@@ -175,7 +178,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:Full Subtitles [FanSub]',
             '--default-track',
             '0:no',
-            str(tracks['subs1']),
+            str(track_files['subs1']),
             # English Subtitles ASS
             '--language',
             '0:eng',
@@ -185,7 +188,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:no',
             '--forced-track',
             '0:yes',
-            str(tracks['subs2']),
+            str(track_files['subs2']),
             # German Subtitles SRT
             '--language',
             '0:ger',
@@ -193,7 +196,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:Dialogue [Blu-ray]',
             '--default-track',
             '0:no',
-            str(tracks['subs4']),
+            str(track_files['subs4']),
             # English Subtitles SRT
             '--language',
             '0:eng',
@@ -201,7 +204,7 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
             '0:Dialogue [Blu-ray]',
             '--default-track',
             '0:no',
-            str(tracks['subs3']),
+            str(track_files['subs3']),
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -209,109 +212,105 @@ def multiplex_tracks(output_path: Path, tracks: dict[str, Path]):
     )
 
 
-def extract_tracks(file_path: Path) -> list[main.Track]:
-    tracks = []
-    for metadata in main.identify(str(file_path))['tracks']:
-        properties = metadata['properties']
-        tracks.append(
-            main.Track(
-                track_id=metadata['id'],
-                track_type=metadata['type'],
-                track_name=properties.get('track_name'),
-                uid=properties['uid'],
-                score=0,
-                language=properties['language'],
-                codec=properties['codec_id'],
-                channels=properties.get('audio_channels', 0),
-                default=properties['default_track'],
-                enabled=properties['enabled_track'],
-                forced=properties['forced_track'],
-            )
-        )
-    return tracks
-
-
 def test_mkvpropedit():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
-        tracks = create_tracks(temp_path)
-        multiplex_tracks(file_path, tracks)
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
 
-        for track in extract_tracks(file_path):
+        tracks = extract_tracks(str(file_path))
+        for track in chain.from_iterable(tracks):
             match track.track_name:
                 case 'Stereo AAC (English)':
                     assert track.default
                 case 'Signs & Songs [FanSub]':
                     assert track.forced
                 case _:
-                    assert not track.default and not track.forced
+                    assert not track.default
+                    assert not track.forced
 
-        sys.argv = ['main.py', '-q', temp_dir]
-        main.main()
+        config, _ = load_config_and_database()
+        process_file(str(file_path), config)
 
-        for track in extract_tracks(file_path):
+        tracks = extract_tracks(str(file_path))
+        for track in chain.from_iterable(tracks):
             match track.track_name:
                 case '5.1 FLAC (Japanese)':
                     assert track.default
                 case 'Full Subtitles [FanSub]':
-                    assert track.default and track.forced
+                    assert track.default
+                    assert track.forced
                 case _:
-                    assert not track.default and not track.forced
+                    assert not track.default
+                    assert not track.forced
 
 
 def test_mkvmerge():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
-        tracks = create_tracks(temp_path)
-        multiplex_tracks(file_path, tracks)
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
 
         count_i = 0
-        for track in extract_tracks(file_path):
-            match track.track_name:
-                case '5.1 FLAC (Japanese)':
-                    assert track.track_id == 3
-                case 'Stereo AAC (English)':
-                    assert track.default and track.track_id == 2
-                case 'Signs & Songs [FanSub]':
-                    assert track.forced and track.track_id == 5
-                case _:
-                    assert not track.default and not track.forced
-            count_i += 1
-
-        sys.argv = ['main.py', '-q', '-r', '-s', temp_dir]
-        main.main()
-
-        count_f, ger_srt = 0, False
-        for track in extract_tracks(temp_path / 'dummy_remux.mkv'):
+        tracks = extract_tracks(str(file_path))
+        for track in chain.from_iterable(tracks):
             match track.track_name:
                 case 'Dummy Video':
                     assert track.track_id == 0
                 case '5.1 FLAC (Japanese)':
-                    assert track.default and track.track_id == 1
-                case 'Full Subtitles [FanSub]':
-                    assert track.default and track.forced and track.track_id == 4
+                    assert track.track_id == 3
+                case 'Stereo AAC (English)':
+                    assert track.default
+                    assert track.track_id == 2
+                case 'Signs & Songs [FanSub]':
+                    assert track.forced
+                    assert track.track_id == 5
                 case _:
-                    assert not track.default and not track.forced
+                    assert not track.default
+                    assert not track.forced
+            count_i += 1
+
+        config, _ = load_config_and_database()
+        process_file(str(file_path), config, reorder=True, strip=True)
+
+        count_f, ger_srt = 0, False
+        tracks = extract_tracks(str(temp_path / 'dummy_remux.mkv'))
+        for track in chain.from_iterable(tracks):
+            match track.track_name:
+                case 'Dummy Video':
+                    assert track.track_id == 0
+                case '5.1 FLAC (Japanese)':
+                    assert track.default
+                    assert track.track_id == 1
+                case 'Full Subtitles [FanSub]':
+                    assert track.default
+                    assert track.forced
+                    assert track.track_id == 4
+                case _:
+                    assert not track.default
+                    assert not track.forced
             if track.language == 'ger':
                 ger_srt = True
             count_f += 1
-        assert not ger_srt and count_i == count_f + 1
+        assert not ger_srt
+        assert count_i == count_f + 1
 
 
 def test_restore():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
-        tracks = create_tracks(temp_path)
-        multiplex_tracks(file_path, tracks)
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
 
         with tempfile.NamedTemporaryFile() as archive_file:
-            sys.argv = ['main.py', '-q', '-a', archive_file.name, temp_dir]
-            main.main()
+            config, database = load_config_and_database(db_path=archive_file.name)
+            process_file(str(file_path), config, database)
 
-            for track in extract_tracks(file_path):
+            tracks = extract_tracks(str(file_path))
+            for track in chain.from_iterable(tracks):
                 match track.track_name:
                     case '5.1 FLAC (Japanese)':
                         assert track.default
@@ -320,10 +319,11 @@ def test_restore():
                     case _:
                         assert not track.default and not track.forced
 
-            sys.argv = ['main.py', '-q', '-a', archive_file.name, temp_dir, '--restore']
-            main.main()
+            config, database = load_config_and_database(db_path=archive_file.name)
+            process_file(str(file_path), config, database, restore=True)
 
-            for track in extract_tracks(file_path):
+            tracks = extract_tracks(str(file_path))
+            for track in chain.from_iterable(tracks):
                 match track.track_name:
                     case 'Stereo AAC (English)':
                         assert track.default
