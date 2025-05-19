@@ -5,12 +5,16 @@ import os
 import signal
 import subprocess
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 from aiohttp import web
 
 import mkvpriority
 
-__version__ = 'v1.0.7'
+try:
+    __version__ = version('mkvpriority')
+except PackageNotFoundError:
+    __version__ = 'dev'
 
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[str] = asyncio.Queue()

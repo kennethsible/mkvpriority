@@ -5,7 +5,6 @@ from itertools import chain
 from pathlib import Path
 
 import mkvpriority
-from mkvpriority import extract_tracks, load_config_and_database, process_file
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -220,7 +219,7 @@ def test_mkvpropedit():
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        tracks = extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
                 case 'Stereo AAC (English)':
@@ -231,10 +230,10 @@ def test_mkvpropedit():
                     assert not track.default
                     assert not track.forced
 
-        config, _ = load_config_and_database()
-        process_file(str(file_path), config)
+        config, _ = mkvpriority.load_config_and_database()
+        mkvpriority.process_file(str(file_path), config)
 
-        tracks = extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
                 case '5.1 FLAC (Japanese)':
@@ -254,7 +253,7 @@ def test_entrypoint():
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        tracks = extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
                 case 'Stereo AAC (English)':
@@ -267,7 +266,7 @@ def test_entrypoint():
 
         mkvpriority.main([str(file_path)])
 
-        tracks = extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
                 case '5.1 FLAC (Japanese)':
@@ -288,10 +287,10 @@ def test_restore():
         multiplex_dummy(file_path, track_files)
 
         with tempfile.NamedTemporaryFile() as archive_file:
-            config, database = load_config_and_database(db_path=archive_file.name)
-            process_file(str(file_path), config, database)
+            config, database = mkvpriority.load_config_and_database(db_path=archive_file.name)
+            mkvpriority.process_file(str(file_path), config, database)
 
-            tracks = extract_tracks(str(file_path))
+            tracks = mkvpriority.extract_tracks(str(file_path))
             for track in chain.from_iterable(tracks):
                 match track.track_name:
                     case '5.1 FLAC (Japanese)':
@@ -301,10 +300,10 @@ def test_restore():
                     case _:
                         assert not track.default and not track.forced
 
-            config, database = load_config_and_database(db_path=archive_file.name)
-            process_file(str(file_path), config, database, restore=True)
+            config, database = mkvpriority.load_config_and_database(db_path=archive_file.name)
+            mkvpriority.process_file(str(file_path), config, database, restore=True)
 
-            tracks = extract_tracks(str(file_path))
+            tracks = mkvpriority.extract_tracks(str(file_path))
             for track in chain.from_iterable(tracks):
                 match track.track_name:
                     case 'Stereo AAC (English)':
