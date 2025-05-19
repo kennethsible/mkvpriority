@@ -1,21 +1,7 @@
 #!/bin/bash
 
-if [ ! -z "$sonarr_episodefile_path" ]; then
-    ARR_NAME="Sonarr"
-    FILE_PATH="$sonarr_episodefile_path"
-    MEDIA_ID="$sonarr_series_id"
-elif [ ! -z "$radarr_moviefile_path" ]; then
-    ARR_NAME="Radarr"
-    FILE_PATH="$radarr_moviefile_path"
-    MEDIA_ID="$radarr_movie_id"
-else
-    exit 0
-fi
+FILE_PATH="${sonarr_episodefile_path:-${radarr_moviefile_path}}" || exit 0
 
-curl -sS -X POST http://mkvpriority:8080/preprocess \
+curl -sS -X POST http://mkvpriority:8080/process \
      -H "Content-Type: application/json" \
-     -d '{
-         "arr_name": "'"$ARR_NAME"'",
-         "file_path": "'"$FILE_PATH"'",
-         "media_id": "'"$MEDIA_ID"'"
-     }'
+     -d '{"file_path": "'"$FILE_PATH"'"}'

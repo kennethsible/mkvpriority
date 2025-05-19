@@ -70,17 +70,14 @@ docker run --rm \
 
 ## Radarr/Sonarr Integration
 
-You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting "On File Import." For Radarr/Sonarr to recognize the custom script, place a copy of it in one of their mounted directories.
+You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. For Radarr/Sonarr to recognize the custom script, the script must be visible inside the container.
 
 ```yaml
 mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
   container_name: mkvpriority
   environment:
-    - SONARR_URL=http://sonarr:8989
-    - SONARR_API_KEY=${SONARR_API_KEY}
-    - RADARR_URL=http://radarr:7878
-    - RADARR_API_KEY=${RADARR_API_KEY}
+    - CUSTOM_SCRIPT=true
     - MKVPRIORITY_ARGS=
   volumes:
     - /path/to/media/anime:/anime
