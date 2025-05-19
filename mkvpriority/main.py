@@ -48,14 +48,14 @@ class Database:
         self.cur = self.con.cursor()
         self.cur.execute('PRAGMA foreign_keys = ON')
         self.cur.execute(
-            '''
+            """
             CREATE TABLE IF NOT EXISTS archive (
                 file_path TEXT PRIMARY KEY
             )
-        '''
+        """
         )
         self.cur.execute(
-            '''
+            """
             CREATE TABLE IF NOT EXISTS metadata (
                 file_path TEXT,
                 track_uid TEXT,
@@ -65,14 +65,14 @@ class Database:
                 PRIMARY KEY (file_path, track_uid),
                 FOREIGN KEY(file_path) REFERENCES archive(file_path) ON DELETE CASCADE
             )
-        '''
+        """
         )
 
     def insert(self, file_path: str, tracks: list[Track]):
         self.cur.execute('REPLACE INTO archive (file_path) VALUES (?)', (file_path,))
         for track in tracks:
             self.cur.execute(
-                '''
+                """
                 REPLACE INTO metadata (
                     file_path,
                     track_uid,
@@ -81,7 +81,7 @@ class Database:
                     enabled_flag
                 )
                 VALUES (?, ?, ?, ?, ?)
-                ''',
+                """,
                 (
                     file_path,
                     str(track.uid),
@@ -252,7 +252,7 @@ def mkvpropedit(
         if not dry_run:
             modify_tracks(mkv_args)
             database.delete(file_path)
-            mkvpriority_logger.info(f'file restored; removed from archive: \'{file_path}\'')
+            mkvpriority_logger.info(f"file restored; removed from archive: '{file_path}'")
         return
 
     archive_tracks: list[Track] = []
@@ -340,9 +340,9 @@ def load_config_and_database(
     )
 
     if 'enabled' in config.audio_mode and 'disabled' in config.audio_mode:
-        mkvpriority_logger.error('\'enabled\' and \'disabled\' are mutually exclusive')
+        mkvpriority_logger.error("'enabled' and 'disabled' are mutually exclusive")
     if 'enabled' in config.subtitle_mode or 'disabled' in config.subtitle_mode:
-        mkvpriority_logger.error('\'enabled\' and \'disabled\' are mutually exclusive')
+        mkvpriority_logger.error("'enabled' and 'disabled' are mutually exclusive")
 
     if db_path and os.path.isfile(db_path):
         database = Database(db_path)
@@ -395,10 +395,10 @@ def main(argv: list[str] | None = None):
             if database is not None:
                 is_archived = database.contains(file_path)
                 if not restore_mode and is_archived:
-                    mkvpriority_logger.info(f'already archived; skipping file: \'{file_path}\'')
+                    mkvpriority_logger.info(f"already archived; skipping file: '{file_path}'")
                     continue
                 if restore_mode and not is_archived:
-                    mkvpriority_logger.info(f'file not archived; cannot restore: \'{file_path}\'')
+                    mkvpriority_logger.info(f"file not archived; cannot restore: '{file_path}'")
                     continue
 
             process_file(file_path, config, database, args.restore, args.dry_run)

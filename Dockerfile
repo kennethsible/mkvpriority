@@ -2,7 +2,7 @@ FROM python:3.13-slim AS builder
 
 WORKDIR /app
 
-COPY pyproject.toml .
+COPY pyproject.toml poetry.lock ./
 RUN pip install poetry>=2.0 && \
     poetry config virtualenvs.in-project true && \
     poetry install --no-root --no-interaction && \
@@ -18,8 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mkvtoolnix \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
-COPY mkvpriority/ .
+COPY mkvpriority mkvpriority
 COPY config.toml .
 
-ENTRYPOINT ["python", "entrypoint.py"]
+ENTRYPOINT ["python", "-m", "mkvpriority.entrypoint"]

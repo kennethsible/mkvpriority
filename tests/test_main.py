@@ -100,7 +100,7 @@ def create_dummy(temp_dir: Path) -> dict[str, Path]:
     sub3_path = temp_dir / 'dialogue_eng.srt'
     sub4_path = temp_dir / 'dialogue_ger.srt'
 
-    ass_template = '''
+    ass_template = """
 [Script Info]
 Title: Dummy Subtitle
 ScriptType: v4.00+
@@ -111,12 +111,12 @@ Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-'''
+"""
 
-    srt_template = '''1
+    srt_template = """1
 00:00:00,000 --> 00:00:01,000
 Dummy Subtitle
-'''
+"""
 
     sub1_path.write_text(ass_template.strip())
     sub2_path.write_text(ass_template.strip())
@@ -264,7 +264,7 @@ def test_entrypoint():
                     assert not track.default
                     assert not track.forced
 
-        mkvpriority.main([str(file_path)])
+        mkvpriority.mkvpriority([str(file_path)])
 
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):

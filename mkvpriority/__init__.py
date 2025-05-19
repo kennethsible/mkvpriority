@@ -1,15 +1,10 @@
-from .mkvpriority import (
-    Track,
-    extract_tracks,
-    load_config_and_database,
-    main,
-    process_file,
-)
+from .main import Track, extract_tracks, load_config_and_database, process_file
+from .main import main as mkvpriority
 
 __all__ = [
     'extract_tracks',
     'load_config_and_database',
-    'main',
+    'mkvpriority',
     'process_file',
     'Track',
 ]

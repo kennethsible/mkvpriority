@@ -15,25 +15,16 @@ homepage = "https://github.com/kennethsible/mkvpriority"
 mkvpriority = "mkvpriority:main"
 
 [project.optional-dependencies]
-dev = [
-    "black>=25.1.0",
-    "isort>=6.0.1",
-    "ruff>=0.11.10",
-    "mypy>=1.15.0",
-    "pytest>=8.3.5",
-]
-
-
-[tool.black]
-skip-string-normalization = true
-line-length = 100
-
-[tool.isort]
-profile = "black"
+dev = ["ruff>=0.11.10", "mypy>=1.15.0", "pytest>=8.3.5"]
 
 [tool.ruff]
-extend-select = ["I"]
 line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.format]
+quote-style = "single"
 
 [tool.mypy]
 ignore_missing_imports = true

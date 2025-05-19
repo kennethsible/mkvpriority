@@ -5,16 +5,12 @@ import os
 import signal
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError, version
 
 from aiohttp import web
 
 import mkvpriority
 
-try:
-    __version__ = version('mkvpriority')
-except PackageNotFoundError:
-    __version__ = 'dev'
+__version__ = 'v1.0.8'
 
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[str] = asyncio.Queue()
@@ -28,9 +24,11 @@ async def queue_worker():
         file_path = await processing_queue.get()
         try:
             argv = [*MKVPRIORITY_ARGS.split(), file_path]
-            await asyncio.get_event_loop().run_in_executor(None, lambda: mkvpriority.main(argv))
+            await asyncio.get_event_loop().run_in_executor(
+                None, lambda: mkvpriority.mkvpriority(argv)
+            )
         except subprocess.CalledProcessError:
-            logger.error(f'error occurred; skipping file: \'{file_path}\'')
+            logger.error(f"error occurred; skipping file: '{file_path}'")
         finally:
             processing_queue.task_done()
 
@@ -39,7 +37,7 @@ async def process_handler(request: web.Request) -> web.Response:
     args = await request.json()
     file_path = args.get('file_path')
     await processing_queue.put(file_path)
-    return web.json_response({'message': f'recieved \'{file_path}\''})
+    return web.json_response({'message': f"recieved '{file_path}'"})
 
 
 async def init_api(host: str, port: int):
@@ -96,4 +94,4 @@ if __name__ == '__main__':
     if CUSTOM_SCRIPT:
         main()
     else:
-        mkvpriority.main()
+        mkvpriority.mkvpriority()
