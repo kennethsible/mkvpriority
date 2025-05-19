@@ -9,7 +9,7 @@ import sys
 import aiohttp
 from aiohttp import web
 
-import main
+import main as mkvpriority
 
 __version__ = 'v1.0.7'
 
@@ -53,8 +53,8 @@ async def queue_worker():
     while True:
         file_path, arr_name, media_id = await processing_queue.get()
         try:
-            sys.argv = ['main.py', *MKVPRIORITY_ARGS.split(), file_path]
-            await asyncio.get_event_loop().run_in_executor(None, main.main)
+            argv = [*MKVPRIORITY_ARGS.split(), file_path]
+            await asyncio.get_event_loop().run_in_executor(None, lambda: mkvpriority.main(argv))
             try:
                 await rescan_folder(arr_name, media_id)
             except aiohttp.ClientConnectorError:
@@ -106,7 +106,7 @@ async def init_api(host: str, port: int):
     await runner.cleanup()
 
 
-def start_api():
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--port', type=int, default=8080)
@@ -124,7 +124,9 @@ if __name__ == '__main__':
         level=logging.INFO,
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+    logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
+
     if SONARR_URL or RADARR_URL:
-        start_api()
+        main()
     else:
-        main.main()
+        mkvpriority.main()

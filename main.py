@@ -301,95 +301,18 @@ def mkvpropedit(
                 database.insert(file_path, archive_tracks)
 
 
-def mkvmerge(
-    file_path: str,
-    video_tracks: list[Track],
-    audio_tracks: list[Track],
-    subtitle_tracks: list[Track],
-    config: Config,
-    database: Database | None = None,
-    reorder: bool = False,
-    strip: bool = False,
-    dry_run: bool = False,
-):
-    track_order: list[str] = []
-    audio_strip: list[str] = []
-    subtitle_strip: list[str] = []
-
-    def process_tracks(
-        tracks: list[Track],
-        track_order: list[str],
-        track_strip: list[str],
-        track_langs: dict[str, int],
-    ):
-        for track in tracks:
-            if reorder and strip:
-                if track.language in track_langs:
-                    track_order.append(f'0:{track.track_id}')
-                else:
-                    track_strip.append(f'!{track.track_id}')
-            elif reorder:
-                track_order.append(f'0:{track.track_id}')
-            elif strip:
-                if track.language not in track_langs:
-                    track_strip.append(f'!{track.track_id}')
-
-    for track in video_tracks:
-        track_order.append(f'0:{track.track_id}')
-    process_tracks(audio_tracks, track_order, audio_strip, config.audio_languages)
-    process_tracks(subtitle_tracks, track_order, subtitle_strip, config.subtitle_languages)
-
-    mkv_args = ['-o', f'{os.path.splitext(file_path)[0]}_remux.mkv']
-    if audio_strip:
-        mkv_args += ['--audio-tracks', ','.join(audio_strip)]
-    if subtitle_strip:
-        mkv_args += ['--subtitle-tracks', ','.join(subtitle_strip)]
-    mkv_args += [file_path]
-    if track_order and any(
-        int(id_a.split(':')[1]) > int(id_b.split(':')[1])
-        for id_a, id_b in zip(track_order, track_order[1:])
-    ):
-        mkv_args += ['--track-order', ','.join(track_order)]
-
-    if len(mkv_args) > 3:
-        mkvmerge_logger.info(' '.join(mkv_args))
-        if not dry_run:
-            multiplex_tracks(mkv_args)
-            if database is not None:
-                database.insert(mkv_args[1], [])
-
-
 def process_file(
     file_path: str,
     config: Config,
     database: Database | None = None,
-    reorder: bool = False,
-    strip: bool = False,
     restore: bool = False,
     dry_run: bool = False,
 ):
-    video_tracks, audio_tracks, subtitle_tracks = extract_tracks(
-        file_path, config, database, restore
-    )
+    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
 
     mkvpropedit(file_path, audio_tracks, subtitle_tracks, config, database, restore, dry_run)
-    if reorder or strip:
-        if restore:
-            mkvpriority_logger.error('restore is incompatible with reorder/strip')
-            return
-        mkvmerge(
-            file_path,
-            video_tracks,
-            audio_tracks,
-            subtitle_tracks,
-            config,
-            database,
-            reorder,
-            strip,
-            dry_run,
-        )
 
 
 def load_config_and_database(
@@ -426,18 +349,16 @@ def load_config_and_database(
     return config, database
 
 
-def main():
+def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', metavar='FILE_PATH', default='config.toml')
     parser.add_argument('-a', '--archive', metavar='FILE_PATH', default='archive.db')
-    parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
-    parser.add_argument('-q', '--quiet', action='store_true', help='suppress standard output')
     parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
-    parser.add_argument('-r', '--reorder', action='store_true', help='reorder tracks by score')
-    parser.add_argument('-s', '--strip', action='store_true', help='remove unwanted tracks')
-    parser.add_argument('--restore', action='store_true', help='restore original flags')
+    parser.add_argument('-q', '--quiet', action='store_true', help='suppress standard output')
+    parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
+    parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
     parser.add_argument('input_dirs', nargs='*', default=[])
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     log_level = logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
     mkvpriority_logger.setLevel(log_level)
@@ -453,13 +374,9 @@ def main():
         parser.error('at least one input_dirs must be provided')
     if args.restore and not archive_mode:
         parser.error('cannot use --restore without --archive (database required)')
-    if args.reorder or args.strip:
-        mkvpriority_logger.warning('reorder/strip will be deprecated in an upcoming release')
-        if args.restore:
-            parser.error('--restore is incompatible with --reorder and/or --strip')
 
     for input_dir in input_dirs:
-        file_paths = []
+        file_paths: list[str] = []
         if os.path.isdir(input_dir):
             for root, _, files in os.walk(input_dir):
                 file_paths.extend(os.path.join(root, f) for f in files)
@@ -471,7 +388,7 @@ def main():
                 continue
             if not file_path.lower().endswith('.mkv'):
                 continue
-            if archive_mode:
+            if database is not None:
                 is_archived = database.contains(file_path)
                 if not restore_mode and is_archived:
                     mkvpriority_logger.info(f'already archived; skipping file: \'{file_path}\'')
@@ -480,9 +397,7 @@ def main():
                     mkvpriority_logger.info(f'file not archived; cannot restore: \'{file_path}\'')
                     continue
 
-            process_file(
-                file_path, config, database, args.reorder, args.strip, args.restore, args.dry_run
-            )
+            process_file(file_path, config, database, args.restore, args.dry_run)
 
 
 if __name__ == '__main__':

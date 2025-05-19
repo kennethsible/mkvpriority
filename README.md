@@ -18,7 +18,7 @@
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-n] [-q] [-v] [-r] [-s] [--restore] [input_dirs ...]
+usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-v] [-q] [-r] [-n] [input_dirs ...]
 
 positional arguments:
   input_dirs
@@ -26,16 +26,11 @@ positional arguments:
 options:
   -c FILE_PATH, --config FILE_PATH
   -a FILE_PATH, --archive FILE_PATH
-  -n, --dry-run         leave tracks unchanged
-  -q, --quiet           suppress standard output
   -v, --verbose         print track information
-  -r, --reorder         reorder tracks by score
-  -s, --strip           remove unwanted tracks
-  --restore             restore original flags
+  -q, --quiet           suppress standard output
+  -r, --restore         restore original flags
+  -n, --dry-run         leave tracks unchanged
 ```
-
-> [!WARNING]
-> `--reorder` and `--strip` are optional features that use `mkvmerge`, which, unlike `mkvpropedit`, outputs a remux because reordering and/or stripping tracks requires changing the container format.
 
 ## Docker Image
 

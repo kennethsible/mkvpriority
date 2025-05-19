@@ -4,6 +4,7 @@ import tempfile
 from itertools import chain
 from pathlib import Path
 
+import main as mkvpriority
 from main import extract_tracks, load_config_and_database, process_file
 
 logging.basicConfig(level=logging.ERROR)
@@ -246,56 +247,37 @@ def test_mkvpropedit():
                     assert not track.forced
 
 
-def test_mkvmerge():
+def test_entrypoint():
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        count_i = 0
         tracks = extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
-                case 'Dummy Video':
-                    assert track.track_id == 0
-                case '5.1 FLAC (Japanese)':
-                    assert track.track_id == 3
                 case 'Stereo AAC (English)':
                     assert track.default
-                    assert track.track_id == 2
                 case 'Signs & Songs [FanSub]':
                     assert track.forced
-                    assert track.track_id == 5
                 case _:
                     assert not track.default
                     assert not track.forced
-            count_i += 1
 
-        config, _ = load_config_and_database()
-        process_file(str(file_path), config, reorder=True, strip=True)
+        mkvpriority.main([str(file_path)])
 
-        count_f, ger_srt = 0, False
-        tracks = extract_tracks(str(temp_path / 'dummy_remux.mkv'))
+        tracks = extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
-                case 'Dummy Video':
-                    assert track.track_id == 0
                 case '5.1 FLAC (Japanese)':
                     assert track.default
-                    assert track.track_id == 1
                 case 'Full Subtitles [FanSub]':
                     assert track.default
                     assert track.forced
-                    assert track.track_id == 4
                 case _:
                     assert not track.default
                     assert not track.forced
-            if track.language == 'ger':
-                ger_srt = True
-            count_f += 1
-        assert not ger_srt
-        assert count_i == count_f + 1
 
 
 def test_restore():
