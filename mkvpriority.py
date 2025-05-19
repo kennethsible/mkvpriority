@@ -264,9 +264,7 @@ def mkvpropedit(
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
 
-        if tracks[0].score == 0:
-            return
-        elif tracks[0].score > 0:
+        if tracks[0].score > 0:
             if default_mode and not tracks[0].default:
                 mkv_flags[tracks[0].uid].append('flag-default=1')
             if forced_mode and not tracks[0].forced:
@@ -294,8 +292,10 @@ def mkvpropedit(
                     mkv_args += ['--set', flag]
                 archive_tracks.append(track)
 
-    process_tracks(audio_tracks, config.audio_mode)
-    process_tracks(subtitle_tracks, config.subtitle_mode)
+    if audio_tracks:
+        process_tracks(audio_tracks, config.audio_mode)
+    if subtitle_tracks:
+        process_tracks(subtitle_tracks, config.subtitle_mode)
 
     if len(mkv_args) > 1:
         mkvpropedit_logger.info(' '.join(mkv_args))

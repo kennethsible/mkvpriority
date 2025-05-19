@@ -92,9 +92,11 @@ sdh = -100       # hard of hearing subtitles
 
 # === Subtitle Codec Preferences ===
 # Ranks subtitle formats by display quality and stylability.
-# ASS (SubStationAlpha) is preferred for anime due to typesetting/styling.
+# ASS is preferred for anime due to typesetting/styling.
 [subtitle_codecs]
-SubStationAlpha = 2 # stylized subtitles (ASS/SSA)
-"SubRip/SRT" = 1    # plain text subtitles (SRT)
-"HDMV PGS" = 0      # image-based (used in Blu-rays)
-VobSub = 0          # legacy image-based (used in DVDs)
+"S_TEXT/ASS" = 2    # stylized subtitles (Advanced SubStationAlpha)
+S_SSA = 2           # legacy stylized subtitles (SubStationAlpha)
+"S_TEXT/UTF8" = 1   # plain text subtitles (SubRip/SRT)
+"S_TEXT/WEBVTT" = 1 # web-based video text (used in streaming)
+"S_HDMV/PGS" = 0    # image-based (used in Blu-rays)
+S_VOBSUB = 0        # legacy image-based (used in DVDs)
