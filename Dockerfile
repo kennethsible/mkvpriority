@@ -7,8 +7,8 @@ RUN pip install --no-cache-dir aiohttp
 
 WORKDIR /app
 
-COPY main.py .
 COPY config.toml .
-
 COPY entrypoint.py .
+COPY mkvpriority.py .
+
 ENTRYPOINT ["python", "-u", "entrypoint.py"]

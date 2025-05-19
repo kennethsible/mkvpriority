@@ -9,7 +9,7 @@ import sys
 import aiohttp
 from aiohttp import web
 
-import main as mkvpriority
+import mkvpriority
 
 __version__ = 'v1.0.7'
 

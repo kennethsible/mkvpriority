@@ -4,8 +4,8 @@ import tempfile
 from itertools import chain
 from pathlib import Path
 
-import main as mkvpriority
-from main import extract_tracks, load_config_and_database, process_file
+import mkvpriority
+from mkvpriority import extract_tracks, load_config_and_database, process_file
 
 logging.basicConfig(level=logging.ERROR)
 
