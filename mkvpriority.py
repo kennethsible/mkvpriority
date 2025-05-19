@@ -258,27 +258,31 @@ def mkvpropedit(
     archive_tracks: list[Track] = []
     mkv_args = [file_path]
 
-    def process_tracks(tracks: list[Track], track_modes: list[str], track_langs: dict[str, int]):
+    def process_tracks(tracks: list[Track], track_modes: list[str]):
         nonlocal mkv_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
 
-        if default_mode and not tracks[0].default:
-            mkv_flags[tracks[0].uid].append('flag-default=1')
-        if forced_mode and not tracks[0].forced:
-            mkv_flags[tracks[0].uid].append('flag-forced=1')
-        if disabled_mode and not tracks[0].enabled:
-            mkv_flags[tracks[0].uid].append('flag-enabled=1')
-        if enabled_mode and not tracks[0].enabled:
-            mkv_flags[tracks[0].uid].append('flag-enabled=1')
+        if tracks[0].score == 0:
+            return
+        elif tracks[0].score > 0:
+            if default_mode and not tracks[0].default:
+                mkv_flags[tracks[0].uid].append('flag-default=1')
+            if forced_mode and not tracks[0].forced:
+                mkv_flags[tracks[0].uid].append('flag-forced=1')
+            if (disabled_mode or enabled_mode) and not tracks[0].enabled:
+                mkv_flags[tracks[0].uid].append('flag-enabled=1')
+            unwanted_tracks = tracks[1:]
+        else:
+            unwanted_tracks = tracks
 
-        for track in tracks[1:]:
+        for track in unwanted_tracks:
             if default_mode and track.default:
                 mkv_flags[track.uid].append('flag-default=0')
             if forced_mode and track.forced:
                 mkv_flags[track.uid].append('flag-forced=0')
-            if disabled_mode and track.enabled and track.language not in track_langs:
+            if disabled_mode and track.enabled:
                 mkv_flags[track.uid].append('flag-enabled=0')
             if enabled_mode and not track.enabled:
                 mkv_flags[track.uid].append('flag-enabled=1')
@@ -290,8 +294,8 @@ def mkvpropedit(
                     mkv_args += ['--set', flag]
                 archive_tracks.append(track)
 
-    process_tracks(audio_tracks, config.audio_mode, config.audio_languages)
-    process_tracks(subtitle_tracks, config.subtitle_mode, config.subtitle_languages)
+    process_tracks(audio_tracks, config.audio_mode)
+    process_tracks(subtitle_tracks, config.subtitle_mode)
 
     if len(mkv_args) > 1:
         mkvpropedit_logger.info(' '.join(mkv_args))
@@ -335,10 +339,10 @@ def load_config_and_database(
         track_filters=toml_file.get('track_filters', {}),
     )
 
-    if 'enable' in config.audio_mode and 'disable' in config.audio_mode:
-        mkvpriority_logger.error('\'enable\' and \'disable\' are mutually exclusive')
-    if 'enable' in config.subtitle_mode or 'disable' in config.subtitle_mode:
-        mkvpriority_logger.error('\'enable\' and \'disable\' are mutually exclusive')
+    if 'enabled' in config.audio_mode and 'disabled' in config.audio_mode:
+        mkvpriority_logger.error('\'enabled\' and \'disabled\' are mutually exclusive')
+    if 'enabled' in config.subtitle_mode or 'disabled' in config.subtitle_mode:
+        mkvpriority_logger.error('\'enabled\' and \'disabled\' are mutually exclusive')
 
     if db_path and os.path.isfile(db_path):
         database = Database(db_path)
