@@ -219,31 +219,43 @@ def test_mkvpropedit():
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
+        track_count = total_count = 0
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
                 case 'Stereo AAC (English)':
+                    track_count += 1
                     assert track.default
                 case 'Signs & Songs [FanSub]':
+                    track_count += 1
                     assert track.forced
                 case _:
                     assert not track.default
                     assert not track.forced
+            total_count += 1
+        assert track_count == 2
+        assert total_count == 8
 
         config, _ = mkvpriority.load_config_and_database()
         mkvpriority.process_file(str(file_path), config)
 
+        track_count = total_count = 0
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
             match track.track_name:
                 case '5.1 FLAC (Japanese)':
+                    track_count += 1
                     assert track.default
                 case 'Full Subtitles [FanSub]':
+                    track_count += 1
                     assert track.default
                     assert track.forced
                 case _:
                     assert not track.default
                     assert not track.forced
+            total_count += 1
+        assert track_count == 2
+        assert total_count == 8
 
 
 def test_entrypoint():

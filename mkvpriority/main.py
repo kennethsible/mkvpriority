@@ -164,22 +164,24 @@ def extract_tracks(
 ) -> tuple[list[Track], list[Track], list[Track]]:
     video_tracks, audio_tracks, subtitle_tracks = [], [], []
 
-    for metadata in identify_tracks(file_path)['tracks']:
-        properties = metadata['properties']
+    for metadata in identify_tracks(file_path).get('tracks', {}):
+        properties = metadata.get('properties', {})
 
         track = Track(
-            track_id=metadata['id'],
-            track_type=metadata['type'],
+            track_id=metadata.get('id'),
+            track_type=metadata.get('type'),
             track_name=properties.get('track_name'),
-            uid=properties['uid'],
+            uid=properties.get('uid'),
             score=0,
-            language=properties['language'],
-            codec=properties['codec_id'],
+            language=properties.get('language', 'und'),
+            codec=properties.get('codec_id'),
             channels=properties.get('audio_channels', 0),
-            default=properties['default_track'],
-            enabled=properties['enabled_track'],
-            forced=properties['forced_track'],
+            default=properties.get('default_track', False),
+            enabled=properties.get('enabled_track', False),
+            forced=properties.get('forced_track', False),
         )
+        if track.uid is None:
+            continue
 
         if config and restore:
             if database is None:
