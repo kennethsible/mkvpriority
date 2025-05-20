@@ -7,8 +7,8 @@ services:
       - PGID=${PGID}
     volumes:
       - /path/to/media/anime:/anime
-      # copy mkvpriority.sh to /config
       - /path/to/sonarr/config:/config
+      - /path/to/mkvpriority.sh:/scripts/mkvpriority.sh
     ports:
       - 8989:8989
     restart: unless-stopped
@@ -21,5 +21,6 @@ services:
       - MKVPRIORITY_ARGS=
     volumes:
       - /path/to/media/anime:/anime
-      - /path/to/database/archive.db:/app/archive.db
+      - /path/to/config.toml:/app/config.toml # (optional)
+      - /path/to/archive.db:/app/archive.db # (optional)
     restart: unless-stopped
