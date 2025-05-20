@@ -363,7 +363,7 @@ def main(argv: list[str] | None = None):
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress standard output')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
     parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
-    parser.add_argument('input_dirs', nargs='*', default=[])
+    parser.add_argument('input_paths', nargs='+', metavar='INPUT_PATH', help='files or directories')
     args = parser.parse_args(argv)
 
     log_level = logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
@@ -371,23 +371,19 @@ def main(argv: list[str] | None = None):
     mkvpropedit_logger.setLevel(log_level)
     mkvmerge_logger.setLevel(log_level)
 
-    with open(args.config, 'rb') as f:
-        input_dirs = tomllib.load(f).get('input_dirs', []) + args.input_dirs
     config, database = load_config_and_database(args.config, args.archive)
     archive_mode, restore_mode = database is not None, args.restore
 
-    if len(input_dirs) == 0:
-        parser.error('at least one input_dirs must be provided')
     if args.restore and not archive_mode:
         parser.error('cannot use --restore without --archive (database required)')
 
-    for input_dir in input_dirs:
+    for input_path in args.input_paths:
         file_paths: list[str] = []
-        if os.path.isdir(input_dir):
-            for root, _, files in os.walk(input_dir):
+        if os.path.isdir(input_path):
+            for root, _, files in os.walk(input_path):
                 file_paths.extend(os.path.join(root, f) for f in files)
-        elif os.path.isfile(input_dir):
-            file_paths.append(input_dir)
+        elif os.path.isfile(input_path):
+            file_paths.append(input_path)
 
         for file_path in file_paths:
             if not os.path.isfile(file_path):

@@ -18,10 +18,10 @@
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-v] [-q] [-r] [-n] [input_dirs ...]
+usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-v] [-q] [-r] [-n] INPUT_PATH [INPUT_PATH ...]
 
 positional arguments:
-  input_dirs
+  INPUT_PATH            files or directories
 
 options:
   -c FILE_PATH, --config FILE_PATH
@@ -50,7 +50,7 @@ You can specify your own preferences by creating a custom TOML config that defin
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/config.toml:/app/config.toml \
+  -v /path/to/config/config.toml:/app/config.toml \
   ghcr.io/kennethsible/mkvpriority /media
 ```
 
@@ -64,16 +64,13 @@ You can periodically process your media library using a cron job and an archive 
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/archive.db:/app/archive.db \
+  -v /path/to/database/archive.db:/app/archive.db \
   ghcr.io/kennethsible/mkvpriority /media
 ```
 
 ## Radarr/Sonarr Integration
 
-You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. In order for Radarr/Sonarr to recognize the custom script, it must be visible inside the container.
-
-> [!NOTE]
-> To add a custom script to Radarr/Sonarr, go to Settings > Connect > Add Connection > Custom Script.
+You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. For Radarr/Sonarr to recognize the custom script, the script must be visible inside the container.
 
 ```yaml
 mkvpriority:
@@ -84,13 +81,12 @@ mkvpriority:
     - MKVPRIORITY_ARGS=
   volumes:
     - /path/to/media/anime:/anime
-    - /path/to/config.toml:/app/config.toml # (optional)
-    - /path/to/archive.db:/app/archive.db # (optional)
+    - /path/to/database/archive.db:/app/archive.db
   restart: unless-stopped
 ```
 
-> [!IMPORTANT]
-> If you use a container name other than "mkvpriority," you will need to update the `mkvpriority.sh` file.
+> [!NOTE]
+> To add a custom script to Radarr/Sonarr, go to Settings > Connect > Add Connection > Custom Script.
 
 ## Configuration (`config.toml`)
 

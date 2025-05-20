@@ -1,45 +1,33 @@
-# === Input Directories ===
-# List of directories to scan recursively for MKV files.
-# You can add multiple paths, including network paths.
-input_dirs = []
-
-
 # === Audio Operation Mode ===
-# Determines how the selected audio track will be flagged in the MKV:
+# Determines how the best-scoring audio track will be flagged:
 # - 'default' = Sets the chosen track as default (recommended for most players)
 # - 'forced'  = Stronger flag; some players prioritize forced tracks
 # - 'disabled' = Disables non-selected tracks (ignored by most players)
 # - 'enabled'  = Re-enables tracks previously disabled (used to undo 'disabled')
-#
-# Recommended: ["default"]
-# Sets the best-scoring audio track as default and disables non-selected tracks.
 audio_mode = ["default"]
 
 
 # === Subtitle Operation Mode ===
-# Similar to audio_mode, this controls subtitle flags:
+# Similar to audio_mode, this controls track flags for subtitles:
 # - 'default' = Sets the chosen track as default (recommended for most players)
 # - 'forced'  = Stronger flag; some players prioritize forced tracks
 # - 'disabled' = Disables non-selected tracks (ignored by most players)
 # - 'enabled'  = Re-enables tracks previously disabled (used to undo 'disabled')
-#
-# Recommended: ["default", "forced"]
 # This helps ensure subtitles are shown even if the player isn't configured properly.
 subtitle_mode = ["default", "forced"]
 
 
 # === Audio Language Preferences ===
-# Language ranking for audio tracks. Higher values are better.
-# Default: prioritize Japanese audio, with English dubs as a fallback.
+# Default: prioritize Japanese audio over English dubs.
+# 'und' = undefined language, treated as a fallback.
 [audio_languages]
 jpn = 100
 eng = 70
 und = 30
 
 
-# === Audio Codec Priorities ===
-# Score audio codecs by quality. Higher values are better.
-# This helps pick higher fidelity audio when multiple options exist.
+# === Audio Codec Preferences ===
+# Default: prioritize audio tracks with higher fidelity.
 [audio_codecs]
 A_DTSHD_MA = 10 # DTS-HD Master Audio
 A_TRUEHD = 9    # Dolby TrueHD
@@ -52,8 +40,8 @@ A_AAC = 3       # Advanced Audio Coding
 "A_MPEG/L3" = 2 # MP3 (MPEG Layer III)
 
 
-# === Audio Channel Priorities ===
-# Prefer audio with more channels (e.g. 5.1 surround over stereo).
+# === Audio Channel Preferences ===
+# Default: prioritize audio tracks with more channels.
 [audio_channels]
 8 = 9  # 7.1 Surround
 7 = 8  # 6.1 Surround
@@ -66,7 +54,7 @@ A_AAC = 3       # Advanced Audio Coding
 
 
 # === Subtitle Language Preferences ===
-# Rank subtitle languages by preference.
+# Default: prioritize English subtitles for Japanese.
 # 'und' = undefined language, treated as a fallback.
 [subtitle_languages]
 jpn = 100
@@ -77,8 +65,8 @@ und = 30
 # === Track Filters (Subtitle Naming Heuristics) ===
 # Looks at the track *name* to detect its purpose and assign priority.
 # This is especially useful when language or codec alone isn't enough.
-# - Full/Dialogue (for English Subs)
-# - Signs & Songs (for English Dubs)
+# - Full/Dialogue (for English subs)
+# - Signs & Songs (for English dubs)
 # - Commentary/SDH (which should be ranked last)
 [track_filters]
 full = 10        # dialog subtitles with signs
