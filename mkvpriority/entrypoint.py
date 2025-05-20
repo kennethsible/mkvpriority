@@ -15,7 +15,8 @@ __version__ = 'v1.0.9'
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[str] = asyncio.Queue()
 
-CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT')
+CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'False').lower() in ('true', '1', 't')
+WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'False').lower() in ('true', '1', 't')
 MKVPRIORITY_ARGS = os.getenv('MKVPRIORITY_ARGS', '')
 
 
@@ -91,7 +92,10 @@ if __name__ == '__main__':
     )
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 
-    if CUSTOM_SCRIPT:
+    if WEBHOOK_RECEIVER:
+        main()
+    elif CUSTOM_SCRIPT:
+        logger.warning('CUSTOM_SCRIPT is deprecated; use WEBHOOK_RECEIVER instead')
         main()
     else:
         mkvpriority.mkvpriority()

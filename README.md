@@ -77,7 +77,7 @@ mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
   container_name: mkvpriority
   environment:
-    - CUSTOM_SCRIPT=true
+    - WEBHOOK_RECEIVER=true
     - MKVPRIORITY_ARGS=
   volumes:
     - /path/to/media/anime:/anime
