@@ -3,7 +3,6 @@ import asyncio
 import logging
 import os
 import signal
-import subprocess
 import sys
 
 from aiohttp import web
@@ -13,7 +12,7 @@ import mkvpriority
 __version__ = 'v1.1.0'
 
 logger = logging.getLogger('entrypoint')
-processing_queue: asyncio.Queue[str] = asyncio.Queue()
+processing_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
 
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'False').lower() in ('true', '1', 't')
 WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'False').lower() in ('true', '1', 't')
@@ -22,14 +21,17 @@ MKVPRIORITY_ARGS = os.getenv('MKVPRIORITY_ARGS', '')
 
 async def queue_worker():
     while True:
-        file_path = await processing_queue.get()
+        file_path, item_tags = await processing_queue.get()
+        if item_tags:
+            file_path += f'::{item_tags.split(",")[0]}'
+        logger.info(file_path)
         try:
             argv = [*MKVPRIORITY_ARGS.split(), file_path]
             await asyncio.get_event_loop().run_in_executor(
                 None, lambda: mkvpriority.mkvpriority(argv)
             )
-        except subprocess.CalledProcessError:
-            logger.error(f"error occurred; skipping file: '{file_path}'")
+        except Exception:
+            logger.exception(f"error occurred; skipping file: '{file_path}'")
         finally:
             processing_queue.task_done()
 
@@ -37,7 +39,8 @@ async def queue_worker():
 async def process_handler(request: web.Request) -> web.Response:
     args = await request.json()
     file_path = args.get('file_path')
-    await processing_queue.put(file_path)
+    item_tags = args.get('item_tags', '')
+    await processing_queue.put((file_path, item_tags))
     return web.json_response({'message': f"recieved '{file_path}'"})
 
 

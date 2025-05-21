@@ -6,7 +6,7 @@ services:
       - PUID=${PUID}
       - PGID=${PGID}
     volumes:
-      - /path/to/media/anime:/anime
+      - /path/to/media:/media # <-- same mount point
       - /path/to/sonarr/config:/config
       - /path/to/mkvpriority.sh:/scripts/mkvpriority.sh
     ports:
@@ -20,7 +20,7 @@ services:
       - WEBHOOK_RECEIVER=true
       - MKVPRIORITY_ARGS=
     volumes:
-      - /path/to/media/anime:/anime
+      - /path/to/media:/media # <-- same mount point
       - /path/to/config.toml:/app/config.toml # (optional)
       - /path/to/archive.db:/app/archive.db # (optional)
     restart: unless-stopped

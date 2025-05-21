@@ -150,7 +150,6 @@ def extract_tracks(
     try:
         json_object = identify_tracks(file_path)
     except subprocess.CalledProcessError as e:
-        # mkvmerge_logger.error(e.stdout.rstrip())
         json_object = json.loads(e.stdout)
         for warning in json_object.get('warnings', []):
             mkvmerge_logger.warning(warning)
@@ -321,7 +320,7 @@ def process_file(
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
-    mkvpriority_logger.info(f"processing '{file_path}'")
+    mkvpriority_logger.info(f"processing file: '{file_path}'")
     mkvpropedit(file_path, audio_tracks, subtitle_tracks, config, database, restore, dry_run)
 
 
@@ -329,7 +328,6 @@ def load_config_and_database(
     toml_path: str | None = None, db_path: str | None = None
 ) -> tuple[Config, Database | None]:
     if toml_path is None or not os.path.isfile(toml_path):
-        mkvpriority_logger.warning('config not found; loading default')
         toml_path = 'config.toml'
     with open(toml_path, 'rb') as f:
         toml_file = tomllib.load(f)
@@ -351,24 +349,22 @@ def load_config_and_database(
         mkvpriority_logger.error("'enabled' and 'disabled' are mutually exclusive")
 
     if db_path and os.path.isfile(db_path):
-        database = Database(db_path)
-    else:
-        mkvpriority_logger.warning('archive not found; skipping database')
-        database = None
-
-    return config, database
+        return config, Database(db_path)
+    return config, None
 
 
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', metavar='FILE_PATH', default='config.toml')
+    parser.add_argument('-c', '--config', action='append', metavar='FILE_PATH[::TAG]', default=[])
     parser.add_argument('-a', '--archive', metavar='FILE_PATH', default='archive.db')
     parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix results')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
     parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
-    parser.add_argument('input_paths', nargs='+', metavar='INPUT_PATH', help='files or directories')
+    parser.add_argument(
+        'input_paths', nargs='+', metavar='INPUT_PATH[::TAG]', help='files or directories'
+    )
     args = parser.parse_args(argv)
 
     mkvpriority_logger.setLevel(
@@ -378,19 +374,38 @@ def main(argv: list[str] | None = None):
     mkvpropedit_logger.setLevel(log_level)
     mkvmerge_logger.setLevel(log_level)
 
-    config, database = load_config_and_database(args.config, args.archive)
+    default_config, database = load_config_and_database('config.toml', args.archive)
+    configs = {'': default_config}
+    for toml_path in args.config:
+        if '::' in toml_path:
+            toml_path, tag = toml_path.rsplit('::', 1)
+            configs[tag], _ = load_config_and_database(toml_path)
+            mkvpriority_logger.info(f"loaded '{tag}' config: '{toml_path}'")
+        else:
+            mkvpriority_logger.info(f"loaded default config: '{toml_path}'")
+            default_config, _ = load_config_and_database(toml_path)
     archive_mode, restore_mode = database is not None, args.restore
 
     if args.restore and not archive_mode:
         parser.error('cannot use --restore without --archive (database required)')
+    if archive_mode:
+        mkvpriority_logger.info(f"loaded archive database: '{args.archive}'")
 
     for input_path in args.input_paths:
+        if '::' in input_path:
+            input_path, tag = input_path.rsplit('::', 1)
+            config = configs.get(tag, default_config)
+        else:
+            config = default_config
+
         file_paths: list[str] = []
         if os.path.isdir(input_path):
             for root, _, files in os.walk(input_path):
                 file_paths.extend(os.path.join(root, f) for f in files)
         elif os.path.isfile(input_path):
             file_paths.append(input_path)
+        else:
+            mkvpriority_logger.error(f"file or directory not found: '{input_path}'")
 
         for file_path in file_paths:
             if not os.path.isfile(file_path):

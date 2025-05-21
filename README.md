@@ -18,13 +18,13 @@
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: main.py [-h] [-c FILE_PATH] [-a FILE_PATH] [-v] [-x] [-q] [-r] [-n] INPUT_PATH [INPUT_PATH ...]
+usage: main.py [-h] [-c FILE_PATH[::TAG]] [-a FILE_PATH] [-v] [-x] [-q] [-r] [-n] INPUT_PATH[::TAG] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
-  INPUT_PATH            files or directories
+  INPUT_PATH[::TAG]     files or directories
 
 options:
-  -c FILE_PATH, --config FILE_PATH
+  -c FILE_PATH[::TAG], --config FILE_PATH[::TAG]
   -a FILE_PATH, --archive FILE_PATH
   -v, --verbose         print track information
   -x, --debug           show mkvtoolnix results
@@ -41,9 +41,6 @@ A Docker image is provided to simplify the installation process and enable quick
 docker run --rm -v /path/to/media:/media ghcr.io/kennethsible/mkvpriority /media
 ```
 
-> [!NOTE]
-> This will use the default `config.toml` inside the image. See below for using a custom config.
-
 ### Use a Custom Config
 
 You can specify your own preferences by creating a custom TOML config that defines track filters by name and assigns scores by property. To override the default config, use a bind mount:
@@ -51,12 +48,9 @@ You can specify your own preferences by creating a custom TOML config that defin
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/config/config.toml:/app/config.toml \
+  -v /path/to/config.toml:/app/config.toml \
   ghcr.io/kennethsible/mkvpriority /media
 ```
-
-> [!NOTE]
-> Media directories can be included in `config.toml` or specified as command-line arguments.
 
 ### Use an Archive Database
 
@@ -65,13 +59,16 @@ You can periodically process your media library using a cron job and an archive 
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/database/archive.db:/app/archive.db \
+  -v /path/to/archive.db:/app/archive.db \
   ghcr.io/kennethsible/mkvpriority /media
 ```
 
 ## Radarr/Sonarr Integration
 
-You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. For Radarr/Sonarr to recognize the custom script, the script must be visible inside the container.
+You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. In order for Radarr/Sonarr to recognize the custom script, it must be visible inside the container.
+
+> [!NOTE]
+> To add a custom script to Radarr/Sonarr, go to Settings > Connect > Add Connection > Custom Script.
 
 ```yaml
 mkvpriority:
@@ -81,13 +78,37 @@ mkvpriority:
     - WEBHOOK_RECEIVER=true
     - MKVPRIORITY_ARGS=
   volumes:
-    - /path/to/media/anime:/anime
-    - /path/to/database/archive.db:/app/archive.db
+    - /path/to/media:/media
+    - /path/to/config.toml:/app/config.toml # (optional)
+    - /path/to/archive.db:/app/archive.db # (optional)
   restart: unless-stopped
 ```
 
-> [!NOTE]
-> To add a custom script to Radarr/Sonarr, go to Settings > Connect > Add Connection > Custom Script.
+> [!IMPORTANT]
+> If you are not using "mkvpriority" as the name of your container, you will need to update it in the custom script.
+> Also, verify that the mount point for your media directory in MKVPriority is the same as the one used by Radarr/Sonarr.
+
+### Use Multiple Configs
+
+MKVPriority supports multiple, tag-based configs that can be customized to match the tagging system used in Radarr/Sonarr. For example, you can create a separate config for anime by adding an `anime` tag in Radarr/Sonarr either manually or via auto-tagging. Then, append the `::anime` tag to the config path in the MKVPriority arguments.
+
+```yaml
+mkvpriority:
+  image: ghcr.io/kennethsible/mkvpriority
+  container_name: mkvpriority
+  environment:
+    - WEBHOOK_RECEIVER=true
+    - MKVPRIORITY_ARGS=-c anime.toml::anime
+  volumes:
+    - /path/to/media:/media
+    - /path/to/anime.toml:/app/anime.toml
+    - /path/to/config.toml:/app/config.toml # (optional)
+    - /path/to/archive.db:/app/archive.db # (optional)
+  restart: unless-stopped
+```
+
+> [!IMPORTANT]
+> In Radarr/Sonarr, a given movie or show can have multiple tags. However, MKVPriority only uses the first tag in alphabetical order. Therefore, you may need to create new tags specifically for MKVPriority.
 
 ## Configuration (`config.toml`)
 
