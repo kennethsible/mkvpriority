@@ -17,11 +17,10 @@ mkvmerge_logger = logging.getLogger('mkvmerge')
 
 @dataclass
 class Track:
-    track_id: int
-    track_type: str
-    track_name: str
-    uid: int
     score: int
+    uid: int
+    type: str
+    name: str
     language: str
     codec: str
     channels: int
@@ -114,17 +113,14 @@ def identify_tracks(file_path: str):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', file_path], temp_file)
         temp_file.flush()
-        try:
-            result = subprocess.run(
-                ['mkvmerge', f'@{temp_file.name}'],
-                capture_output=True,
-                encoding='utf-8',
-                check=True,
-                text=True,
-            )
-        except subprocess.CalledProcessError as e:
-            mkvmerge_logger.error(e.stdout.rstrip())
-            raise
+        result = subprocess.run(
+            ['mkvmerge', f'@{temp_file.name}'],
+            capture_output=True,
+            encoding='utf-8',
+            check=True,
+            text=True,
+        )
+        mkvmerge_logger.debug(result.stdout.rstrip())
         return json.loads(result.stdout)
 
 
@@ -132,28 +128,13 @@ def modify_tracks(mkv_args: list[str]):
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(mkv_args, temp_file)
         temp_file.flush()
-        try:
-            result = subprocess.run(
-                ['mkvpropedit', f'@{temp_file.name}'], capture_output=True, check=True, text=True
-            )
-            mkvpropedit_logger.debug(result.stdout)
-        except subprocess.CalledProcessError as e:
-            mkvpropedit_logger.error(e.stdout.rstrip())
-            raise
-
-
-def multiplex_tracks(mkv_args: list[str]):
-    with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump(mkv_args, temp_file)
-        temp_file.flush()
-        try:
-            result = subprocess.run(
-                ['mkvmerge', f'@{temp_file.name}'], capture_output=True, check=True, text=True
-            )
-            mkvmerge_logger.debug(result.stdout)
-        except subprocess.CalledProcessError as e:
-            mkvmerge_logger.error(e.stdout.rstrip())
-            raise
+        result = subprocess.run(
+            ['mkvpropedit', f'@{temp_file.name}'],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        mkvpropedit_logger.debug(result.stdout.rstrip())
 
 
 def extract_tracks(
@@ -162,17 +143,32 @@ def extract_tracks(
     database: Database | None = None,
     restore: bool = False,
 ) -> tuple[list[Track], list[Track], list[Track]]:
-    video_tracks, audio_tracks, subtitle_tracks = [], [], []
+    video_tracks: list[Track] = []
+    audio_tracks: list[Track] = []
+    subtitle_tracks: list[Track] = []
 
-    for metadata in identify_tracks(file_path).get('tracks', {}):
+    try:
+        json_object = identify_tracks(file_path)
+    except subprocess.CalledProcessError as e:
+        # mkvmerge_logger.error(e.stdout.rstrip())
+        json_object = json.loads(e.stdout)
+        for warning in json_object.get('warnings', []):
+            mkvmerge_logger.warning(warning)
+        for error in json_object.get('errors', []):
+            mkvmerge_logger.error(error)
+        return video_tracks, audio_tracks, subtitle_tracks
+    else:
+        for warning in json_object.get('warnings', []):
+            mkvmerge_logger.warning(warning)
+
+    for metadata in json_object.get('tracks', {}):
         properties = metadata.get('properties', {})
 
         track = Track(
-            track_id=metadata.get('id'),
-            track_type=metadata.get('type'),
-            track_name=properties.get('track_name'),
-            uid=properties.get('uid'),
             score=0,
+            uid=properties.get('uid'),
+            type=metadata.get('type'),
+            name=properties.get('track_name'),
             language=properties.get('language', 'und'),
             codec=properties.get('codec_id'),
             channels=properties.get('audio_channels', 0),
@@ -187,40 +183,40 @@ def extract_tracks(
             if database is None:
                 mkvpriority_logger.error('cannot restore without archive (database)')
                 return [], [], []
-            mkvpriority_logger.debug(str(track))
-            if track.track_type == 'audio':
+            mkvpriority_logger.debug(track)
+            if track.type == 'audio':
                 database.restore_track(file_path, track)
                 audio_tracks.append(track)
-            elif track.track_type == 'subtitles':
+            elif track.type == 'subtitles':
                 database.restore_track(file_path, track)
                 subtitle_tracks.append(track)
             continue
 
-        if track.track_type == 'video':
+        if track.type == 'video':
             video_tracks.append(track)
 
-        elif track.track_type == 'audio':
+        elif track.type == 'audio':
             if config:
                 track.score += config.audio_languages.get(track.language, 0)
                 track.score += config.audio_codecs.get(track.codec, 0)
                 track.score += config.audio_channels.get(track.channels, 0)
-                if track.track_name:
+                if track.name:
                     for key, value in config.track_filters.items():
-                        if key in track.track_name.lower():
+                        if key in track.name.lower():
                             track.score += value
             audio_tracks.append(track)
-            mkvpriority_logger.debug(str(track))
+            mkvpriority_logger.debug(track)
 
-        elif track.track_type == 'subtitles':
+        elif track.type == 'subtitles':
             if config:
                 track.score += config.subtitle_languages.get(track.language, 0)
                 track.score += config.subtitle_codecs.get(track.codec, 0)
-                if track.track_name:
+                if track.name:
                     for key, value in config.track_filters.items():
-                        if key in track.track_name.lower():
+                        if key in track.name.lower():
                             track.score += value
             subtitle_tracks.append(track)
-            mkvpriority_logger.debug(str(track))
+            mkvpriority_logger.debug(track)
 
     return video_tracks, audio_tracks, subtitle_tracks
 
@@ -250,11 +246,15 @@ def mkvpropedit(
                 '--set',
                 f'flag-enabled={int(track.enabled)}',
             ]
-        mkvpropedit_logger.info(' '.join(mkv_args))
+        mkvpropedit_logger.info(' '.join(mkv_args[1:]))
         if not dry_run:
-            modify_tracks(mkv_args)
-            database.delete(file_path)
-            mkvpriority_logger.info(f"file restored; removed from archive: '{file_path}'")
+            try:
+                modify_tracks(mkv_args)
+            except subprocess.CalledProcessError as e:
+                mkvpropedit_logger.error(e.stdout.rstrip())
+            else:
+                database.delete(file_path)
+                mkvpriority_logger.info(f"file restored; removed from archive: '{file_path}'")
         return
 
     archive_tracks: list[Track] = []
@@ -300,11 +300,15 @@ def mkvpropedit(
         process_tracks(subtitle_tracks, config.subtitle_mode)
 
     if len(mkv_args) > 1:
-        mkvpropedit_logger.info(' '.join(mkv_args))
+        mkvpropedit_logger.info(' '.join(mkv_args[1:]))
         if not dry_run:
-            modify_tracks(mkv_args)
-            if database is not None:
-                database.insert(file_path, archive_tracks)
+            try:
+                modify_tracks(mkv_args)
+            except subprocess.CalledProcessError as e:
+                mkvpropedit_logger.error(e.stdout.rstrip())
+            else:
+                if database is not None:
+                    database.insert(file_path, archive_tracks)
 
 
 def process_file(
@@ -317,7 +321,7 @@ def process_file(
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
-
+    mkvpriority_logger.info(f"processing '{file_path}'")
     mkvpropedit(file_path, audio_tracks, subtitle_tracks, config, database, restore, dry_run)
 
 
@@ -325,7 +329,7 @@ def load_config_and_database(
     toml_path: str | None = None, db_path: str | None = None
 ) -> tuple[Config, Database | None]:
     if toml_path is None or not os.path.isfile(toml_path):
-        mkvpriority_logger.info('config not found; using default')
+        mkvpriority_logger.warning('config not found; loading default')
         toml_path = 'config.toml'
     with open(toml_path, 'rb') as f:
         toml_file = tomllib.load(f)
@@ -349,7 +353,7 @@ def load_config_and_database(
     if db_path and os.path.isfile(db_path):
         database = Database(db_path)
     else:
-        mkvpriority_logger.info('database not found; ignoring archive')
+        mkvpriority_logger.warning('archive not found; skipping database')
         database = None
 
     return config, database
@@ -360,14 +364,17 @@ def main(argv: list[str] | None = None):
     parser.add_argument('-c', '--config', metavar='FILE_PATH', default='config.toml')
     parser.add_argument('-a', '--archive', metavar='FILE_PATH', default='archive.db')
     parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
-    parser.add_argument('-q', '--quiet', action='store_true', help='suppress standard output')
+    parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix results')
+    parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
     parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
     parser.add_argument('input_paths', nargs='+', metavar='INPUT_PATH', help='files or directories')
     args = parser.parse_args(argv)
 
-    log_level = logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
-    mkvpriority_logger.setLevel(log_level)
+    mkvpriority_logger.setLevel(
+        logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
+    )
+    log_level = logging.ERROR if args.quiet else logging.DEBUG if args.debug else logging.INFO
     mkvpropedit_logger.setLevel(log_level)
     mkvmerge_logger.setLevel(log_level)
 

@@ -1,12 +1,9 @@
-import logging
 import subprocess
 import tempfile
 from itertools import chain
 from pathlib import Path
 
 import mkvpriority
-
-logging.basicConfig(level=logging.ERROR)
 
 
 def create_dummy(temp_dir: Path) -> dict[str, Path]:
@@ -222,7 +219,7 @@ def test_mkvpropedit():
         track_count = total_count = 0
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
-            match track.track_name:
+            match track.name:
                 case 'Stereo AAC (English)':
                     track_count += 1
                     assert track.default
@@ -242,7 +239,7 @@ def test_mkvpropedit():
         track_count = total_count = 0
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
-            match track.track_name:
+            match track.name:
                 case '5.1 FLAC (Japanese)':
                     track_count += 1
                     assert track.default
@@ -267,7 +264,7 @@ def test_entrypoint():
 
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
-            match track.track_name:
+            match track.name:
                 case 'Stereo AAC (English)':
                     assert track.default
                 case 'Signs & Songs [FanSub]':
@@ -280,7 +277,7 @@ def test_entrypoint():
 
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):
-            match track.track_name:
+            match track.name:
                 case '5.1 FLAC (Japanese)':
                     assert track.default
                 case 'Full Subtitles [FanSub]':
@@ -304,7 +301,7 @@ def test_restore():
 
             tracks = mkvpriority.extract_tracks(str(file_path))
             for track in chain.from_iterable(tracks):
-                match track.track_name:
+                match track.name:
                     case '5.1 FLAC (Japanese)':
                         assert track.default
                     case 'Full Subtitles [FanSub]':
@@ -317,7 +314,7 @@ def test_restore():
 
             tracks = mkvpriority.extract_tracks(str(file_path))
             for track in chain.from_iterable(tracks):
-                match track.track_name:
+                match track.name:
                     case 'Stereo AAC (English)':
                         assert track.default
                     case 'Signs & Songs [FanSub]':
