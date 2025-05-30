@@ -57,8 +57,8 @@ A_AAC = 3       # Advanced Audio Coding
 # Default: prioritize English subtitles for Japanese.
 # 'und' = undefined language, treated as a fallback.
 [subtitle_languages]
-jpn = 100
-eng = 70
+eng = 100
+jpn = 90
 und = 30
 
 
@@ -72,8 +72,8 @@ und = 30
 full = 10        # dialog subtitles with signs
 dialog = 9       # spoken content subtitles
 honorific = 8    # dialog subtitles with honorifics
-sign = -10       # on-screen text subtitles
-song = -10       # lyrics or karaoke subtitles
+sign = -15       # on-screen text subtitles
+song = -15       # lyrics or karaoke subtitles
 commentar = -100 # commentary track subtitles
 sdh = -100       # hard of hearing subtitles
 

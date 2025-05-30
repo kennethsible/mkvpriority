@@ -233,7 +233,7 @@ def test_mkvpropedit():
         assert track_count == 2
         assert total_count == 8
 
-        config, _ = mkvpriority.load_config_and_database()
+        config = mkvpriority.Config.from_file('config.toml')
         mkvpriority.process_file(str(file_path), config)
 
         track_count = total_count = 0
@@ -253,6 +253,35 @@ def test_mkvpropedit():
             total_count += 1
         assert track_count == 2
         assert total_count == 8
+
+
+def test_mkvpriority():
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        config = mkvpriority.Config.from_file('config.toml')
+        tracks = mkvpriority.process_file(str(file_path), config)
+
+        for track in chain.from_iterable(tracks):
+            match track.name:
+                case '5.1 FLAC (Japanese)':
+                    assert track.score == 118
+                case 'Stereo AAC (Japanese)':
+                    assert track.score == 107
+                case 'Stereo AAC (English)':
+                    assert track.score == 77
+                case 'Full Subtitles [FanSub]':
+                    assert track.score == 112
+                case 'Signs & Songs [FanSub]':
+                    assert track.score == 72
+                case 'Dialogue [Blu-ray]':
+                    if track.language == 'eng':
+                        assert track.score == 110
+                    else:
+                        assert track.score == 10
 
 
 def test_entrypoint():
@@ -296,7 +325,8 @@ def test_restore():
         multiplex_dummy(file_path, track_files)
 
         with tempfile.NamedTemporaryFile() as archive_file:
-            config, database = mkvpriority.load_config_and_database(db_path=archive_file.name)
+            config = mkvpriority.Config.from_file('config.toml')
+            database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(str(file_path), config, database)
 
             tracks = mkvpriority.extract_tracks(str(file_path))
@@ -309,7 +339,6 @@ def test_restore():
                     case _:
                         assert not track.default and not track.forced
 
-            config, database = mkvpriority.load_config_and_database(db_path=archive_file.name)
             mkvpriority.process_file(str(file_path), config, database, restore=True)
 
             tracks = mkvpriority.extract_tracks(str(file_path))
@@ -321,3 +350,23 @@ def test_restore():
                         assert track.forced
                     case _:
                         assert not track.default and not track.forced
+
+
+def test_prune():
+    with tempfile.NamedTemporaryFile() as archive_file:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            file_path = temp_path / 'dummy.mkv'
+            track_files = create_dummy(temp_path)
+            multiplex_dummy(file_path, track_files)
+
+            config = mkvpriority.Config.from_file('config.toml')
+            database = mkvpriority.Database(archive_file.name)
+            mkvpriority.process_file(str(file_path), config, database)
+
+            assert database.contains(str(file_path))
+            database.prune()
+            assert database.contains(str(file_path))
+
+        database.prune()
+        assert not database.contains(str(file_path))

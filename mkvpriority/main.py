@@ -31,14 +31,31 @@ class Track:
 
 @dataclass
 class Config:
+    toml_path: str
     audio_mode: list[str]
     subtitle_mode: list[str]
     audio_languages: dict[str, int]
     audio_codecs: dict[str, int]
-    audio_channels: dict[int, int]
+    audio_channels: dict[str, int]
     subtitle_languages: dict[str, int]
     subtitle_codecs: dict[str, int]
     track_filters: dict[str, int]
+
+    @classmethod
+    def from_file(cls, toml_path: str) -> 'Config':
+        with open(toml_path, 'rb') as f:
+            toml_file = tomllib.load(f)
+        return cls(
+            toml_path=toml_path,
+            audio_mode=toml_file.get('audio_mode', []),
+            subtitle_mode=toml_file.get('subtitle_mode', []),
+            audio_languages=toml_file.get('audio_languages', {}),
+            audio_codecs=toml_file.get('audio_codecs', {}),
+            audio_channels=toml_file.get('audio_channels', {}),
+            subtitle_languages=toml_file.get('subtitle_languages', {}),
+            subtitle_codecs=toml_file.get('subtitle_codecs', {}),
+            track_filters=toml_file.get('track_filters', {}),
+        )
 
 
 class Database:
@@ -99,7 +116,7 @@ class Database:
         self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (file_path,))
         return self.cur.fetchone() is not None
 
-    def restore_track(self, file_path: str, track: Track):
+    def restore(self, file_path: str, track: Track):
         self.cur.execute(
             'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = ? AND track_uid = ?',
             (file_path, str(track.uid)),
@@ -107,6 +124,16 @@ class Database:
         result = self.cur.fetchone()
         if result:
             track.default, track.forced, track.enabled = map(bool, result)
+
+    def prune(self, dry_run: bool = False):
+        self.cur.execute('SELECT file_path FROM archive')
+        for row in self.cur.fetchall():
+            file_path = row[0]
+            if os.path.exists(file_path):
+                continue
+            mkvpriority_logger.info(f"updating database (entry deleted): '{file_path}'")
+            if not dry_run:
+                self.delete(file_path)
 
 
 def identify_tracks(file_path: str):
@@ -180,14 +207,14 @@ def extract_tracks(
 
         if config and restore:
             if database is None:
-                mkvpriority_logger.error('cannot restore without archive (database)')
+                mkvpriority_logger.error('cannot restore without a database')
                 return [], [], []
             mkvpriority_logger.debug(track)
             if track.type == 'audio':
-                database.restore_track(file_path, track)
+                database.restore(file_path, track)
                 audio_tracks.append(track)
             elif track.type == 'subtitles':
-                database.restore_track(file_path, track)
+                database.restore(file_path, track)
                 subtitle_tracks.append(track)
             continue
 
@@ -198,7 +225,7 @@ def extract_tracks(
             if config:
                 track.score += config.audio_languages.get(track.language, 0)
                 track.score += config.audio_codecs.get(track.codec, 0)
-                track.score += config.audio_channels.get(track.channels, 0)
+                track.score += config.audio_channels.get(str(track.channels), 0)
                 if track.name:
                     for key, value in config.track_filters.items():
                         if key in track.name.lower():
@@ -231,7 +258,7 @@ def mkvpropedit(
 ):
     if restore:
         if database is None:
-            mkvpriority_logger.error('cannot restore without archive (database)')
+            mkvpriority_logger.error('cannot restore without a database')
             return
         mkv_args = [file_path]
         for track in [*audio_tracks, *subtitle_tracks]:
@@ -252,8 +279,8 @@ def mkvpropedit(
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
             else:
+                mkvpriority_logger.info('updating database (entry deleted)')
                 database.delete(file_path)
-                mkvpriority_logger.info(f"file restored; removed from archive: '{file_path}'")
         return
 
     archive_tracks: list[Track] = []
@@ -307,6 +334,7 @@ def mkvpropedit(
                 mkvpropedit_logger.error(e.stdout.rstrip())
             else:
                 if database is not None:
+                    mkvpriority_logger.info('updating database (entry inserted)')
                     database.insert(file_path, archive_tracks)
 
 
@@ -316,54 +344,28 @@ def process_file(
     database: Database | None = None,
     restore: bool = False,
     dry_run: bool = False,
-):
+) -> tuple[list[Track], list[Track]]:
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
-    mkvpriority_logger.info(f"processing file: '{file_path}'")
     mkvpropedit(file_path, audio_tracks, subtitle_tracks, config, database, restore, dry_run)
-
-
-def load_config_and_database(
-    toml_path: str | None = None, db_path: str | None = None
-) -> tuple[Config, Database | None]:
-    if toml_path is None or not os.path.isfile(toml_path):
-        toml_path = 'config.toml'
-    with open(toml_path, 'rb') as f:
-        toml_file = tomllib.load(f)
-
-    config = Config(
-        audio_mode=toml_file.get('audio_mode', []),
-        subtitle_mode=toml_file.get('subtitle_mode', []),
-        audio_languages=toml_file.get('audio_languages', {}),
-        audio_codecs=toml_file.get('audio_codecs', {}),
-        audio_channels=toml_file.get('audio_channels', {}),
-        subtitle_languages=toml_file.get('subtitle_languages', {}),
-        subtitle_codecs=toml_file.get('subtitle_codecs', {}),
-        track_filters=toml_file.get('track_filters', {}),
-    )
-
-    if 'enabled' in config.audio_mode and 'disabled' in config.audio_mode:
-        mkvpriority_logger.error("'enabled' and 'disabled' are mutually exclusive")
-    if 'enabled' in config.subtitle_mode or 'disabled' in config.subtitle_mode:
-        mkvpriority_logger.error("'enabled' and 'disabled' are mutually exclusive")
-
-    if db_path and os.path.isfile(db_path):
-        return config, Database(db_path)
-    return config, None
+    return audio_tracks, subtitle_tracks
 
 
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', action='append', metavar='FILE_PATH[::TAG]', default=[])
-    parser.add_argument('-a', '--archive', metavar='FILE_PATH', default='archive.db')
+    parser.add_argument(
+        '-c', '--config', action='append', metavar='TOML_PATH[::TAG]', default=['config.toml']
+    )
+    parser.add_argument('-a', '--archive', metavar='DB_PATH')
     parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix results')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
+    parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
     parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
     parser.add_argument(
-        'input_paths', nargs='+', metavar='INPUT_PATH[::TAG]', help='files or directories'
+        'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
     )
     args = parser.parse_args(argv)
 
@@ -374,29 +376,36 @@ def main(argv: list[str] | None = None):
     mkvpropedit_logger.setLevel(log_level)
     mkvmerge_logger.setLevel(log_level)
 
-    default_config, database = load_config_and_database('config.toml', args.archive)
-    configs = {'': default_config}
+    configs: dict[str, Config] = {}
     for toml_path in args.config:
+        tag = 'untagged'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
-            configs[tag], _ = load_config_and_database(toml_path)
-            mkvpriority_logger.info(f"loaded '{tag}' config: '{toml_path}'")
-        else:
-            mkvpriority_logger.info(f"loaded default config: '{toml_path}'")
-            default_config, _ = load_config_and_database(toml_path)
-    archive_mode, restore_mode = database is not None, args.restore
+        try:
+            configs[tag] = Config.from_file(toml_path)
+        except FileNotFoundError:
+            mkvpriority_logger.exception(f"config not found: '{toml_path}'")
 
-    if args.restore and not archive_mode:
-        parser.error('cannot use --restore without --archive (database required)')
-    if archive_mode:
-        mkvpriority_logger.info(f"loaded archive database: '{args.archive}'")
+    database = None
+    if args.archive:
+        try:
+            database = Database(args.archive)
+        except FileNotFoundError:
+            mkvpriority_logger.exception(f"database not found: '{args.archive}'")
+        else:
+            if args.prune:
+                database.prune(args.dry_run)
+    if args.restore and database is None:
+        parser.error('cannot use --restore without --archive')
 
     for input_path in args.input_paths:
+        tag = 'untagged'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-            config = configs.get(tag, default_config)
-        else:
-            config = default_config
+        config = configs.get(tag, configs['untagged'])
+        mkvpriority_logger.info(
+            f"config ({tag}) = '{config.toml_path}'; database = '{args.archive}'"
+        )
 
         file_paths: list[str] = []
         if os.path.isdir(input_path):
@@ -405,7 +414,7 @@ def main(argv: list[str] | None = None):
         elif os.path.isfile(input_path):
             file_paths.append(input_path)
         else:
-            mkvpriority_logger.error(f"file or directory not found: '{input_path}'")
+            mkvpriority_logger.info(f"skipping '{input_path}' (not found)")
 
         for file_path in file_paths:
             if not os.path.isfile(file_path):
@@ -414,13 +423,14 @@ def main(argv: list[str] | None = None):
                 continue
             if database is not None:
                 is_archived = database.contains(file_path)
-                if not restore_mode and is_archived:
-                    mkvpriority_logger.info(f"already archived; skipping file: '{file_path}'")
+                if not args.restore and is_archived:
+                    mkvpriority_logger.info(f"skipping '{file_path}' (archived)")
                     continue
-                if restore_mode and not is_archived:
-                    mkvpriority_logger.info(f"file not archived; cannot restore: '{file_path}'")
+                if args.restore and not is_archived:
+                    mkvpriority_logger.info(f"skipping '{file_path}' (unarchived)")
                     continue
 
+            mkvpriority_logger.info(f"processing '{file_path}' ({tag})")
             process_file(file_path, config, database, args.restore, args.dry_run)
 
 

@@ -24,7 +24,6 @@ async def queue_worker():
         file_path, item_tags = await processing_queue.get()
         if item_tags:
             file_path += f'::{item_tags.split(",")[0]}'
-        logger.info(file_path)
         try:
             argv = [*MKVPRIORITY_ARGS.split(), file_path]
             await asyncio.get_event_loop().run_in_executor(

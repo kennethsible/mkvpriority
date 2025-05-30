@@ -7,3 +7,9 @@ __pycache__/
 .env
 *.pyc
 *.ipynb
+media/
+*.yaml
+!compose.yaml
+*.toml
+!config.toml
+*.db

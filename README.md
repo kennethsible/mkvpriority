@@ -18,17 +18,18 @@
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: main.py [-h] [-c FILE_PATH[::TAG]] [-a FILE_PATH] [-v] [-x] [-q] [-r] [-n] INPUT_PATH[::TAG] [INPUT_PATH[::TAG] ...]
+usage: main.py [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-n] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
 
 options:
-  -c FILE_PATH[::TAG], --config FILE_PATH[::TAG]
-  -a FILE_PATH, --archive FILE_PATH
+  -c TOML_PATH[::TAG], --config TOML_PATH[::TAG]
+  -a DB_PATH, --archive DB_PATH
   -v, --verbose         print track information
   -x, --debug           show mkvtoolnix results
   -q, --quiet           suppress logging output
+  -p, --prune           prune database entries
   -r, --restore         restore original flags
   -n, --dry-run         leave tracks unchanged
 ```

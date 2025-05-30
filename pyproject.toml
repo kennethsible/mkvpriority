@@ -1,12 +1,12 @@
 [project]
 name = "mkvpriority"
-version = "1.0.8"
+version = "1.1.0"
 description = "Automatically Prioritize Audio/Subtitle Tracks in MKV Files"
 license = { text = "MIT" }
 readme = "README.md"
 authors = [{ name = "Ken Sible", email = "ksible@outlook.com" }]
-requires-python = ">=3.9"
-dependencies = ["aiohttp>=3.11.18"]
+requires-python = ">=3.9,<4.0"
+dependencies = ["aiohttp>=3.12.4"]
 
 [project.urls]
 homepage = "https://github.com/kennethsible/mkvpriority"
@@ -15,7 +15,7 @@ homepage = "https://github.com/kennethsible/mkvpriority"
 mkvpriority = "mkvpriority:main"
 
 [project.optional-dependencies]
-dev = ["ruff>=0.11.10", "mypy>=1.15.0", "pytest>=8.3.5"]
+dev = ["ruff>=0.11.12", "mypy>=1.16.0", "pytest>=8.3.5"]
 
 [tool.ruff]
 line-length = 100
