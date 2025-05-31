@@ -59,6 +59,8 @@ class Config:
 
 
 class Database:
+    SCHEMA_VERSION = 1
+
     def __init__(self, db_path: str):
         self.con = sqlite3.connect(db_path)
         self.cur = self.con.cursor()
@@ -66,7 +68,9 @@ class Database:
         self.cur.execute(
             """
             CREATE TABLE IF NOT EXISTS archive (
-                file_path TEXT PRIMARY KEY
+                file_path TEXT PRIMARY KEY,
+                file_mtime INTEGER,
+                schema_version INTEGER
             )
         """
         )
@@ -83,13 +87,34 @@ class Database:
             )
         """
         )
+        self.migrate(db_path)
+        self.db_path = db_path
 
     def insert(self, file_path: str, tracks: list[Track]):
-        self.cur.execute('REPLACE INTO archive (file_path) VALUES (?)', (file_path,))
+        if self.contains(file_path):
+            mkvpriority_logger.info(f"updating database entry in '{self.db_path}'")
+        else:
+            mkvpriority_logger.info(f"inserting database entry into '{self.db_path}'")
+
+        file_mtime = int(os.path.getmtime(file_path))
+        self.cur.execute(
+            """
+            INSERT INTO archive (
+                file_path,
+                file_mtime,
+                schema_version
+            )
+            VALUES (?, ?, ?)
+            ON CONFLICT(file_path) DO UPDATE SET
+                file_mtime = excluded.file_mtime,
+                schema_version = excluded.schema_version
+            """,
+            (file_path, file_mtime, self.SCHEMA_VERSION),
+        )
         for track in tracks:
             self.cur.execute(
                 """
-                REPLACE INTO metadata (
+                INSERT INTO metadata (
                     file_path,
                     track_uid,
                     default_flag,
@@ -97,6 +122,7 @@ class Database:
                     enabled_flag
                 )
                 VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(file_path, track_uid) DO NOTHING
                 """,
                 (
                     file_path,
@@ -108,12 +134,20 @@ class Database:
             )
         self.con.commit()
 
-    def delete(self, file_path: str):
-        self.cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
-        self.con.commit()
+    def delete(self, file_path: str, dry_run: bool = False):
+        mkvpriority_logger.info(f"deleting database entry from '{self.db_path}': '{file_path}'")
+        if not dry_run:
+            self.cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
+            self.con.commit()
 
-    def contains(self, file_path: str) -> bool:
-        self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (file_path,))
+    def contains(self, file_path: str, file_mtime: int | None = None) -> bool:
+        if file_mtime is None:
+            self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (file_path,))
+        else:
+            self.cur.execute(
+                'SELECT 1 FROM archive WHERE file_path = ? AND file_mtime = ?',
+                (file_path, file_mtime),
+            )
         return self.cur.fetchone() is not None
 
     def restore(self, file_path: str, track: Track):
@@ -129,11 +163,31 @@ class Database:
         self.cur.execute('SELECT file_path FROM archive')
         for row in self.cur.fetchall():
             file_path = row[0]
-            if os.path.exists(file_path):
+            if file_path is None or os.path.exists(file_path):
                 continue
-            mkvpriority_logger.info(f"updating database (entry deleted): '{file_path}'")
-            if not dry_run:
-                self.delete(file_path)
+            self.delete(file_path, dry_run)
+
+    def migrate(self, db_path: str):
+        def column_exists(table: str, column: str) -> bool:
+            self.cur.execute(f'PRAGMA table_info({table})')
+            return column in [row[1] for row in self.cur.fetchall()]
+
+        if not column_exists('archive', 'schema_version'):
+            self.cur.execute('ALTER TABLE archive ADD COLUMN schema_version INTEGER')
+
+        self.cur.execute('SELECT schema_version FROM archive ORDER BY schema_version DESC LIMIT 1')
+        row = self.cur.fetchone()
+        schema_version = row[0] if row and row[0] is not None else 0
+        if schema_version < self.SCHEMA_VERSION:
+            mkvpriority_logger.info(
+                f"migrating schema for '{db_path}' to version {self.SCHEMA_VERSION}"
+            )
+
+        if schema_version < 1:
+            if not column_exists('archive', 'file_mtime'):
+                self.cur.execute('ALTER TABLE archive ADD COLUMN file_mtime INTEGER')
+            self.cur.execute('INSERT INTO archive (schema_version) VALUES (1)')
+        self.con.commit()
 
 
 def identify_tracks(file_path: str):
@@ -279,7 +333,6 @@ def mkvpropedit(
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
             else:
-                mkvpriority_logger.info('updating database (entry deleted)')
                 database.delete(file_path)
         return
 
@@ -334,8 +387,9 @@ def mkvpropedit(
                 mkvpropedit_logger.error(e.stdout.rstrip())
             else:
                 if database is not None:
-                    mkvpriority_logger.info('updating database (entry inserted)')
                     database.insert(file_path, archive_tracks)
+    elif database is not None:
+        database.insert(file_path, archive_tracks)
 
 
 def process_file(
@@ -383,18 +437,20 @@ def main(argv: list[str] | None = None):
             toml_path, tag = toml_path.rsplit('::', 1)
         try:
             configs[tag] = Config.from_file(toml_path)
-        except FileNotFoundError:
-            mkvpriority_logger.exception(f"config not found: '{toml_path}'")
+        except (FileNotFoundError, tomllib.TOMLDecodeError):
+            mkvpriority_logger.exception(f"config missing (not found): '{toml_path}'")
 
     database = None
     if args.archive:
         try:
             database = Database(args.archive)
-        except FileNotFoundError:
-            mkvpriority_logger.exception(f"database not found: '{args.archive}'")
+        except (FileNotFoundError, sqlite3.OperationalError):
+            mkvpriority_logger.exception(f"database missing (not found): '{args.archive}'")
+    if args.prune:
+        if database is None:
+            parser.error('cannot use --prune without --archive')
         else:
-            if args.prune:
-                database.prune(args.dry_run)
+            database.prune(args.dry_run)
     if args.restore and database is None:
         parser.error('cannot use --restore without --archive')
 
@@ -414,7 +470,7 @@ def main(argv: list[str] | None = None):
         elif os.path.isfile(input_path):
             file_paths.append(input_path)
         else:
-            mkvpriority_logger.info(f"skipping '{input_path}' (not found)")
+            mkvpriority_logger.info(f"skipping (not found) '{input_path}'")
 
         for file_path in file_paths:
             if not os.path.isfile(file_path):
@@ -422,15 +478,16 @@ def main(argv: list[str] | None = None):
             if not file_path.lower().endswith('.mkv'):
                 continue
             if database is not None:
-                is_archived = database.contains(file_path)
+                file_mtime = int(os.path.getmtime(file_path))
+                is_archived = database.contains(file_path, file_mtime)
                 if not args.restore and is_archived:
-                    mkvpriority_logger.info(f"skipping '{file_path}' (archived)")
+                    mkvpriority_logger.info(f"skipping (archived) '{file_path}'")
                     continue
                 if args.restore and not is_archived:
-                    mkvpriority_logger.info(f"skipping '{file_path}' (unarchived)")
+                    mkvpriority_logger.info(f"skipping (unarchived) '{file_path}'")
                     continue
 
-            mkvpriority_logger.info(f"processing '{file_path}' ({tag})")
+            mkvpriority_logger.info(f"processing '{file_path}'")
             process_file(file_path, config, database, args.restore, args.dry_run)
 
 
