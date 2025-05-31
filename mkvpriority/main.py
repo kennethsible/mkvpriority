@@ -432,20 +432,22 @@ def main(argv: list[str] | None = None):
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
-        tag = 'untagged'
+        tag = 'default'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
         try:
             configs[tag] = Config.from_file(toml_path)
         except (FileNotFoundError, tomllib.TOMLDecodeError):
-            mkvpriority_logger.exception(f"config missing (not found): '{toml_path}'")
+            mkvpriority_logger.exception(f"config error (not found): '{toml_path}'")
+            raise
 
     database = None
     if args.archive:
         try:
             database = Database(args.archive)
         except (FileNotFoundError, sqlite3.OperationalError):
-            mkvpriority_logger.exception(f"database missing (not found): '{args.archive}'")
+            mkvpriority_logger.exception(f"database error (not found): '{args.archive}'")
+            raise
     if args.prune:
         if database is None:
             parser.error('cannot use --prune without --archive')
@@ -455,10 +457,10 @@ def main(argv: list[str] | None = None):
         parser.error('cannot use --restore without --archive')
 
     for input_path in args.input_paths:
-        tag = 'untagged'
+        tag = 'default'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-        config = configs.get(tag, configs['untagged'])
+        config = configs.get(tag, configs['default'])
         mkvpriority_logger.info(
             f"config ({tag}) = '{config.toml_path}'; database = '{args.archive}'"
         )

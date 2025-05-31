@@ -3,8 +3,8 @@ services:
     image: lscr.io/linuxserver/sonarr
     container_name: sonarr
     environment:
-      PUID: "${PUID}"
-      PGID: "${PGID}"
+      PUID: ${PUID}
+      PGID: ${PGID}
     volumes:
       - /path/to/media:/media # <-- same mount point
       - /path/to/sonarr/config:/config
@@ -16,8 +16,9 @@ services:
   mkvpriority:
     image: ghcr.io/kennethsible/mkvpriority
     container_name: mkvpriority
+    user: ${PUID}:${PGID}
     environment:
-      WEBHOOK_RECEIVER: "true"
+      WEBHOOK_RECEIVER: true
       MKVPRIORITY_ARGS: >
         --archive /config/archive.db
     volumes:

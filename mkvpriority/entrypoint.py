@@ -31,7 +31,7 @@ async def queue_worker():
                 None, lambda: mkvpriority.mkvpriority(argv)
             )
         except Exception:
-            logger.exception(f"skipping (error occurred) '{file_path}'")
+            logger.error(f"skipping (error occurred) '{file_path}'")
         finally:
             processing_queue.task_done()
 

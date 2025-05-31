@@ -47,7 +47,7 @@ docker run --rm -v /path/to/media:/media ghcr.io/kennethsible/mkvpriority /media
 You can specify your own preferences by creating a custom TOML config that defines track filters by name and assigns scores by property. To override the default config, use a bind mount:
 
 ```bash
-docker run --rm \
+docker run --rm -u ${PUID}:${PGID} \
   -v /path/to/media:/media \
   -v /path/to/mkvpriority/config:/config \
   ghcr.io/kennethsible/mkvpriority /media \
@@ -59,7 +59,7 @@ docker run --rm \
 You can periodically process your media library using a cron job and an archive database. To keep track of processed files, create an `archive.db` file and use a bind mount:
 
 ```bash
-docker run --rm \
+docker run --rm -u ${PUID}:${PGID} \
   -v /path/to/media:/media \
   -v /path/to/mkvpriority/config:/config \
   ghcr.io/kennethsible/mkvpriority /media \
@@ -77,8 +77,9 @@ You can process new MKV files as they are imported into Radarr/Sonarr by adding 
 mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
   container_name: mkvpriority
+  user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: "true"
+    WEBHOOK_RECEIVER: true
     MKVPRIORITY_ARGS: >
       --archive /config/archive.db
   volumes:
@@ -99,8 +100,9 @@ MKVPriority supports multiple, tag-based configs that can be customized to match
 mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
   container_name: mkvpriority
+  user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: "true"
+    WEBHOOK_RECEIVER: true
     MKVPRIORITY_ARGS: >
       --config /config/anime.toml::anime
       --archive /config/archive.db
