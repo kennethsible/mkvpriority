@@ -49,8 +49,9 @@ You can specify your own preferences by creating a custom TOML config that defin
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/config.toml:/app/config.toml \
-  ghcr.io/kennethsible/mkvpriority /media
+  -v /path/to/mkvpriority/config:/config \
+  ghcr.io/kennethsible/mkvpriority /media \
+  --config /config/custom.toml
 ```
 
 ### Use an Archive Database
@@ -60,8 +61,9 @@ You can periodically process your media library using a cron job and an archive 
 ```bash
 docker run --rm \
   -v /path/to/media:/media \
-  -v /path/to/archive.db:/app/archive.db \
-  ghcr.io/kennethsible/mkvpriority /media
+  -v /path/to/mkvpriority/config:/config \
+  ghcr.io/kennethsible/mkvpriority /media \
+  --archive /config/archive.db
 ```
 
 ## Radarr/Sonarr Integration
@@ -76,12 +78,12 @@ mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
   container_name: mkvpriority
   environment:
-    - WEBHOOK_RECEIVER=true
-    - MKVPRIORITY_ARGS=
+    WEBHOOK_RECEIVER: "true"
+    MKVPRIORITY_ARGS: >
+      --archive /config/archive.db
   volumes:
     - /path/to/media:/media
-    - /path/to/config.toml:/app/config.toml # (optional)
-    - /path/to/archive.db:/app/archive.db # (optional)
+    - /path/to/mkvpriority/config:/config
   restart: unless-stopped
 ```
 
@@ -98,20 +100,20 @@ mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
   container_name: mkvpriority
   environment:
-    - WEBHOOK_RECEIVER=true
-    - MKVPRIORITY_ARGS=-c anime.toml::anime
+    WEBHOOK_RECEIVER: "true"
+    MKVPRIORITY_ARGS: >
+      --config /config/anime.toml::anime
+      --archive /config/archive.db
   volumes:
     - /path/to/media:/media
-    - /path/to/anime.toml:/app/anime.toml
-    - /path/to/config.toml:/app/config.toml # (optional)
-    - /path/to/archive.db:/app/archive.db # (optional)
+    - /path/to/mkvpriority/config:/config
   restart: unless-stopped
 ```
 
 > [!IMPORTANT]
 > In Radarr/Sonarr, a given movie or show can have multiple tags. However, MKVPriority only uses the first tag in alphabetical order. Therefore, you may need to create new tags specifically for MKVPriority.
 
-## Configuration (`config.toml`)
+## TOML Configuration
 
 A single TOML file controls all behavior by assigning priority scores to track properties, such as languages and codecs, and by defining custom filters for track names, such as signs and songs.
 

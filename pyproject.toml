@@ -12,7 +12,7 @@ dependencies = ["aiohttp>=3.12.4"]
 homepage = "https://github.com/kennethsible/mkvpriority"
 
 [project.scripts]
-mkvpriority = "mkvpriority:main"
+mkvpriority = "mkvpriority.main:main"
 
 [project.optional-dependencies]
 dev = ["ruff>=0.11.12", "mypy>=1.16.0", "pytest>=8.3.5"]

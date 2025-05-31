@@ -3,12 +3,12 @@ services:
     image: lscr.io/linuxserver/sonarr
     container_name: sonarr
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
+      PUID: "${PUID}"
+      PGID: "${PGID}"
     volumes:
       - /path/to/media:/media # <-- same mount point
       - /path/to/sonarr/config:/config
-      - /path/to/mkvpriority.sh:/scripts/mkvpriority.sh
+      - /path/to/mkvpriority/config:/mkvpriority
     ports:
       - 8989:8989
     restart: unless-stopped
@@ -17,10 +17,10 @@ services:
     image: ghcr.io/kennethsible/mkvpriority
     container_name: mkvpriority
     environment:
-      - WEBHOOK_RECEIVER=true
-      - MKVPRIORITY_ARGS=
+      WEBHOOK_RECEIVER: "true"
+      MKVPRIORITY_ARGS: >
+        --archive /config/archive.db
     volumes:
       - /path/to/media:/media # <-- same mount point
-      - /path/to/config.toml:/app/config.toml # (optional)
-      - /path/to/archive.db:/app/archive.db # (optional)
+      - /path/to/mkvpriority/config:/config
     restart: unless-stopped

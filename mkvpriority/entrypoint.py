@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+import shutil
 import signal
 import sys
 
@@ -16,7 +17,7 @@ processing_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
 
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'False').lower() in ('true', '1', 't')
 WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'False').lower() in ('true', '1', 't')
-MKVPRIORITY_ARGS = os.getenv('MKVPRIORITY_ARGS', '')
+MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + os.getenv('MKVPRIORITY_ARGS', '').split()
 
 
 async def queue_worker():
@@ -25,12 +26,12 @@ async def queue_worker():
         if item_tags:
             file_path += f'::{item_tags.split(",")[0]}'
         try:
-            argv = [*MKVPRIORITY_ARGS.split(), file_path]
+            argv = [*MKVPRIORITY_ARGS, file_path]
             await asyncio.get_event_loop().run_in_executor(
                 None, lambda: mkvpriority.mkvpriority(argv)
             )
         except Exception:
-            logger.exception(f"error occurred; skipping file: '{file_path}'")
+            logger.exception(f"skipping (error occurred) '{file_path}'")
         finally:
             processing_queue.task_done()
 
@@ -79,6 +80,13 @@ def main():
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
+
+    os.makedirs('/config', exist_ok=True)
+    if not os.path.exists('/config/config.toml'):
+        shutil.copy2('config.toml', '/config/')
+    if not os.path.exists('/config/mkvpriority.toml'):
+        shutil.copy2('mkvpriority.sh', '/config/')
+    open('/config/archive.db', 'a').close()
 
     logger.info(f'MKVPriority {__version__}')
     logger.info(f'running on http://{args.host}:{args.port}')

@@ -8,8 +8,10 @@ __pycache__/
 *.pyc
 *.ipynb
 media/
+config/
 *.yaml
 !compose.yaml
 *.toml
 !config.toml
 *.db
+.DS_Store

@@ -22,6 +22,7 @@ WORKDIR /app
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 COPY mkvpriority mkvpriority
+COPY mkvpriority.sh .
 COPY config.toml .
 
 ENTRYPOINT ["python", "-m", "mkvpriority.entrypoint"]
