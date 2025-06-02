@@ -302,7 +302,7 @@ def test_entrypoint():
                     assert not track.default
                     assert not track.forced
 
-        mkvpriority.mkvpriority([str(file_path)])
+        mkvpriority.main.main([str(file_path)])
 
         tracks = mkvpriority.extract_tracks(str(file_path))
         for track in chain.from_iterable(tracks):

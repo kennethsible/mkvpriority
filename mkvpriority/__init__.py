@@ -1,11 +1,19 @@
-from .main import Config, Database, Track, extract_tracks, process_file
-from .main import main as mkvpriority
+from .main import (
+    Config,
+    Database,
+    Track,
+    extract_tracks,
+    identify_tracks,
+    modify_tracks,
+    process_file,
+)
 
 __all__ = [
     'Config',
     'Database',
     'Track',
     'extract_tracks',
+    'identify_tracks',
+    'modify_tracks',
     'process_file',
-    'mkvpriority',
 ]

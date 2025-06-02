@@ -4,11 +4,11 @@ import logging
 import os
 import shutil
 import signal
-import sys
 
 from aiohttp import web
 
-import mkvpriority
+from mkvpriority.main import main as main_cli
+from mkvpriority.main import setup_logging
 
 __version__ = 'v1.1.0'
 
@@ -27,9 +27,7 @@ async def queue_worker():
             file_path += f'::{item_tags.split(",")[0]}'
         try:
             argv = [*MKVPRIORITY_ARGS, file_path]
-            await asyncio.get_event_loop().run_in_executor(
-                None, lambda: mkvpriority.mkvpriority(argv)
-            )
+            await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv))
         except Exception:
             logger.error(f"skipping (error occurred) '{file_path}'")
         finally:
@@ -81,6 +79,10 @@ def main():
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
 
+    setup_logging()
+    logger.setLevel(logging.INFO)
+    logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
+
     os.makedirs('/config', exist_ok=True)
     if not os.path.exists('/config/config.toml'):
         shutil.copy2('config.toml', '/config/')
@@ -95,17 +97,10 @@ def main():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s',
-        level=logging.INFO,
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-    logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
-
     if WEBHOOK_RECEIVER:
         main()
     elif CUSTOM_SCRIPT:
         logger.warning('CUSTOM_SCRIPT is deprecated; use WEBHOOK_RECEIVER instead')
         main()
     else:
-        mkvpriority.mkvpriority()
+        main_cli()

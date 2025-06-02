@@ -15,6 +15,15 @@ mkvpropedit_logger = logging.getLogger('mkvpropedit')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
+def setup_logging():
+    if logging.getLogger().hasHandlers():
+        return
+    logging.basicConfig(
+        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+
 @dataclass
 class Track:
     score: int
@@ -432,6 +441,7 @@ def main(argv: list[str] | None = None):
     )
     args = parser.parse_args(argv)
 
+    setup_logging()
     mkvpriority_logger.setLevel(
         logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
     )
@@ -471,9 +481,7 @@ def main(argv: list[str] | None = None):
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
         config = configs.get(tag, configs['default'])
-        mkvpriority_logger.info(
-            dry_run + f"using '{config.toml_path}' ({tag} config) and '{args.archive}' (database)"
-        )
+        mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
 
         file_paths: list[str] = []
         if os.path.isdir(input_path):
@@ -505,8 +513,4 @@ def main(argv: list[str] | None = None):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
     main()
