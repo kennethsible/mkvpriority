@@ -18,7 +18,7 @@
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: main.py [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-n] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-n] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories

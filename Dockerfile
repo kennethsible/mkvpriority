@@ -3,9 +3,10 @@ FROM python:3.13-slim AS builder
 WORKDIR /app
 
 COPY pyproject.toml poetry.lock ./
+COPY mkvpriority/ ./mkvpriority/
 RUN pip install poetry>=2.0 && \
     poetry config virtualenvs.in-project true && \
-    poetry install --no-root --no-interaction && \
+    poetry install --no-interaction && \
     poetry cache clear PyPI --all --no-interaction
 
 FROM python:3.13-slim AS runtime
@@ -21,8 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
-COPY mkvpriority mkvpriority
-COPY mkvpriority.sh .
-COPY config.toml .
+COPY --from=builder /app/mkvpriority /app/mkvpriority
+COPY config.toml mkvpriority.sh ./
 
 ENTRYPOINT ["python", "-m", "mkvpriority.entrypoint"]
