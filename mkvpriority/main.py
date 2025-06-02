@@ -147,11 +147,14 @@ class Database:
             )
         self.con.commit()
 
-    def delete(self, file_path: str):
+    def delete(self, file_path: str, print_entry: bool = False):
         dry_run = '[DRY RUN] ' if self.dry_run else ''
-        mkvpriority_logger.info(
-            dry_run + f"deleting entry from database '{self.db_path}': '{file_path}'"
-        )
+        if print_entry:
+            mkvpriority_logger.info(
+                dry_run + f"deleting entry from database '{self.db_path}': '{file_path}'"
+            )
+        else:
+            mkvpriority_logger.info(dry_run + f"deleting entry from database '{self.db_path}'")
         if not self.dry_run:
             self.cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
             self.con.commit()
@@ -166,7 +169,7 @@ class Database:
             )
         return self.cur.fetchone() is not None
 
-    def restore(self, file_path: str, track: Track):
+    def restore(self, file_path: str, track: Track) -> bool:
         self.cur.execute(
             'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = ? AND track_uid = ?',
             (file_path, str(track.uid)),
@@ -174,6 +177,7 @@ class Database:
         result = self.cur.fetchone()
         if result:
             track.default, track.forced, track.enabled = map(bool, result)
+        return result is not None
 
     def prune(self):
         self.cur.execute('SELECT file_path FROM archive')
@@ -181,7 +185,7 @@ class Database:
             file_path = row[0]
             if file_path is None or os.path.exists(file_path):
                 continue
-            self.delete(file_path)
+            self.delete(file_path, print_entry=True)
 
     def migrate(self, db_path: str):
         def column_exists(table: str, column: str) -> bool:
@@ -281,11 +285,11 @@ def extract_tracks(
                 return [], [], []
             mkvpriority_logger.debug(track)
             if track.type == 'audio':
-                database.restore(file_path, track)
-                audio_tracks.append(track)
+                if database.restore(file_path, track):
+                    audio_tracks.append(track)
             elif track.type == 'subtitles':
-                database.restore(file_path, track)
-                subtitle_tracks.append(track)
+                if database.restore(file_path, track):
+                    subtitle_tracks.append(track)
             continue
 
         if track.type == 'video':
@@ -342,15 +346,16 @@ def mkvpropedit(
                 '--set',
                 f'flag-enabled={int(track.enabled)}',
             ]
-        if dry_run:
-            mkvpropedit_logger.info('[DRY RUN] ' + ' '.join(mkv_args[1:]))
-        else:
-            mkvpropedit_logger.info(' '.join(mkv_args[1:]))
-            try:
-                modify_tracks(mkv_args)
-            except subprocess.CalledProcessError as e:
-                mkvpropedit_logger.error(e.stdout.rstrip())
-                return
+        if len(mkv_args) > 1:
+            if dry_run:
+                mkvpropedit_logger.info('[DRY RUN] ' + ' '.join(mkv_args[1:]))
+            else:
+                mkvpropedit_logger.info(' '.join(mkv_args[1:]))
+                try:
+                    modify_tracks(mkv_args)
+                except subprocess.CalledProcessError as e:
+                    mkvpropedit_logger.error(e.stdout.rstrip())
+                    return
         database.delete(file_path)
         return
 
