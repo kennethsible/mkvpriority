@@ -61,7 +61,7 @@ class Config:
 class Database:
     SCHEMA_VERSION = 1
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, dry_run: bool = False):
         self.con = sqlite3.connect(db_path)
         self.cur = self.con.cursor()
         self.cur.execute('PRAGMA foreign_keys = ON')
@@ -89,12 +89,16 @@ class Database:
         )
         self.migrate(db_path)
         self.db_path = db_path
+        self.dry_run = dry_run
 
     def insert(self, file_path: str, tracks: list[Track]):
+        dry_run = '[DRY RUN] ' if self.dry_run else ''
         if self.contains(file_path):
-            mkvpriority_logger.info(f"updating database entry in '{self.db_path}'")
+            mkvpriority_logger.info(dry_run + f"updating entry in database '{self.db_path}'")
         else:
-            mkvpriority_logger.info(f"inserting database entry into '{self.db_path}'")
+            mkvpriority_logger.info(dry_run + f"inserting entry into database '{self.db_path}'")
+        if self.dry_run:
+            return
 
         file_mtime = int(os.path.getmtime(file_path))
         self.cur.execute(
@@ -134,9 +138,12 @@ class Database:
             )
         self.con.commit()
 
-    def delete(self, file_path: str, dry_run: bool = False):
-        mkvpriority_logger.info(f"deleting database entry from '{self.db_path}': '{file_path}'")
-        if not dry_run:
+    def delete(self, file_path: str):
+        dry_run = '[DRY RUN] ' if self.dry_run else ''
+        mkvpriority_logger.info(
+            dry_run + f"deleting entry from database '{self.db_path}': '{file_path}'"
+        )
+        if not self.dry_run:
             self.cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
             self.con.commit()
 
@@ -159,13 +166,13 @@ class Database:
         if result:
             track.default, track.forced, track.enabled = map(bool, result)
 
-    def prune(self, dry_run: bool = False):
+    def prune(self):
         self.cur.execute('SELECT file_path FROM archive')
         for row in self.cur.fetchall():
             file_path = row[0]
             if file_path is None or os.path.exists(file_path):
                 continue
-            self.delete(file_path, dry_run)
+            self.delete(file_path)
 
     def migrate(self, db_path: str):
         def column_exists(table: str, column: str) -> bool:
@@ -326,14 +333,16 @@ def mkvpropedit(
                 '--set',
                 f'flag-enabled={int(track.enabled)}',
             ]
-        mkvpropedit_logger.info(' '.join(mkv_args[1:]))
-        if not dry_run:
+        if dry_run:
+            mkvpropedit_logger.info('[DRY RUN] ' + ' '.join(mkv_args[1:]))
+        else:
+            mkvpropedit_logger.info(' '.join(mkv_args[1:]))
             try:
                 modify_tracks(mkv_args)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
-            else:
-                database.delete(file_path)
+                return
+        database.delete(file_path)
         return
 
     archive_tracks: list[Track] = []
@@ -379,16 +388,16 @@ def mkvpropedit(
         process_tracks(subtitle_tracks, config.subtitle_mode)
 
     if len(mkv_args) > 1:
-        mkvpropedit_logger.info(' '.join(mkv_args[1:]))
-        if not dry_run:
+        if dry_run:
+            mkvpropedit_logger.info('[DRY RUN] ' + ' '.join(mkv_args[1:]))
+        else:
+            mkvpropedit_logger.info(' '.join(mkv_args[1:]))
             try:
                 modify_tracks(mkv_args)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
-            else:
-                if database is not None:
-                    database.insert(file_path, archive_tracks)
-    elif database is not None:
+                return
+    if database is not None:
         database.insert(file_path, archive_tracks)
 
 
@@ -444,7 +453,7 @@ def main(argv: list[str] | None = None):
     database = None
     if args.archive:
         try:
-            database = Database(args.archive)
+            database = Database(args.archive, args.dry_run)
         except (FileNotFoundError, sqlite3.OperationalError):
             mkvpriority_logger.exception(f"database error (not found): '{args.archive}'")
             raise
@@ -452,17 +461,18 @@ def main(argv: list[str] | None = None):
         if database is None:
             parser.error('cannot use --prune without --archive')
         else:
-            database.prune(args.dry_run)
+            database.prune()
     if args.restore and database is None:
         parser.error('cannot use --restore without --archive')
 
+    dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
         tag = 'default'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
         config = configs.get(tag, configs['default'])
         mkvpriority_logger.info(
-            f"config ({tag}) = '{config.toml_path}'; database = '{args.archive}'"
+            dry_run + f"using '{config.toml_path}' ({tag} config) and '{args.archive}' (database)"
         )
 
         file_paths: list[str] = []
@@ -472,7 +482,7 @@ def main(argv: list[str] | None = None):
         elif os.path.isfile(input_path):
             file_paths.append(input_path)
         else:
-            mkvpriority_logger.info(f"skipping (not found) '{input_path}'")
+            mkvpriority_logger.info(dry_run + f"skipping (not found) '{input_path}'")
 
         for file_path in file_paths:
             if not os.path.isfile(file_path):
@@ -483,13 +493,14 @@ def main(argv: list[str] | None = None):
                 file_mtime = int(os.path.getmtime(file_path))
                 is_archived = database.contains(file_path, file_mtime)
                 if not args.restore and is_archived:
-                    mkvpriority_logger.info(f"skipping (archived) '{file_path}'")
+                    mkvpriority_logger.info(dry_run + f"skipping (archived) '{file_path}'")
                     continue
                 if args.restore and not is_archived:
-                    mkvpriority_logger.info(f"skipping (unarchived) '{file_path}'")
+                    mkvpriority_logger.info(dry_run + f"skipping (unarchived) '{file_path}'")
                     continue
 
-            mkvpriority_logger.info(f"processing '{file_path}'")
+            operation = 'restoring' if args.restore else 'processing'
+            mkvpriority_logger.info(dry_run + f"{operation} '{file_path}'")
             process_file(file_path, config, database, args.restore, args.dry_run)
 
 

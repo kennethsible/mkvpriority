@@ -279,9 +279,9 @@ def test_mkvpriority():
                     assert track.score == 72
                 case 'Dialogue [Blu-ray]':
                     if track.language == 'eng':
-                        assert track.score == 110
+                        assert track.score == 108
                     else:
-                        assert track.score == 10
+                        assert track.score == 8
 
 
 def test_entrypoint():
