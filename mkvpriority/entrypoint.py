@@ -10,7 +10,7 @@ from aiohttp import web
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
 
-__version__ = 'v1.1.0'
+__version__ = 'v1.1.1'
 
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()

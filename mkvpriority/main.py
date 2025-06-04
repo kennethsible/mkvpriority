@@ -6,9 +6,12 @@ import sqlite3
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import tomllib
+
+UNSUPPORTED_FORMATS = ['.mp4', '.m4v', '.mov', '.avi', '.webm']
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -103,9 +106,9 @@ class Database:
     def insert(self, file_path: str, tracks: list[Track]):
         dry_run = '[DRY RUN] ' if self.dry_run else ''
         if self.contains(file_path):
-            mkvpriority_logger.info(dry_run + f"updating entry in database '{self.db_path}'")
+            mkvpriority_logger.info(dry_run + f"updating database '{self.db_path}'")
         else:
-            mkvpriority_logger.info(dry_run + f"inserting entry into database '{self.db_path}'")
+            mkvpriority_logger.info(dry_run + f"inserting into database '{self.db_path}'")
         if self.dry_run:
             return
 
@@ -151,10 +154,10 @@ class Database:
         dry_run = '[DRY RUN] ' if self.dry_run else ''
         if print_entry:
             mkvpriority_logger.info(
-                dry_run + f"deleting entry from database '{self.db_path}': '{file_path}'"
+                dry_run + f"deleting from database '{self.db_path}': '{file_path}'"
             )
         else:
-            mkvpriority_logger.info(dry_run + f"deleting entry from database '{self.db_path}'")
+            mkvpriority_logger.info(dry_run + f"deleting from database '{self.db_path}'")
         if not self.dry_run:
             self.cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
             self.con.commit()
@@ -486,21 +489,24 @@ def main(argv: list[str] | None = None):
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
         config = configs.get(tag, configs['default'])
-        mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
 
         file_paths: list[str] = []
         if os.path.isdir(input_path):
+            mkvpriority_logger.info(dry_run + f"scanning '{input_path}'")
             for root, _, files in os.walk(input_path):
                 file_paths.extend(os.path.join(root, f) for f in files)
         elif os.path.isfile(input_path):
             file_paths.append(input_path)
         else:
-            mkvpriority_logger.info(dry_run + f"skipping (not found) '{input_path}'")
+            mkvpriority_logger.warning(dry_run + f"skipping (not found) '{input_path}'")
 
         for file_path in file_paths:
-            if not os.path.isfile(file_path):
-                continue
-            if not file_path.lower().endswith('.mkv'):
+            suffix = Path(file_path).suffix.lower()
+            if suffix != '.mkv':
+                if suffix in UNSUPPORTED_FORMATS:
+                    mkvpriority_logger.warning(
+                        dry_run + f"skipping (unsupported format) '{file_path}'"
+                    )
                 continue
             if database is not None:
                 file_mtime = int(os.path.getmtime(file_path))
@@ -514,6 +520,7 @@ def main(argv: list[str] | None = None):
 
             operation = 'restoring' if args.restore else 'processing'
             mkvpriority_logger.info(dry_run + f"{operation} '{file_path}'")
+            mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
             process_file(file_path, config, database, args.restore, args.dry_run)
 
 
