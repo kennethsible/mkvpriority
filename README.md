@@ -10,7 +10,7 @@
 - Assigns **configurable priority scores** to audio and subtitle tracks (similar to **custom formats** in Radarr/Sonarr)
 - Automatically sets **default/forced flags** for the highest priority tracks (e.g., Japanese audio and ASS subtitles)
 - Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
-- Periodically scans your media library and processes new MKV files when using a cron job with **archive mode**
+- Periodically scans your media library and processes new MKV files when using a **cron schedule** with a database
 - Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
 
 ## CLI Usage
@@ -79,7 +79,7 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: true
+    WEBHOOK_RECEIVER: "true"
     MKVPRIORITY_ARGS: >
       --archive /config/archive.db
   volumes:
@@ -102,7 +102,7 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: true
+    WEBHOOK_RECEIVER: "true"
     MKVPRIORITY_ARGS: >
       --config /config/anime.toml::anime
       --archive /config/archive.db
@@ -125,7 +125,7 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: true
+    WEBHOOK_RECEIVER: "true"
     MKVPRIORITY_ARGS: >
       --archive /config/archive.db
     SONARR_URL: http://sonarr:8989
@@ -140,6 +140,25 @@ mkvpriority:
 
 > [!NOTE]
 > To generate an API key for Radarr/Sonarr, go to Settings > General > Security > API Key.
+
+## Cron Scheduler
+
+You can use the built-in cron scheduler to periodically scan your media library and process MKV files. When paired with an archive database, MKVPriority will only process new files with each scan.
+
+```yaml
+mkvpriority:
+  image: ghcr.io/kennethsible/mkvpriority
+  container_name: mkvpriority
+  user: ${PUID}:${PGID}
+  environment:
+    TZ: "America/New_York"
+    CRON_SCHEDULE: "0 5 * * *"
+    MKVPRIORITY_ARGS: -a /config/archive.db /media
+  volumes:
+    - /path/to/media:/media
+    - /path/to/mkvpriority/config:/config
+  restart: unless-stopped
+```
 
 ## TOML Configuration
 

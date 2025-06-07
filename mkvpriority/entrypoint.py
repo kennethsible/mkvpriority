@@ -8,6 +8,8 @@ import signal
 import pycountry
 import requests
 from aiohttp import web
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
@@ -17,8 +19,9 @@ __version__ = 'v1.2.0'
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
-CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'False').lower() in ('true', '1', 't')
-WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'False').lower() in ('true', '1', 't')
+CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
+CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
+WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1', 't')
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + os.getenv('MKVPRIORITY_ARGS', '').split()
 SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
 RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
@@ -61,7 +64,6 @@ async def queue_worker():
         try:
             argv = [*MKVPRIORITY_ARGS, file_path]
             orig_lang = get_orig_lang(item_id, item_type)
-            logger.info(orig_lang)
             await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv, orig_lang))
         except Exception:
             logger.error(f"skipping (error occurred) '{file_path}'")
@@ -79,7 +81,7 @@ async def process_handler(request: web.Request) -> web.Response:
     return web.json_response({'message': f"recieved '{file_path}'"})
 
 
-async def init_api(host: str, port: int):
+async def init_api(host: str, port: int) -> web.AppRunner:
     app = web.Application()
     app.router.add_post('/process', process_handler)
 
@@ -100,14 +102,15 @@ async def init_api(host: str, port: int):
     await runner.setup()
     site = web.TCPSite(runner, host, port)
     await site.start()
+    return runner
 
-    stop_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGTERM, lambda: stop_event.set())
-    loop.add_signal_handler(signal.SIGINT, lambda: stop_event.set())
 
-    await stop_event.wait()
-    await runner.cleanup()
+async def init_scheduler(timezone: str | None) -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler()
+    trigger = CronTrigger.from_crontab(CRON_SCHEDULE, timezone)
+    scheduler.add_job(lambda: main_cli(MKVPRIORITY_ARGS), trigger)
+    scheduler.start()
+    return scheduler
 
 
 def main():
@@ -128,16 +131,41 @@ def main():
     open('/config/archive.db', 'a').close()
 
     logger.info(f'MKVPriority {__version__}')
-    logger.info(f'running on http://{args.host}:{args.port}')
 
-    asyncio.run(init_api(args.host, args.port))
+    async def run_all():
+        stop_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        loop.add_signal_handler(signal.SIGTERM, lambda: stop_event.set())
+        loop.add_signal_handler(signal.SIGINT, lambda: stop_event.set())
+
+        runner = None
+        if WEBHOOK_RECEIVER:
+            logger.info(f'running receiver on port {args.port}')
+            runner = await init_api(args.host, args.port)
+
+        scheduler = None
+        if CRON_SCHEDULE:
+            timezone = os.getenv('TZ', 'UTC')
+            if timezone:
+                logger.info(f'setting timezone to {timezone}')
+            logger.info(f"scheduling task at '{CRON_SCHEDULE}'")
+            scheduler = await init_scheduler(timezone)
+
+        await stop_event.wait()
+        if runner:
+            await runner.cleanup()
+        if scheduler:
+            scheduler.shutdown(wait=False)
+
+    asyncio.run(run_all())
 
 
 if __name__ == '__main__':
-    if WEBHOOK_RECEIVER:
-        main()
-    elif CUSTOM_SCRIPT:
+    if CUSTOM_SCRIPT:
         logger.warning('CUSTOM_SCRIPT is deprecated; use WEBHOOK_RECEIVER instead')
+        main()
+    elif WEBHOOK_RECEIVER or CRON_SCHEDULE:
         main()
     else:
         main_cli()

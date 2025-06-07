@@ -18,7 +18,9 @@ services:
     container_name: mkvpriority
     user: ${PUID}:${PGID}
     environment:
-      WEBHOOK_RECEIVER: true
+      # TZ: "America/New_York"
+      # CRON_SCHEDULE: "0 5 * * *"
+      WEBHOOK_RECEIVER: "true"
       MKVPRIORITY_ARGS: >
         --archive /config/archive.db
       # SONARR_URL: http://sonarr:8989
