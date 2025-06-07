@@ -5,29 +5,64 @@ import os
 import shutil
 import signal
 
+import pycountry
+import requests
 from aiohttp import web
 
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
 
-__version__ = 'v1.1.1'
+__version__ = 'v1.2.0'
 
 logger = logging.getLogger('entrypoint')
-processing_queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
+processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
+SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
+RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'False').lower() in ('true', '1', 't')
 WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'False').lower() in ('true', '1', 't')
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + os.getenv('MKVPRIORITY_ARGS', '').split()
 
 
+def get_alpha_3_code(lang_name: str) -> str | None:
+    try:
+        lang = pycountry.languages.lookup(lang_name)
+        return lang.alpha_3  # ISO 639-3
+    except LookupError:
+        return None
+
+
+def get_orig_lang(item_id: str, item_type: str) -> str | None:
+    match item_type:
+        case 'series':
+            endpoint = f'{SONARR_URL}/api/v3/series/{item_id}'
+            headers = {'X-Api-Key': SONARR_API_KEY}
+        case 'movie':
+            endpoint = f'{RADARR_URL}/api/v3/movie/{item_id}'
+            headers = {'X-Api-Key': RADARR_API_KEY}
+        case _:
+            return None
+
+    try:
+        response = requests.get(endpoint, headers=headers)
+        response.raise_for_status()
+    except requests.RequestException:
+        logger.exception(f"request failed: '{endpoint}'")
+        raise
+    lang_info = response.json().get('originalLanguage', {})
+    return get_alpha_3_code(lang_info.get('name', ''))
+
+
 async def queue_worker():
     while True:
-        file_path, item_tags = await processing_queue.get()
+        file_path, item_type, item_tags, item_id = await processing_queue.get()
         if item_tags:
             file_path += f'::{item_tags.split(",")[0]}'
         try:
             argv = [*MKVPRIORITY_ARGS, file_path]
-            await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv))
+            orig_lang = get_orig_lang(item_id, item_type)
+            logger.info(orig_lang)
+            await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv, orig_lang))
         except Exception:
             logger.error(f"skipping (error occurred) '{file_path}'")
         finally:
@@ -37,8 +72,10 @@ async def queue_worker():
 async def process_handler(request: web.Request) -> web.Response:
     args = await request.json()
     file_path = args.get('file_path')
+    item_type = args.get('item_type', '')
     item_tags = args.get('item_tags', '')
-    await processing_queue.put((file_path, item_tags))
+    item_id = args.get('item_id', '')
+    await processing_queue.put((file_path, item_type, item_tags, item_id))
     return web.json_response({'message': f"recieved '{file_path}'"})
 
 

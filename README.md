@@ -115,6 +115,32 @@ mkvpriority:
 > [!IMPORTANT]
 > In Radarr/Sonarr, a given movie or show can have multiple tags. However, MKVPriority only uses the first tag in alphabetical order. Therefore, you may need to create new tags specifically for MKVPriority.
 
+### Use Original Language
+
+MKVPriority supports using the Radarr/Sonarr API to identify the original language of a movie or series. You can assign priority scores to the language code `org` (original) by configuring API access with environment variables.
+
+```yaml
+mkvpriority:
+  image: ghcr.io/kennethsible/mkvpriority
+  container_name: mkvpriority
+  user: ${PUID}:${PGID}
+  environment:
+    SONARR_URL: http://sonarr:8989
+    SONARR_API_KEY: ${SONARR_API_KEY}
+    RADARR_URL: http://radarr:7878
+    RADARR_API_KEY: ${RADARR_API_KEY}
+    WEBHOOK_RECEIVER: true
+    MKVPRIORITY_ARGS: >
+      --archive /config/archive.db
+  volumes:
+    - /path/to/media:/media
+    - /path/to/mkvpriority/config:/config
+  restart: unless-stopped
+```
+
+> [!NOTE]
+> To generate an API key for Radarr/Sonarr, go to Settings > General > Security > API Key.
+
 ## TOML Configuration
 
 A single TOML file controls all behavior by assigning priority scores to track properties, such as languages and codecs, and by defining custom filters for track names, such as signs and songs.

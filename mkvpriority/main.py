@@ -432,7 +432,7 @@ def process_file(
     return audio_tracks, subtitle_tracks
 
 
-def main(argv: list[str] | None = None):
+def main(argv: list[str] | None = None, orig_lang: str | None = None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '-c', '--config', action='append', metavar='TOML_PATH[::TAG]', default=['config.toml']
@@ -463,10 +463,15 @@ def main(argv: list[str] | None = None):
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
         try:
-            configs[tag] = Config.from_file(toml_path)
+            config = Config.from_file(toml_path)
         except (FileNotFoundError, tomllib.TOMLDecodeError):
             mkvpriority_logger.exception(f"config error (not found): '{toml_path}'")
             raise
+        if orig_lang and 'org' in config.audio_languages:
+            config.audio_languages[orig_lang] = config.audio_languages['org']
+        if orig_lang and 'org' in config.subtitle_languages:
+            config.subtitle_languages[orig_lang] = config.subtitle_languages['org']
+        configs[tag] = config
 
     database = None
     if args.archive:
