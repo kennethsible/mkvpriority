@@ -115,7 +115,7 @@ mkvpriority:
 > [!IMPORTANT]
 > In Radarr/Sonarr, a given movie or show can have multiple tags. However, MKVPriority only uses the first tag in alphabetical order. Therefore, you may need to create new tags specifically for MKVPriority.
 
-### Use Original Language
+### Original Audio Language
 
 MKVPriority supports using the Radarr/Sonarr API to identify the original language of a movie or series. You can assign priority scores to the language code `org` (original) by configuring API access with environment variables.
 
@@ -125,13 +125,13 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
+    WEBHOOK_RECEIVER: true
+    MKVPRIORITY_ARGS: >
+      --archive /config/archive.db
     SONARR_URL: http://sonarr:8989
     SONARR_API_KEY: ${SONARR_API_KEY}
     RADARR_URL: http://radarr:7878
     RADARR_API_KEY: ${RADARR_API_KEY}
-    WEBHOOK_RECEIVER: true
-    MKVPRIORITY_ARGS: >
-      --archive /config/archive.db
   volumes:
     - /path/to/media:/media
     - /path/to/mkvpriority/config:/config
@@ -145,19 +145,16 @@ mkvpriority:
 
 A single TOML file controls all behavior by assigning priority scores to track properties, such as languages and codecs, and by defining custom filters for track names, such as signs and songs.
 
-### Example (Audio Codecs)
+### Example: Subtitle Codecs
 
 ```toml
-[audio_codecs]
-A_DTSHD_MA = 10 # DTS-HD Master Audio
-A_TRUEHD = 9    # Dolby TrueHD
-A_FLAC = 8      # Free Lossless Audio Codec
-A_DTS = 7       # DTS
-A_OPUS = 6      # Opus
-A_EAC3 = 5      # Dolby Digital Plus
-A_AC3 = 4       # Dolby Digital (AC-3)
-A_AAC = 3       # Advanced Audio Coding
-"A_MPEG/L3" = 2 # MP3 (MPEG Layer III)
+[subtitle_codecs]
+"S_TEXT/ASS" = 2    # Stylized Subtitles (Advanced SubStationAlpha)
+S_SSA = 2           # Legacy Stylized Subtitles (SubStationAlpha)
+"S_TEXT/UTF8" = 1   # Plain Text Subtitles (SubRip/SRT)
+"S_TEXT/WEBVTT" = 1 # Web-Based Video Text (Used in Streaming)
+"S_HDMV/PGS" = 0    # Image-Based (Used in Blu-rays)
+S_VOBSUB = 0        # Legacy Image-Based (Used in DVDs)
 ```
 
 ## Limitations

@@ -45,13 +45,14 @@ class Track:
 class Config:
     toml_path: str
     audio_mode: list[str]
-    subtitle_mode: list[str]
     audio_languages: dict[str, int]
     audio_codecs: dict[str, int]
     audio_channels: dict[str, int]
+    audio_filters: dict[str, int]
+    subtitle_mode: list[str]
     subtitle_languages: dict[str, int]
     subtitle_codecs: dict[str, int]
-    track_filters: dict[str, int]
+    subtitle_filters: dict[str, int]
 
     @classmethod
     def from_file(cls, toml_path: str) -> 'Config':
@@ -60,13 +61,14 @@ class Config:
         return cls(
             toml_path=toml_path,
             audio_mode=toml_file.get('audio_mode', []),
-            subtitle_mode=toml_file.get('subtitle_mode', []),
             audio_languages=toml_file.get('audio_languages', {}),
             audio_codecs=toml_file.get('audio_codecs', {}),
             audio_channels=toml_file.get('audio_channels', {}),
+            audio_filters=toml_file.get('audio_filters', {}),
+            subtitle_mode=toml_file.get('subtitle_mode', []),
             subtitle_languages=toml_file.get('subtitle_languages', {}),
             subtitle_codecs=toml_file.get('subtitle_codecs', {}),
-            track_filters=toml_file.get('track_filters', {}),
+            subtitle_filters=toml_file.get('subtitle_filters', {}),
         )
 
 
@@ -304,7 +306,7 @@ def extract_tracks(
                 track.score += config.audio_codecs.get(track.codec, 0)
                 track.score += config.audio_channels.get(str(track.channels), 0)
                 if track.name:
-                    for key, value in config.track_filters.items():
+                    for key, value in config.audio_filters.items():
                         if key in track.name.lower():
                             track.score += value
             audio_tracks.append(track)
@@ -315,7 +317,7 @@ def extract_tracks(
                 track.score += config.subtitle_languages.get(track.language, 0)
                 track.score += config.subtitle_codecs.get(track.codec, 0)
                 if track.name:
-                    for key, value in config.track_filters.items():
+                    for key, value in config.subtitle_filters.items():
                         if key in track.name.lower():
                             track.score += value
             subtitle_tracks.append(track)

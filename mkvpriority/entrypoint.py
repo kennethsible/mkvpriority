@@ -17,11 +17,11 @@ __version__ = 'v1.2.0'
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
-SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
-RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'False').lower() in ('true', '1', 't')
 WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'False').lower() in ('true', '1', 't')
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + os.getenv('MKVPRIORITY_ARGS', '').split()
+SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
+RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
 
 
 def get_alpha_3_code(lang_name: str) -> str | None:
@@ -123,7 +123,7 @@ def main():
     os.makedirs('/config', exist_ok=True)
     if not os.path.exists('/config/config.toml'):
         shutil.copy2('config.toml', '/config/')
-    if not os.path.exists('/config/mkvpriority.toml'):
+    if not os.path.exists('/config/mkvpriority.sh'):
         shutil.copy2('mkvpriority.sh', '/config/')
     open('/config/archive.db', 'a').close()
 
