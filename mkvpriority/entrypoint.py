@@ -139,11 +139,6 @@ def main():
         loop.add_signal_handler(signal.SIGTERM, lambda: stop_event.set())
         loop.add_signal_handler(signal.SIGINT, lambda: stop_event.set())
 
-        runner = None
-        if WEBHOOK_RECEIVER:
-            logger.info(f'running receiver on port {args.port}')
-            runner = await init_api(args.host, args.port)
-
         scheduler = None
         if CRON_SCHEDULE:
             timezone = os.getenv('TZ', 'UTC')
@@ -151,6 +146,14 @@ def main():
                 logger.info(f'setting timezone to {timezone}')
             logger.info(f"scheduling task at '{CRON_SCHEDULE}'")
             scheduler = await init_scheduler(timezone)
+
+        runner = None
+        if WEBHOOK_RECEIVER:
+            if CRON_SCHEDULE:
+                logger.warning('unset CRON_SCHEDULE to use WEBHOOK_RECEIVER')
+            else:
+                logger.info(f'running receiver on port {args.port}')
+                runner = await init_api(args.host, args.port)
 
         await stop_event.wait()
         if runner:
