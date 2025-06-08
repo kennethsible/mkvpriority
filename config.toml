@@ -52,8 +52,8 @@ A_AAC = 3       # Advanced Audio Coding
 # Looks at the track name to detect its purpose and assign priority.
 # This is especially useful when language or codec alone isn't enough.
 [audio_filters]
-commentar = -200   # Commentary Track
-descriptive = -200 # Visually Impaired
+commentar = -200 # Commentary Track
+descript = -200  # Visually Impaired
 
 # === Subtitle Language Preferences ===
 # Example: Prioritize English subtitles with Japanese audio.

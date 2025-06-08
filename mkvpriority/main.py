@@ -58,6 +58,11 @@ class Config:
     def from_file(cls, toml_path: str) -> 'Config':
         with open(toml_path, 'rb') as f:
             toml_file = tomllib.load(f)
+        if 'track_filters' in toml_file and 'subtitle_filters' not in toml_file:
+            mkvpriority_logger.warning(
+                '[track_filters] is deprecated; use [subtitle_filters] instead'
+            )
+            toml_file['subtitle_filters'] = toml_file['track_filters']
         return cls(
             toml_path=toml_path,
             audio_mode=toml_file.get('audio_mode', []),
