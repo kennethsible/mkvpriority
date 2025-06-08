@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+import shlex
 import shutil
 import signal
 
@@ -22,7 +23,7 @@ processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
 WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1', 't')
-MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + os.getenv('MKVPRIORITY_ARGS', '').split()
+MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
 SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
 RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
 

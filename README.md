@@ -10,7 +10,7 @@
 - Assigns **configurable priority scores** to audio and subtitle tracks (similar to **custom formats** in Radarr/Sonarr)
 - Automatically sets **default/forced flags** for the highest priority tracks (e.g., Japanese audio and ASS subtitles)
 - Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
-- Periodically scans your media library and processes new MKV files when using a **cron schedule** with a database
+- Periodically scans your media library using a **cron schedule** and processes new MKV files with a database
 - Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
 
 ## CLI Usage
@@ -143,7 +143,7 @@ mkvpriority:
 
 ## Cron Scheduler
 
-You can use the built-in cron scheduler to periodically scan your media library and process MKV files. When paired with an archive database, MKVPriority will only process new files with each scan.
+You can use the built-in [cron scheduler](https://en.wikipedia.org/wiki/Cron#Overview) to periodically scan your media library and process MKV files. When paired with an archive database, MKVPriority will only process new files with each scan.
 
 ```yaml
 mkvpriority:
