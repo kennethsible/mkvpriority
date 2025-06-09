@@ -143,7 +143,7 @@ mkvpriority:
 
 ## Cron Scheduler
 
-You can use the built-in [cron scheduler](https://en.wikipedia.org/wiki/Cron#Overview) to periodically scan your media library and process MKV files. When paired with an archive database, MKVPriority will only process new files with each scan.
+You can use the built-in cron scheduler to periodically scan your media library and process MKV files. When paired with an archive database, MKVPriority will only process new files with each scan.
 
 ```yaml
 mkvpriority:
@@ -152,13 +152,16 @@ mkvpriority:
   user: ${PUID}:${PGID}
   environment:
     TZ: "America/New_York"
-    CRON_SCHEDULE: "0 5 * * *"
+    CRON_SCHEDULE: "0 0 * * *"
     MKVPRIORITY_ARGS: -a /config/archive.db /media
   volumes:
     - /path/to/media:/media
     - /path/to/mkvpriority/config:/config
   restart: unless-stopped
 ```
+
+> [!NOTE]
+> MKVPriority supports all non-standard macros defined on [Wikipedia](https://en.wikipedia.org/wiki/Cron#Overview), except for `@reboot` (use `docker run` instead).
 
 ## TOML Configuration
 

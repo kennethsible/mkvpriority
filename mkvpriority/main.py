@@ -60,7 +60,7 @@ class Config:
             toml_file = tomllib.load(f)
         if 'track_filters' in toml_file and 'subtitle_filters' not in toml_file:
             mkvpriority_logger.warning(
-                '[track_filters] is deprecated; use [subtitle_filters] instead'
+                f"'{toml_path}' [track_filters] is deprecated; use [subtitle_filters] instead"
             )
             toml_file['subtitle_filters'] = toml_file['track_filters']
         return cls(
@@ -472,7 +472,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None):
         try:
             config = Config.from_file(toml_path)
         except (FileNotFoundError, tomllib.TOMLDecodeError):
-            mkvpriority_logger.exception(f"config error (not found): '{toml_path}'")
+            mkvpriority_logger.exception(f"error occurred while loading config: '{toml_path}'")
             raise
         if orig_lang and 'org' in config.audio_languages:
             config.audio_languages[orig_lang] = config.audio_languages['org']
@@ -485,7 +485,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None):
         try:
             database = Database(args.archive, args.dry_run)
         except (FileNotFoundError, sqlite3.OperationalError):
-            mkvpriority_logger.exception(f"database error (not found): '{args.archive}'")
+            mkvpriority_logger.exception(f"error occurred while loading database: '{args.archive}'")
             raise
     if args.prune:
         if database is None:

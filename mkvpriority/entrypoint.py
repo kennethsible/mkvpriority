@@ -20,12 +20,23 @@ __version__ = 'v1.2.0'
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
-CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
+
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
 WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1', 't')
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
 SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
 RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
+
+CRON_MACROS = {
+    '@yearly': '0 0 1 1 *',
+    '@annually': '0 0 1 1 *',
+    '@monthly': '0 0 1 * *',
+    '@weekly': '0 0 * * 0',
+    '@daily': '0 0 * * *',
+    '@midnight': '0 0 * * *',
+    '@hourly': '0 * * * *',
+}
+CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
 
 
 def get_alpha_3_code(lang_name: str) -> str | None:
@@ -67,7 +78,7 @@ async def queue_worker():
             orig_lang = get_orig_lang(item_id, item_type)
             await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv, orig_lang))
         except Exception:
-            logger.error(f"skipping (error occurred) '{file_path}'")
+            logger.error(f"error occurred while processing file: '{file_path}'")
         finally:
             processing_queue.task_done()
 
@@ -106,9 +117,13 @@ async def init_api(host: str, port: int) -> web.AppRunner:
     return runner
 
 
-async def init_scheduler(timezone: str | None) -> AsyncIOScheduler:
+async def init_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
-    trigger = CronTrigger.from_crontab(CRON_SCHEDULE, timezone)
+    try:
+        trigger = CronTrigger.from_crontab(expr, timezone)
+    except ValueError:
+        logger.exception(f"invalid expression or unsupported macro: '{expr}'")
+        raise
     scheduler.add_job(lambda: main_cli(MKVPRIORITY_ARGS), trigger)
     scheduler.start()
     return scheduler
@@ -142,18 +157,19 @@ def main():
 
         scheduler = None
         if CRON_SCHEDULE:
+            expr = CRON_MACROS.get(CRON_SCHEDULE, CRON_SCHEDULE)
             timezone = os.getenv('TZ', 'UTC')
             if timezone:
-                logger.info(f'setting timezone to {timezone}')
-            logger.info(f"scheduling task at '{CRON_SCHEDULE}'")
-            scheduler = await init_scheduler(timezone)
+                logger.info(f'setting time zone to {timezone}')
+            logger.info(f"scheduling task to run at '{expr}'")
+            scheduler = await init_scheduler(expr, timezone)
 
         runner = None
         if WEBHOOK_RECEIVER:
             if CRON_SCHEDULE:
                 logger.warning('unset CRON_SCHEDULE to use WEBHOOK_RECEIVER')
             else:
-                logger.info(f'running receiver on port {args.port}')
+                logger.info(f'running webhook receiver on port {args.port}')
                 runner = await init_api(args.host, args.port)
 
         await stop_event.wait()

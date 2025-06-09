@@ -19,7 +19,7 @@ services:
     user: ${PUID}:${PGID}
     environment:
       # TZ: "America/New_York"
-      # CRON_SCHEDULE: "0 5 * * *"
+      # CRON_SCHEDULE: "0 0 * * *"
       WEBHOOK_RECEIVER: "true"
       MKVPRIORITY_ARGS: >
         --archive /config/archive.db
