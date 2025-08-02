@@ -1,25 +1,25 @@
 [project]
 name = "mkvpriority"
-version = "1.2.0"
+version = "1.2.1"
 description = "Automatically Prioritize Audio/Subtitle Tracks in MKV Files"
 license = { text = "MIT" }
 authors = [{ name = "Ken Sible", email = "ksible@outlook.com" }]
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.10"
 dependencies = [
-    "aiohttp>=3.12.11",
+    "aiohttp>=3.12.15",
     "apscheduler>=3.11.0",
-    "requests>=2.32.3",
+    "requests>=2.32.4",
     "pycountry>=24.6.1",
 ]
+
+[dependency-groups]
+dev = ["ruff>=0.12.7", "mypy>=1.17.1", "pytest>=8.4.1"]
 
 [project.urls]
 homepage = "https://github.com/kennethsible/mkvpriority"
 
 [project.scripts]
 mkvpriority = "mkvpriority.main:main"
-
-[project.optional-dependencies]
-dev = ["ruff>=0.11.13", "mypy>=1.16.0", "pytest>=8.4.0"]
 
 [tool.ruff]
 line-length = 100
@@ -34,5 +34,5 @@ quote-style = "single"
 ignore_missing_imports = true
 
 [build-system]
-requires = ["poetry-core>=2.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
