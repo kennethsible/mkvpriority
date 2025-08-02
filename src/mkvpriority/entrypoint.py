@@ -52,10 +52,16 @@ def get_orig_lang(item_id: str, item_type: str) -> str | None:
         case 'series':
             if SONARR_URL is None:
                 return None
+            if SONARR_API_KEY is None:
+                logger.warning('set SONARR_API_KEY to use SONARR_URL')
+                return None
             endpoint = f'{SONARR_URL}/api/v3/series/{item_id}'
             headers = {'X-Api-Key': SONARR_API_KEY}
         case 'movie':
             if RADARR_URL is None:
+                return None
+            if RADARR_API_KEY is None:
+                logger.warning('set RADARR_API_KEY to use RADARR_URL')
                 return None
             endpoint = f'{RADARR_URL}/api/v3/movie/{item_id}'
             headers = {'X-Api-Key': RADARR_API_KEY}
