@@ -15,7 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
 
-__version__ = 'v1.2.0'
+__version__ = 'v1.2.1'
 
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
@@ -50,19 +50,22 @@ def get_alpha_3_code(lang_name: str) -> str | None:
 def get_orig_lang(item_id: str, item_type: str) -> str | None:
     match item_type:
         case 'series':
+            if SONARR_URL is None:
+                return None
             endpoint = f'{SONARR_URL}/api/v3/series/{item_id}'
             headers = {'X-Api-Key': SONARR_API_KEY}
         case 'movie':
+            if RADARR_URL is None:
+                return None
             endpoint = f'{RADARR_URL}/api/v3/movie/{item_id}'
             headers = {'X-Api-Key': RADARR_API_KEY}
         case _:
             return None
-
     try:
         response = requests.get(endpoint, headers=headers)
         response.raise_for_status()
     except requests.RequestException:
-        logger.exception(f"request failed: '{endpoint}'")
+        logger.exception(f"error occurred while sending request: '{endpoint}'")
         raise
     lang_info = response.json().get('originalLanguage', {})
     return get_alpha_3_code(lang_info.get('name', ''))

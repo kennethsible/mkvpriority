@@ -441,9 +441,7 @@ def process_file(
 
 def main(argv: list[str] | None = None, orig_lang: str | None = None):
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-c', '--config', action='append', metavar='TOML_PATH[::TAG]', default=['config.toml']
-    )
+    parser.add_argument('-c', '--config', action='append', metavar='TOML_PATH[::TAG]')
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
     parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix results')
