@@ -1,4 +1,6 @@
-# MKVPriority - MKV Track Prioritizer
+<div align="center">
+  <img alt="MKVPriority Banner" src="images/mkvpriority_banner.svg" width="600">
+</div>
 
 **MKVPriority** assigns configurable priority scores to audio and subtitle tracks, similar to custom formats in Radarr/Sonarr. MKV flags, such as default and forced, are automatically set for the highest-priority tracks (e.g., 5.1 surround and ASS subtitles), while lower-priority tracks (e.g., stereo audio and PGS subtitles) are deprioritized.
 
