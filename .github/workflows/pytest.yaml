@@ -1,4 +1,4 @@
-name: Python Unit Testing
+name: Python CI
 
 on: [push]
 

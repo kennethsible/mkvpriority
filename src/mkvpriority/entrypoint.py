@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import signal
+from typing import cast
 
 import pycountry
 import requests
@@ -15,7 +16,7 @@ from apscheduler.triggers.cron import CronTrigger
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
 
-__version__ = 'v1.2.1'
+__version__ = 'v1.2.2'
 
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
@@ -42,7 +43,7 @@ CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
 def get_alpha_3_code(lang_name: str) -> str | None:
     try:
         lang = pycountry.languages.lookup(lang_name)
-        return lang.alpha_3  # ISO 639-3
+        return cast(str, lang.alpha_3)  # ISO 639-3
     except LookupError:
         return None
 
@@ -77,7 +78,7 @@ def get_orig_lang(item_id: str, item_type: str) -> str | None:
     return get_alpha_3_code(lang_info.get('name', ''))
 
 
-async def queue_worker():
+async def queue_worker() -> None:
     while True:
         file_path, item_type, item_tags, item_id = await processing_queue.get()
         if item_tags:
@@ -106,10 +107,10 @@ async def init_api(host: str, port: int) -> web.AppRunner:
     app = web.Application()
     app.router.add_post('/process', process_handler)
 
-    async def on_startup(app: web.Application):
+    async def on_startup(app: web.Application) -> None:
         app['worker'] = asyncio.create_task(queue_worker())
 
-    async def on_cleanup(app: web.Application):
+    async def on_cleanup(app: web.Application) -> None:
         app['worker'].cancel()
         try:
             await app['worker']
@@ -138,7 +139,7 @@ async def init_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     return scheduler
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--port', type=int, default=8080)
@@ -157,7 +158,7 @@ def main():
 
     logger.info(f'MKVPriority {__version__}')
 
-    async def run_all():
+    async def run_all() -> None:
         stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
 

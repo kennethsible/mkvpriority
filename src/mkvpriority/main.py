@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Any
 
 import tomllib
 
@@ -18,7 +19,7 @@ mkvpropedit_logger = logging.getLogger('mkvpropedit')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
-def setup_logging():
+def setup_logging() -> None:
     if logging.getLogger().hasHandlers():
         return
     logging.basicConfig(
@@ -31,7 +32,7 @@ def setup_logging():
 class Track:
     score: int
     uid: int
-    type: str
+    kind: str
     name: str
     language: str
     codec: str
@@ -110,7 +111,7 @@ class Database:
         self.db_path = db_path
         self.dry_run = dry_run
 
-    def insert(self, file_path: str, tracks: list[Track]):
+    def insert(self, file_path: str, tracks: list[Track]) -> None:
         dry_run = '[DRY RUN] ' if self.dry_run else ''
         if self.contains(file_path):
             mkvpriority_logger.info(dry_run + f"updating database '{self.db_path}'")
@@ -157,7 +158,7 @@ class Database:
             )
         self.con.commit()
 
-    def delete(self, file_path: str, print_entry: bool = False):
+    def delete(self, file_path: str, print_entry: bool = False) -> None:
         dry_run = '[DRY RUN] ' if self.dry_run else ''
         if print_entry:
             mkvpriority_logger.info(
@@ -189,7 +190,7 @@ class Database:
             track.default, track.forced, track.enabled = map(bool, result)
         return result is not None
 
-    def prune(self):
+    def prune(self) -> None:
         self.cur.execute('SELECT file_path FROM archive')
         for row in self.cur.fetchall():
             file_path = row[0]
@@ -197,7 +198,7 @@ class Database:
                 continue
             self.delete(file_path, print_entry=True)
 
-    def migrate(self, db_path: str):
+    def migrate(self, db_path: str) -> None:
         def column_exists(table: str, column: str) -> bool:
             self.cur.execute(f'PRAGMA table_info({table})')
             return column in [row[1] for row in self.cur.fetchall()]
@@ -220,7 +221,7 @@ class Database:
         self.con.commit()
 
 
-def identify_tracks(file_path: str):
+def identify_tracks(file_path: str) -> Any:
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', file_path], temp_file)
         temp_file.flush()
@@ -235,7 +236,7 @@ def identify_tracks(file_path: str):
         return json.loads(result.stdout)
 
 
-def modify_tracks(mkv_args: list[str]):
+def modify_tracks(mkv_args: list[str]) -> None:
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(mkv_args, temp_file)
         temp_file.flush()
@@ -277,7 +278,7 @@ def extract_tracks(
         track = Track(
             score=0,
             uid=properties.get('uid'),
-            type=metadata.get('type'),
+            kind=metadata.get('type'),
             name=properties.get('track_name'),
             language=properties.get('language', 'und'),
             codec=properties.get('codec_id'),
@@ -294,18 +295,18 @@ def extract_tracks(
                 mkvpriority_logger.error('cannot restore without a database')
                 return [], [], []
             mkvpriority_logger.debug(track)
-            if track.type == 'audio':
+            if track.kind == 'audio':
                 if database.restore(file_path, track):
                     audio_tracks.append(track)
-            elif track.type == 'subtitles':
+            elif track.kind == 'subtitles':
                 if database.restore(file_path, track):
                     subtitle_tracks.append(track)
             continue
 
-        if track.type == 'video':
+        if track.kind == 'video':
             video_tracks.append(track)
 
-        elif track.type == 'audio':
+        elif track.kind == 'audio':
             if config:
                 track.score += config.audio_languages.get(track.language, 0)
                 track.score += config.audio_codecs.get(track.codec, 0)
@@ -317,7 +318,7 @@ def extract_tracks(
             audio_tracks.append(track)
             mkvpriority_logger.debug(track)
 
-        elif track.type == 'subtitles':
+        elif track.kind == 'subtitles':
             if config:
                 track.score += config.subtitle_languages.get(track.language, 0)
                 track.score += config.subtitle_codecs.get(track.codec, 0)
@@ -339,7 +340,7 @@ def mkvpropedit(
     database: Database | None = None,
     restore: bool = False,
     dry_run: bool = False,
-):
+) -> None:
     if restore:
         if database is None:
             mkvpriority_logger.error('cannot restore without a database')
@@ -372,7 +373,7 @@ def mkvpropedit(
     archive_tracks: list[Track] = []
     mkv_args = [file_path]
 
-    def process_tracks(tracks: list[Track], track_modes: list[str]):
+    def process_tracks(tracks: list[Track], track_modes: list[str]) -> None:
         nonlocal mkv_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
@@ -439,7 +440,7 @@ def process_file(
     return audio_tracks, subtitle_tracks
 
 
-def main(argv: list[str] | None = None, orig_lang: str | None = None):
+def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', action='append', metavar='TOML_PATH[::TAG]')
     parser.add_argument('-a', '--archive', metavar='DB_PATH')

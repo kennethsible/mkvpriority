@@ -132,7 +132,7 @@ Dummy Subtitle
     }
 
 
-def multiplex_dummy(output_path: Path, track_files: dict[str, Path]):
+def multiplex_dummy(output_path: Path, track_files: dict[str, Path]) -> None:
     subprocess.run(
         [
             'mkvmerge',
@@ -209,7 +209,7 @@ def multiplex_dummy(output_path: Path, track_files: dict[str, Path]):
     )
 
 
-def test_mkvpropedit():
+def test_mkvpropedit() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -255,7 +255,7 @@ def test_mkvpropedit():
         assert total_count == 8
 
 
-def test_mkvpriority():
+def test_mkvpriority() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -284,7 +284,7 @@ def test_mkvpriority():
                         assert track.score == 8
 
 
-def test_entrypoint():
+def test_entrypoint() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -317,7 +317,7 @@ def test_entrypoint():
                     assert not track.forced
 
 
-def test_restore():
+def test_restore() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -352,7 +352,7 @@ def test_restore():
                         assert not track.default and not track.forced
 
 
-def test_prune():
+def test_prune() -> None:
     with tempfile.NamedTemporaryFile() as archive_file:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
