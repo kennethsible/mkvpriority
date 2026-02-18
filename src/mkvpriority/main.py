@@ -358,10 +358,8 @@ def mkvpropedit(
                 f'flag-enabled={int(track.enabled)}',
             ]
         if len(mkv_args) > 1:
-            if dry_run:
-                mkvpropedit_logger.info('[DRY RUN] ' + ' '.join(mkv_args[1:]))
-            else:
-                mkvpropedit_logger.info(' '.join(mkv_args[1:]))
+            if not dry_run:
+                mkvpropedit_logger.debug(' '.join(mkv_args[1:]))
                 try:
                     modify_tracks(mkv_args)
                 except subprocess.CalledProcessError as e:
@@ -380,12 +378,26 @@ def mkvpropedit(
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
 
         if tracks[0].score > 0:
-            if default_mode and not tracks[0].default:
-                mkv_flags[tracks[0].uid].append('flag-default=1')
-            if forced_mode and not tracks[0].forced:
-                mkv_flags[tracks[0].uid].append('flag-forced=1')
-            if (disabled_mode or enabled_mode) and not tracks[0].enabled:
-                mkv_flags[tracks[0].uid].append('flag-enabled=1')
+            if default_mode:
+                if tracks[0].default:
+                    track_modes.remove('default')
+                else:
+                    mkv_flags[tracks[0].uid].append('flag-default=1')
+            if forced_mode:
+                if tracks[0].forced:
+                    track_modes.remove('forced')
+                else:
+                    mkv_flags[tracks[0].uid].append('flag-forced=1')
+            if disabled_mode or enabled_mode:
+                if tracks[0].enabled:
+                    track_modes.remove('enabled')
+                else:
+                    mkv_flags[tracks[0].uid].append('flag-enabled=1')
+            if track_modes:
+                mkvpriority_logger.info(
+                    ('[DRY RUN] ' if dry_run else '')
+                    + f"setting track '{tracks[0].name}' as {track_modes}"
+                )
             unwanted_tracks = tracks[1:]
         else:
             unwanted_tracks = tracks
@@ -413,10 +425,8 @@ def mkvpropedit(
         process_tracks(subtitle_tracks, config.subtitle_mode)
 
     if len(mkv_args) > 1:
-        if dry_run:
-            mkvpropedit_logger.info('[DRY RUN] ' + ' '.join(mkv_args[1:]))
-        else:
-            mkvpropedit_logger.info(' '.join(mkv_args[1:]))
+        if not dry_run:
+            mkvpropedit_logger.debug(' '.join(mkv_args[1:]))
             try:
                 modify_tracks(mkv_args)
             except subprocess.CalledProcessError as e:
