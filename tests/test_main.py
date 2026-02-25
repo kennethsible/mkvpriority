@@ -8,7 +8,7 @@ import mkvpriority
 
 def create_dummy(temp_dir: Path) -> dict[str, Path]:
     # 1. Black Screen Video MP4
-    video_path = temp_dir / 'video.mp4'
+    video_path = temp_dir / 'blank_video.mp4'
     subprocess.run(
         [
             'ffmpeg',
@@ -28,8 +28,8 @@ def create_dummy(temp_dir: Path) -> dict[str, Path]:
         check=True,
     )
 
-    # 2. Japanese Audio FLAC
-    audio1_path = temp_dir / 'japanese_surround.flac'
+    # 2. Japanese Audio 5.1 FLAC
+    audio1_path = temp_dir / 'jpn.5.1.flac'
     subprocess.run(
         [
             'ffmpeg',
@@ -49,8 +49,8 @@ def create_dummy(temp_dir: Path) -> dict[str, Path]:
         check=True,
     )
 
-    # 3. Japanese Audio AAC
-    audio2_path = temp_dir / 'japanese_stereo.aac'
+    # 3. Japanese Audio 2.0 AAC
+    audio2_path = temp_dir / 'jpn.2.0.aac'
     subprocess.run(
         [
             'ffmpeg',
@@ -70,8 +70,8 @@ def create_dummy(temp_dir: Path) -> dict[str, Path]:
         check=True,
     )
 
-    # 4. English Audio AAC
-    audio3_path = temp_dir / 'english_stereo.aac'
+    # 4. English Audio 2.0 AAC
+    audio3_path = temp_dir / 'eng.2.0.aac'
     subprocess.run(
         [
             'ffmpeg',
@@ -94,20 +94,20 @@ def create_dummy(temp_dir: Path) -> dict[str, Path]:
     # 5. English Subtitles ASS/SRT
     sub1_path = temp_dir / 'full_subs.ass'
     sub2_path = temp_dir / 'signs_songs.ass'
-    sub3_path = temp_dir / 'dialogue_eng.srt'
-    sub4_path = temp_dir / 'dialogue_ger.srt'
+    sub3_path = temp_dir / 'dialogue.eng.srt'
+    sub4_path = temp_dir / 'dialogue.ger.srt'
 
     ass_template = """
 [Script Info]
-Title: Dummy Subtitle
 ScriptType: v4.00+
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,1.5,0,2,10,10,10,1
+Format: Name, Fontname, Fontsize, PrimaryColour, Outline, Shadow, Alignment, Encoding
+Style: Default,Arial,20,&H00FFFFFF,2,1,2,1
 
 [Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Format: Layer, Start, End, Style, Text
+Dialogue: 0,0:00:00.00,0:00:01.00,Default,Dummy Subtitle
 """
 
     srt_template = """1
@@ -144,7 +144,7 @@ def multiplex_dummy(output_path: Path, track_files: dict[str, Path]) -> None:
             '--default-track',
             '0:no',
             str(track_files['video']),
-            # Japanese Audio AAC
+            # Japanese Audio 2.0 AAC
             '--language',
             '0:jpn',
             '--track-name',
@@ -152,7 +152,7 @@ def multiplex_dummy(output_path: Path, track_files: dict[str, Path]) -> None:
             '--default-track',
             '0:no',
             str(track_files['audio2']),
-            # English Audio AAC
+            # English Audio 2.0 AAC
             '--language',
             '0:eng',
             '--track-name',
@@ -160,7 +160,7 @@ def multiplex_dummy(output_path: Path, track_files: dict[str, Path]) -> None:
             '--default-track',
             '0:yes',
             str(track_files['audio3']),
-            # Japanese Audio FLAC
+            # Japanese Audio 5.1 FLAC
             '--language',
             '0:jpn',
             '--track-name',
