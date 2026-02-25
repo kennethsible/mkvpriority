@@ -19,27 +19,6 @@
 - Periodically scans your media library using a **cron schedule** and processes new MKV files with a database
 - Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
 
-## CLI Usage
-
-[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
-
-```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-n] [INPUT_PATH[::TAG] ...]
-
-positional arguments:
-  INPUT_PATH[::TAG]     files or directories
-
-options:
-  -c TOML_PATH[::TAG], --config TOML_PATH[::TAG]
-  -a DB_PATH, --archive DB_PATH
-  -v, --verbose         print track information
-  -x, --debug           show mkvtoolnix results
-  -q, --quiet           suppress logging output
-  -p, --prune           prune database entries
-  -r, --restore         restore original flags
-  -n, --dry-run         leave tracks unchanged
-```
-
 ## Docker Image
 
 A Docker image is provided to simplify the installation process and enable quick deployment.
@@ -171,6 +150,39 @@ mkvpriority:
 
 > [!NOTE]
 > MKVPriority supports all non-standard macros defined on [Wikipedia](https://en.wikipedia.org/wiki/Cron#Overview), except for `@reboot` (use `docker run` instead).
+
+## CLI Usage
+
+[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
+
+```text
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-e] [-n] [INPUT_PATH[::TAG] ...]
+
+positional arguments:
+  INPUT_PATH[::TAG]     files or directories
+
+options:
+  -c TOML_PATH[::TAG], --config TOML_PATH[::TAG]
+  -a DB_PATH, --archive DB_PATH
+  -v, --verbose         print track information
+  -x, --debug           show mkvtoolnix results
+  -q, --quiet           suppress logging output
+  -p, --prune           prune database entries
+  -r, --restore         restore original flags
+  -e, --extract         extract embedded subtitles
+  -n, --dry-run         leave tracks unchanged
+```
+
+### Subtitle Extractor
+
+You can use the `--extract` argument to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support the embedded subtitle format. For example, your player may need to burn the subtitles into the video or convert them on the fly, which increases CPU usage and can delay playback.
+
+```text
+Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
+```
+
+> [!NOTE]
+> To avoid changing internal track flags and *only* use external subtitles, use the `--dry-run` argument with `--extract` since subtitle extraction still runs during a dry run, which only prevents changes to the MKV container.
 
 ## TOML Configuration
 

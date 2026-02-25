@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import sys
 from dataclasses import dataclass
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -19,20 +20,23 @@ mkvpropedit_logger = logging.getLogger('mkvpropedit')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
-def setup_logging() -> None:
+def setup_logging(log_path: str | None = None, max_bytes: int = 0, max_files: int = 1) -> None:
     if logging.getLogger().hasHandlers():
         return
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if log_path is not None:
+        assert max_bytes >= 0 and max_files >= 1, 'invalid log rotation parameters'
+        handlers.append(RotatingFileHandler(log_path, 'a', max_bytes, max_files - 1))
     logging.basicConfig(
-        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s',
-        handlers=[logging.StreamHandler(sys.stdout)],
+        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s', handlers=handlers
     )
 
 
 @dataclass
 class Track:
-    score: int
-    uid: int
+    index: int
     kind: str
+    score: int
     name: str
     language: str
     codec: str
@@ -40,6 +44,7 @@ class Track:
     default: bool
     enabled: bool
     forced: bool
+    uid: int
 
 
 @dataclass
@@ -276,9 +281,9 @@ def extract_tracks(
         properties = metadata.get('properties', {})
 
         track = Track(
-            score=0,
-            uid=properties.get('uid'),
+            index=metadata.get('id'),
             kind=metadata.get('type'),
+            score=0,
             name=properties.get('track_name'),
             language=properties.get('language', 'und'),
             codec=properties.get('codec_id'),
@@ -286,6 +291,7 @@ def extract_tracks(
             default=properties.get('default_track', False),
             enabled=properties.get('enabled_track', False),
             forced=properties.get('forced_track', False),
+            uid=properties.get('uid'),
         )
         if track.uid is None:
             continue
@@ -332,47 +338,61 @@ def extract_tracks(
     return video_tracks, audio_tracks, subtitle_tracks
 
 
-def mkvpropedit(
+def restore_tracks(
+    file_path: str,
+    audio_tracks: list[Track],
+    subtitle_tracks: list[Track],
+    database: Database | None = None,
+    dry_run: bool = False,
+) -> None:
+    if database is None:
+        mkvpriority_logger.error('cannot restore without a database')
+        return
+
+    mkv_args, log_args = [file_path], []
+
+    def apply_flags(track: Track, use_index: bool = False) -> list[str]:
+        track_id = track.index if use_index else track.uid
+        return [
+            '--edit',
+            f'track:={track_id}',
+            '--set',
+            f'flag-default={int(track.default)}',
+            '--set',
+            f'flag-forced={int(track.forced)}',
+            '--set',
+            f'flag-enabled={int(track.enabled)}',
+        ]
+
+    for track in [*audio_tracks, *subtitle_tracks]:
+        mkv_args += apply_flags(track, use_index=False)
+        log_args += apply_flags(track, use_index=True)
+
+    if len(mkv_args) > 1:
+        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(log_args))
+        if not dry_run:
+            try:
+                modify_tracks(mkv_args)
+            except subprocess.CalledProcessError as e:
+                mkvpropedit_logger.error(e.stdout.rstrip())
+                return
+    database.delete(file_path)
+
+
+def process_tracks(
     file_path: str,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
     config: Config,
     database: Database | None = None,
-    restore: bool = False,
+    extract: bool = False,
     dry_run: bool = False,
 ) -> None:
-    if restore:
-        if database is None:
-            mkvpriority_logger.error('cannot restore without a database')
-            return
-        mkv_args = [file_path]
-        for track in [*audio_tracks, *subtitle_tracks]:
-            mkv_args += [
-                '--edit',
-                f'track:={track.uid}',
-                '--set',
-                f'flag-default={int(track.default)}',
-                '--set',
-                f'flag-forced={int(track.forced)}',
-                '--set',
-                f'flag-enabled={int(track.enabled)}',
-            ]
-        if len(mkv_args) > 1:
-            if not dry_run:
-                mkvpropedit_logger.debug(' '.join(mkv_args[1:]))
-                try:
-                    modify_tracks(mkv_args)
-                except subprocess.CalledProcessError as e:
-                    mkvpropedit_logger.error(e.stdout.rstrip())
-                    return
-        database.delete(file_path)
-        return
-
     archive_tracks: list[Track] = []
-    mkv_args = [file_path]
+    mkv_args, log_args = [file_path], []
 
-    def process_tracks(tracks: list[Track], track_modes: list[str]) -> None:
-        nonlocal mkv_args
+    def apply_flags(tracks: list[Track], track_modes: list[str]) -> None:
+        nonlocal mkv_args, log_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
@@ -393,11 +413,6 @@ def mkvpropedit(
                     track_modes.remove('enabled')
                 else:
                     mkv_flags[tracks[0].uid].append('flag-enabled=1')
-            if track_modes:
-                mkvpriority_logger.info(
-                    ('[DRY RUN] ' if dry_run else '')
-                    + f"setting track '{tracks[0].name}' as {track_modes}"
-                )
             unwanted_tracks = tracks[1:]
         else:
             unwanted_tracks = tracks
@@ -415,18 +430,20 @@ def mkvpropedit(
         for track in tracks:
             if mkv_flags[track.uid]:
                 mkv_args += ['--edit', f'track:={track.uid}']
+                log_args += ['--edit', f'track:={track.index}']
                 for flag in mkv_flags[track.uid]:
                     mkv_args += ['--set', flag]
+                    log_args += ['--set', flag]
                 archive_tracks.append(track)
 
     if audio_tracks:
-        process_tracks(audio_tracks, config.audio_mode)
+        apply_flags(audio_tracks, config.audio_mode)
     if subtitle_tracks:
-        process_tracks(subtitle_tracks, config.subtitle_mode)
+        apply_flags(subtitle_tracks, config.subtitle_mode)
 
     if len(mkv_args) > 1:
+        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(log_args))
         if not dry_run:
-            mkvpropedit_logger.debug(' '.join(mkv_args[1:]))
             try:
                 modify_tracks(mkv_args)
             except subprocess.CalledProcessError as e:
@@ -446,13 +463,18 @@ def process_file(
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
-    mkvpropedit(file_path, audio_tracks, subtitle_tracks, config, database, restore, dry_run)
+    if restore:
+        restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
+    else:
+        process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
     return audio_tracks, subtitle_tracks
 
 
 def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', action='append', metavar='TOML_PATH[::TAG]')
+    parser.add_argument(
+        '-c', '--config', action='append', required=True, metavar='TOML_PATH[::TAG]'
+    )
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
     parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix results')
@@ -475,7 +497,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
-        tag = 'default'
+        tag = 'untagged'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
         try:
@@ -506,10 +528,10 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
-        tag = 'default'
+        tag = 'untagged'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-        config = configs.get(tag, configs['default'])
+        config = configs.get(tag, configs['untagged'])
 
         file_paths: list[str] = []
         if os.path.isdir(input_path):

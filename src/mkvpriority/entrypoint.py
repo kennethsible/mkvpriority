@@ -27,6 +27,7 @@ WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
 SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
 RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
+LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
 
 CRON_MACROS = {
     '@yearly': '0 0 1 1 *',
@@ -145,16 +146,20 @@ def main() -> None:
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
 
-    setup_logging()
-    logger.setLevel(logging.INFO)
-    logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
-
     os.makedirs('/config', exist_ok=True)
     if not os.path.exists('/config/config.toml'):
         shutil.copy2('config.toml', '/config/')
     if not os.path.exists('/config/mkvpriority.sh'):
         shutil.copy2('mkvpriority.sh', '/config/')
     open('/config/archive.db', 'a').close()
+
+    if LOG_MAX_BYTES or LOG_MAX_FILES:
+        os.makedirs('/config/logs', exist_ok=True)
+        max_bytes = 0 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
+        max_files = 1 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
+        setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
+    logger.setLevel(logging.INFO)
+    logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 
     logger.info(f'MKVPriority {__version__}')
 
