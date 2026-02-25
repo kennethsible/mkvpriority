@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 from itertools import chain
@@ -350,6 +351,21 @@ def test_restore() -> None:
                         assert track.forced
                     case _:
                         assert not track.default and not track.forced
+
+
+def test_extract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        config = mkvpriority.Config.from_file('config.toml')
+        mkvpriority.process_file(str(file_path), config, extract=True)
+
+        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
+        assert os.path.isfile(subtitle_path)
+        assert subtitle_path.stat().st_size > 0
 
 
 def test_prune() -> None:

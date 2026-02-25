@@ -5,7 +5,7 @@ import os
 import sqlite3
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -17,6 +17,7 @@ UNSUPPORTED_FORMATS = ['.mp4', '.m4v', '.mov', '.avi', '.webm']
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
+mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
@@ -226,6 +227,35 @@ class Database:
         self.con.commit()
 
 
+def extract_subtitles(file_path: str, subtitle_track: Track) -> Path | None:
+    if subtitle_track.codec != 'S_TEXT/ASS':
+        return None
+
+    subtitle_suffix = f'.{subtitle_track.language}'
+    if subtitle_track.default:
+        subtitle_suffix += '.default'
+    if subtitle_track.forced:
+        subtitle_suffix += '.forced'
+    subtitle_path = Path(file_path.replace('.mkv', f'{subtitle_suffix}.ass'))
+    if os.path.isfile(subtitle_path):
+        return None
+    mkvextract_logger.info(f"extracting subtitles to '{subtitle_path}'")
+
+    with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
+        json.dump(['tracks', file_path, f'{subtitle_track.index}:{subtitle_path}'], temp_file)
+        temp_file.flush()
+        result = subprocess.run(
+            ['mkvextract', f'@{temp_file.name}'],
+            capture_output=True,
+            encoding='utf-8',
+            check=True,
+            text=True,
+        )
+        mkvextract_logger.debug(result.stdout.rstrip())
+
+    return subtitle_path
+
+
 def identify_tracks(file_path: str) -> Any:
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', file_path], temp_file)
@@ -389,10 +419,11 @@ def process_tracks(
     dry_run: bool = False,
 ) -> None:
     archive_tracks: list[Track] = []
+    embedded_subtitles: Track | None = None
     mkv_args, log_args = [file_path], []
 
     def apply_flags(tracks: list[Track], track_modes: list[str]) -> None:
-        nonlocal mkv_args, log_args
+        nonlocal embedded_subtitles, mkv_args, log_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
@@ -402,11 +433,19 @@ def process_tracks(
                 if tracks[0].default:
                     track_modes.remove('default')
                 else:
+                    if tracks[0].kind == 'subtitles':
+                        if embedded_subtitles is None:
+                            embedded_subtitles = replace(tracks[0])
+                        embedded_subtitles.default = True
                     mkv_flags[tracks[0].uid].append('flag-default=1')
             if forced_mode:
                 if tracks[0].forced:
                     track_modes.remove('forced')
                 else:
+                    if tracks[0].kind == 'subtitles':
+                        if embedded_subtitles is None:
+                            embedded_subtitles = replace(tracks[0])
+                        embedded_subtitles.forced = True
                     mkv_flags[tracks[0].uid].append('flag-forced=1')
             if disabled_mode or enabled_mode:
                 if tracks[0].enabled:
@@ -449,6 +488,8 @@ def process_tracks(
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
                 return
+    if extract and embedded_subtitles:
+        extract_subtitles(file_path, embedded_subtitles)
     if database is not None:
         database.insert(file_path, archive_tracks)
 
@@ -458,6 +499,7 @@ def process_file(
     config: Config,
     database: Database | None = None,
     restore: bool = False,
+    extract: bool = False,
     dry_run: bool = False,
 ) -> tuple[list[Track], list[Track]]:
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
@@ -466,7 +508,7 @@ def process_file(
     if restore:
         restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
     else:
-        process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
+        process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, extract, dry_run)
     return audio_tracks, subtitle_tracks
 
 
@@ -481,6 +523,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
     parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
+    parser.add_argument('-e', '--extract', action='store_true', help='extract embedded subtitles')
     parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
     parser.add_argument(
         'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
@@ -493,6 +536,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     )
     log_level = logging.ERROR if args.quiet else logging.DEBUG if args.debug else logging.INFO
     mkvpropedit_logger.setLevel(log_level)
+    mkvextract_logger.setLevel(log_level)
     mkvmerge_logger.setLevel(log_level)
 
     configs: dict[str, Config] = {}
@@ -564,7 +608,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             operation = 'restoring' if args.restore else 'processing'
             mkvpriority_logger.info(dry_run + f"{operation} '{file_path}'")
             mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
-            process_file(file_path, config, database, args.restore, args.dry_run)
+            process_file(file_path, config, database, args.restore, args.extract, args.dry_run)
 
 
 if __name__ == '__main__':

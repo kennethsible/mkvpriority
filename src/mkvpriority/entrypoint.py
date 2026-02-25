@@ -158,6 +158,8 @@ def main() -> None:
         max_bytes = 0 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
         max_files = 1 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
         setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
+    else:
+        setup_logging()
     logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 
