@@ -3,8 +3,8 @@ services:
     image: lscr.io/linuxserver/sonarr
     container_name: sonarr
     environment:
-      PUID: ${PUID}
-      PGID: ${PGID}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     volumes:
       - /path/to/media:/media # <-- same mount point
       - /path/to/sonarr/config:/config
@@ -16,7 +16,7 @@ services:
   mkvpriority:
     image: ghcr.io/kennethsible/mkvpriority
     container_name: mkvpriority
-    user: ${PUID}:${PGID}
+    user: ${PUID:-1000}:${PGID:-1000}
     environment:
       # TZ: "America/New_York"
       # CRON_SCHEDULE: "0 0 * * *"

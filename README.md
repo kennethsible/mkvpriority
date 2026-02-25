@@ -60,6 +60,9 @@ docker run --rm -u ${PUID}:${PGID} \
   --config /config/custom.toml
 ```
 
+> [!IMPORTANT]
+> Before starting the container for the first time, you must pre-create the config folder on the host. Otherwise, Docker will create the folder as the root user, which will cause Python to throw a `PermissionError`.
+
 ### Use an Archive Database
 
 You can periodically process your media library using a cron job and an archive database. To keep track of processed files, create an `archive.db` file and use a bind mount:
