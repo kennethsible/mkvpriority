@@ -269,7 +269,7 @@ def test_mkvpriority() -> None:
         for track in chain.from_iterable(tracks):
             match track.name:
                 case '5.1 FLAC (Japanese)':
-                    assert track.score == 118
+                    assert track.score == 116
                 case 'Stereo AAC (Japanese)':
                     assert track.score == 107
                 case 'Stereo AAC (English)':

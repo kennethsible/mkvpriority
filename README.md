@@ -193,7 +193,7 @@ A single TOML file controls all behavior by assigning priority scores to track p
 ```toml
 [subtitle_codecs]
 "S_TEXT/ASS" = 2    # Stylized Subtitles (Advanced SubStationAlpha)
-S_SSA = 2           # Legacy Stylized Subtitles (SubStationAlpha)
+"S_TEXT/SSA" = 2    # Legacy Stylized Subtitles (SubStationAlpha)
 "S_TEXT/UTF8" = 1   # Plain Text Subtitles (SubRip/SRT)
 "S_TEXT/WEBVTT" = 1 # Web-Based Video Text (Used in Streaming)
 "S_HDMV/PGS" = 0    # Image-Based (Used in Blu-rays)

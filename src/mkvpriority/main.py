@@ -14,6 +14,7 @@ from typing import Any
 import tomllib
 
 UNSUPPORTED_FORMATS = ['.mp4', '.m4v', '.mov', '.avi', '.webm']
+SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt'}
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -228,18 +229,22 @@ class Database:
 
 
 def extract_subtitles(file_path: str, subtitle_track: Track) -> Path | None:
-    if subtitle_track.codec != 'S_TEXT/ASS':
+    if not subtitle_track.codec.startswith('S_TEXT/'):
         return None
+    subtitle_format = subtitle_track.codec.split('/')[-1]
+    if subtitle_format not in SUBTITLE_EXTENSIONS:
+        return None
+    extension = SUBTITLE_EXTENSIONS[subtitle_format]
 
     subtitle_suffix = f'.{subtitle_track.language}'
     if subtitle_track.default:
         subtitle_suffix += '.default'
     if subtitle_track.forced:
         subtitle_suffix += '.forced'
-    subtitle_path = Path(file_path.replace('.mkv', f'{subtitle_suffix}.ass'))
-    if os.path.isfile(subtitle_path):
+    subtitle_path = Path(file_path).with_suffix(f'{subtitle_suffix}.{extension}')
+    if subtitle_path.is_file():
         return None
-    mkvextract_logger.info(f"extracting subtitles to '{subtitle_path}'")
+    mkvextract_logger.info(f"extracting subtitles to '{subtitle_path.parent}'")
 
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['tracks', file_path, f'{subtitle_track.index}:{subtitle_path}'], temp_file)
@@ -448,10 +453,10 @@ def process_tracks(
                         embedded_subtitles = replace(tracks[0])
                     embedded_subtitles.forced = True
             if disabled_mode or enabled_mode:
-                if tracks[0].enabled:
-                    track_modes.remove('enabled')
-                else:
+                if not tracks[0].enabled:
                     mkv_flags[tracks[0].uid].append('flag-enabled=1')
+                elif enabled_mode:
+                    track_modes.remove('enabled')
             unwanted_tracks = tracks[1:]
         else:
             unwanted_tracks = tracks
@@ -602,7 +607,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                     mkvpriority_logger.info(dry_run + f"skipping (archived) '{file_path}'")
                     continue
                 if args.restore and not is_archived:
-                    mkvpriority_logger.info(dry_run + f"skipping (unarchived) '{file_path}'")
+                    mkvpriority_logger.info(dry_run + f"skipping (not archived) '{file_path}'")
                     continue
 
             operation = 'restoring' if args.restore else 'processing'

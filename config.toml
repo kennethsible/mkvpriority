@@ -18,7 +18,7 @@ subtitle_mode = ["default", "forced"]
 # === Audio Language Preferences ===
 # Example: Prioritize Japanese subs over English dubs.
 [audio_languages]
-# org = ? # Original Language (Radarr/Sonarr)
+org = 130 # Original Language (Radarr/Sonarr)
 jpn = 100 # Japanese
 eng = 70  # English
 und = 30  # Undefined (Fallback)
@@ -39,9 +39,9 @@ A_AAC = 3       # Advanced Audio Coding
 # === Audio Channel Preferences ===
 # Example: Prioritize audio tracks with more channels.
 [audio_channels]
-8 = 9  # 7.1 Surround
-7 = 8  # 6.1 Surround
-6 = 10 # 5.1 Surround (Preferred)
+8 = 10 # 7.1 Surround
+7 = 9  # 6.1 Surround
+6 = 8  # 5.1 Surround
 5 = 7  # 5.0 Surround
 4 = 6  # Quadraphonic / 4.0 Surround
 3 = 5  # 2.1 or 3.0
@@ -67,7 +67,7 @@ und = 30  # Undefined (Fallback)
 # Example: Prioritize subtitle tracks with higher stylability.
 [subtitle_codecs]
 "S_TEXT/ASS" = 2    # Stylized Subtitles (Advanced SubStationAlpha)
-S_SSA = 2           # Legacy Stylized Subtitles (SubStationAlpha)
+"S_TEXT/SSA" = 2    # Legacy Stylized Subtitles (SubStationAlpha)
 "S_TEXT/UTF8" = 1   # Plain Text Subtitles (SubRip/SRT)
 "S_TEXT/WEBVTT" = 1 # Web-Based Video Text (Used in Streaming)
 "S_HDMV/PGS" = 0    # Image-Based (Used in Blu-rays)
