@@ -153,13 +153,10 @@ def main() -> None:
         shutil.copy2('mkvpriority.sh', '/config/')
     open('/config/archive.db', 'a').close()
 
-    if LOG_MAX_BYTES or LOG_MAX_FILES:
-        os.makedirs('/config/logs', exist_ok=True)
-        max_bytes = 0 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
-        max_files = 1 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
-        setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
-    else:
-        setup_logging()
+    os.makedirs('/config/logs', exist_ok=True)
+    max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
+    max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
+    setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
     logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 

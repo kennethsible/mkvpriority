@@ -20,11 +20,11 @@ services:
     environment:
       # TZ: "America/New_York"
       # CRON_SCHEDULE: "0 0 * * *"
+      # LOG_MAX_BYTES: 5242880
+      # LOG_MAX_FILES: 3
       WEBHOOK_RECEIVER: "true"
       MKVPRIORITY_ARGS: >
         --archive /config/archive.db
-      LOG_MAX_BYTES: 5242880 # 5 MB
-      LOG_MAX_FILES: 5
       # SONARR_URL: http://sonarr:8989
       # SONARR_API_KEY: ${SONARR_API_KEY}
       # RADARR_URL: http://radarr:7878

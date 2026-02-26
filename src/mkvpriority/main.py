@@ -433,20 +433,20 @@ def process_tracks(
                 if tracks[0].default:
                     track_modes.remove('default')
                 else:
-                    if tracks[0].kind == 'subtitles':
-                        if embedded_subtitles is None:
-                            embedded_subtitles = replace(tracks[0])
-                        embedded_subtitles.default = True
                     mkv_flags[tracks[0].uid].append('flag-default=1')
+                if tracks[0].kind == 'subtitles':
+                    if embedded_subtitles is None:
+                        embedded_subtitles = replace(tracks[0])
+                    embedded_subtitles.default = True
             if forced_mode:
                 if tracks[0].forced:
                     track_modes.remove('forced')
                 else:
-                    if tracks[0].kind == 'subtitles':
-                        if embedded_subtitles is None:
-                            embedded_subtitles = replace(tracks[0])
-                        embedded_subtitles.forced = True
                     mkv_flags[tracks[0].uid].append('flag-forced=1')
+                if tracks[0].kind == 'subtitles':
+                    if embedded_subtitles is None:
+                        embedded_subtitles = replace(tracks[0])
+                    embedded_subtitles.forced = True
             if disabled_mode or enabled_mode:
                 if tracks[0].enabled:
                     track_modes.remove('enabled')

@@ -40,7 +40,7 @@ docker run --rm -u ${PUID}:${PGID} \
 ```
 
 > [!IMPORTANT]
-> Before starting the container for the first time, you must pre-create the config folder on the host. Otherwise, Docker will create the folder as the root user, which will cause Python to throw a `PermissionError`.
+> Before starting the Docker container, you should pre-create the config folder on the host. Otherwise, Docker will create the folder as the root user, causing Python to raise a `PermissionError`.
 
 ### Use an Archive Database
 
@@ -175,7 +175,7 @@ options:
 
 ### Subtitle Extractor
 
-You can use the `--extract` argument to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support the embedded subtitle format. For example, your player may need to burn the subtitles into the video or convert them on the fly, which increases CPU usage and can delay playback.
+You can use the `--extract` argument to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, the entire MKV container must be demuxed and processed first. However, external subtitles avoid this additional processing step.
 
 ```text
 Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
@@ -202,7 +202,7 @@ S_VOBSUB = 0        # Legacy Image-Based (Used in DVDs)
 
 ## Limitations
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects [hardlinks](https://trash-guides.info/File-and-Folder-Structure/Hardlinks-and-Instant-Moves/) since the metadata is modified.
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects [hardlinks](https://trash-guides.info/File-and-Folder-Structure/Hardlinks-and-Instant-Moves/) since the metadata is modified. To avoid breaking hardlinks, use the `--dry-run` argument with `--extract` for external subtitles only (see [Subtitle Extractor](#subtitle-extractor)).
 
 ## Acknowledgments
 
