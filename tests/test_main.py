@@ -1,4 +1,3 @@
-import os
 import subprocess
 import tempfile
 from itertools import chain
@@ -218,7 +217,7 @@ def test_mkvpropedit() -> None:
         multiplex_dummy(file_path, track_files)
 
         track_count = total_count = 0
-        tracks = mkvpriority.extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(file_path)
         for track in chain.from_iterable(tracks):
             match track.name:
                 case 'Stereo AAC (English)':
@@ -235,10 +234,10 @@ def test_mkvpropedit() -> None:
         assert total_count == 8
 
         config = mkvpriority.Config.from_file('config.toml')
-        mkvpriority.process_file(str(file_path), config)
+        mkvpriority.process_file(file_path, config)
 
         track_count = total_count = 0
-        tracks = mkvpriority.extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(file_path)
         for track in chain.from_iterable(tracks):
             match track.name:
                 case '5.1 FLAC (Japanese)':
@@ -264,7 +263,7 @@ def test_mkvpriority() -> None:
         multiplex_dummy(file_path, track_files)
 
         config = mkvpriority.Config.from_file('config.toml')
-        tracks = mkvpriority.process_file(str(file_path), config)
+        tracks = mkvpriority.process_file(file_path, config)
 
         for track in chain.from_iterable(tracks):
             match track.name:
@@ -292,7 +291,7 @@ def test_entrypoint() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        tracks = mkvpriority.extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(file_path)
         for track in chain.from_iterable(tracks):
             match track.name:
                 case 'Stereo AAC (English)':
@@ -305,7 +304,7 @@ def test_entrypoint() -> None:
 
         mkvpriority.main.main(['-c', 'config.toml', str(file_path)])
 
-        tracks = mkvpriority.extract_tracks(str(file_path))
+        tracks = mkvpriority.extract_tracks(file_path)
         for track in chain.from_iterable(tracks):
             match track.name:
                 case '5.1 FLAC (Japanese)':
@@ -328,9 +327,9 @@ def test_restore() -> None:
         with tempfile.NamedTemporaryFile() as archive_file:
             config = mkvpriority.Config.from_file('config.toml')
             database = mkvpriority.Database(archive_file.name)
-            mkvpriority.process_file(str(file_path), config, database)
+            mkvpriority.process_file(file_path, config, database)
 
-            tracks = mkvpriority.extract_tracks(str(file_path))
+            tracks = mkvpriority.extract_tracks(file_path)
             for track in chain.from_iterable(tracks):
                 match track.name:
                     case '5.1 FLAC (Japanese)':
@@ -340,9 +339,9 @@ def test_restore() -> None:
                     case _:
                         assert not track.default and not track.forced
 
-            mkvpriority.process_file(str(file_path), config, database, restore=True)
+            mkvpriority.process_file(file_path, config, database, restore=True)
 
-            tracks = mkvpriority.extract_tracks(str(file_path))
+            tracks = mkvpriority.extract_tracks(file_path)
             for track in chain.from_iterable(tracks):
                 match track.name:
                     case 'Stereo AAC (English)':
@@ -361,10 +360,10 @@ def test_extract() -> None:
         multiplex_dummy(file_path, track_files)
 
         config = mkvpriority.Config.from_file('config.toml')
-        mkvpriority.process_file(str(file_path), config, extract=True)
+        mkvpriority.process_file(file_path, config, extract=True)
 
         subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
-        assert os.path.isfile(subtitle_path)
+        assert subtitle_path.is_file()
         assert subtitle_path.stat().st_size > 0
 
 
@@ -378,11 +377,11 @@ def test_prune() -> None:
 
             config = mkvpriority.Config.from_file('config.toml')
             database = mkvpriority.Database(archive_file.name)
-            mkvpriority.process_file(str(file_path), config, database)
+            mkvpriority.process_file(file_path, config, database)
 
-            assert database.contains(str(file_path))
+            assert database.contains(file_path)
             database.prune()
-            assert database.contains(str(file_path))
+            assert database.contains(file_path)
 
         database.prune()
-        assert not database.contains(str(file_path))
+        assert not database.contains(file_path)

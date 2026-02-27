@@ -1,7 +1,6 @@
 import argparse
 import json
 import logging
-import os
 import sqlite3
 import subprocess
 import sys
@@ -13,7 +12,6 @@ from typing import Any
 
 import tomllib
 
-UNSUPPORTED_FORMATS = ['.mp4', '.m4v', '.mov', '.avi', '.webm']
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt'}
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
@@ -118,7 +116,7 @@ class Database:
         self.db_path = db_path
         self.dry_run = dry_run
 
-    def insert(self, file_path: str, tracks: list[Track]) -> None:
+    def insert(self, file_path: Path, tracks: list[Track]) -> None:
         dry_run = '[DRY RUN] ' if self.dry_run else ''
         if self.contains(file_path):
             mkvpriority_logger.info(dry_run + f"updating database '{self.db_path}'")
@@ -127,7 +125,7 @@ class Database:
         if self.dry_run:
             return
 
-        file_mtime = int(os.path.getmtime(file_path))
+        file_mtime = file_path.stat().st_mtime
         self.cur.execute(
             """
             INSERT INTO archive (
@@ -140,7 +138,7 @@ class Database:
                 file_mtime = excluded.file_mtime,
                 schema_version = excluded.schema_version
             """,
-            (file_path, file_mtime, self.SCHEMA_VERSION),
+            (str(file_path), int(file_mtime), self.SCHEMA_VERSION),
         )
         for track in tracks:
             self.cur.execute(
@@ -156,7 +154,7 @@ class Database:
                 ON CONFLICT(file_path, track_uid) DO NOTHING
                 """,
                 (
-                    file_path,
+                    str(file_path),
                     str(track.uid),
                     int(track.default),
                     int(track.forced),
@@ -165,7 +163,7 @@ class Database:
             )
         self.con.commit()
 
-    def delete(self, file_path: str, print_entry: bool = False) -> None:
+    def delete(self, file_path: Path, print_entry: bool = False) -> None:
         dry_run = '[DRY RUN] ' if self.dry_run else ''
         if print_entry:
             mkvpriority_logger.info(
@@ -174,23 +172,23 @@ class Database:
         else:
             mkvpriority_logger.info(dry_run + f"deleting from database '{self.db_path}'")
         if not self.dry_run:
-            self.cur.execute('DELETE FROM archive WHERE file_path = ?', (file_path,))
+            self.cur.execute('DELETE FROM archive WHERE file_path = ?', (str(file_path),))
             self.con.commit()
 
-    def contains(self, file_path: str, file_mtime: int | None = None) -> bool:
+    def contains(self, file_path: Path, file_mtime: float | None = None) -> bool:
         if file_mtime is None:
-            self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (file_path,))
+            self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (str(file_path),))
         else:
             self.cur.execute(
                 'SELECT 1 FROM archive WHERE file_path = ? AND file_mtime = ?',
-                (file_path, file_mtime),
+                (str(file_path), int(file_mtime)),
             )
         return self.cur.fetchone() is not None
 
-    def restore(self, file_path: str, track: Track) -> bool:
+    def restore(self, file_path: Path, track: Track) -> bool:
         self.cur.execute(
             'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = ? AND track_uid = ?',
-            (file_path, str(track.uid)),
+            (str(file_path), str(track.uid)),
         )
         result = self.cur.fetchone()
         if result:
@@ -201,7 +199,7 @@ class Database:
         self.cur.execute('SELECT file_path FROM archive')
         for row in self.cur.fetchall():
             file_path = row[0]
-            if file_path is None or os.path.exists(file_path):
+            if file_path is None or Path(file_path).is_file():
                 continue
             self.delete(file_path, print_entry=True)
 
@@ -228,7 +226,7 @@ class Database:
         self.con.commit()
 
 
-def extract_subtitles(file_path: str, subtitle_track: Track) -> Path | None:
+def extract_subtitles(file_path: Path, subtitle_track: Track) -> Path | None:
     if not subtitle_track.codec.startswith('S_TEXT/'):
         return None
     subtitle_format = subtitle_track.codec.split('/')[-1]
@@ -247,7 +245,7 @@ def extract_subtitles(file_path: str, subtitle_track: Track) -> Path | None:
     mkvextract_logger.info(f"extracting subtitles to '{subtitle_path.parent}'")
 
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump(['tracks', file_path, f'{subtitle_track.index}:{subtitle_path}'], temp_file)
+        json.dump(['tracks', str(file_path), f'{subtitle_track.index}:{subtitle_path}'], temp_file)
         temp_file.flush()
         result = subprocess.run(
             ['mkvextract', f'@{temp_file.name}'],
@@ -261,9 +259,9 @@ def extract_subtitles(file_path: str, subtitle_track: Track) -> Path | None:
     return subtitle_path
 
 
-def identify_tracks(file_path: str) -> Any:
+def identify_tracks(file_path: Path) -> Any:
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump(['--identification-format', 'json', '--identify', file_path], temp_file)
+        json.dump(['--identification-format', 'json', '--identify', str(file_path)], temp_file)
         temp_file.flush()
         result = subprocess.run(
             ['mkvmerge', f'@{temp_file.name}'],
@@ -290,7 +288,7 @@ def modify_tracks(mkv_args: list[str]) -> None:
 
 
 def extract_tracks(
-    file_path: str,
+    file_path: Path,
     config: Config | None = None,
     database: Database | None = None,
     restore: bool = False,
@@ -374,7 +372,7 @@ def extract_tracks(
 
 
 def restore_tracks(
-    file_path: str,
+    file_path: Path,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
     database: Database | None = None,
@@ -384,7 +382,7 @@ def restore_tracks(
         mkvpriority_logger.error('cannot restore without a database')
         return
 
-    mkv_args, log_args = [file_path], []
+    mkv_args, log_args = [str(file_path)], []
 
     def apply_flags(track: Track, use_index: bool = False) -> list[str]:
         track_id = track.index if use_index else track.uid
@@ -415,7 +413,7 @@ def restore_tracks(
 
 
 def process_tracks(
-    file_path: str,
+    file_path: Path,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
     config: Config,
@@ -425,7 +423,7 @@ def process_tracks(
 ) -> None:
     archive_tracks: list[Track] = []
     embedded_subtitles: Track | None = None
-    mkv_args, log_args = [file_path], []
+    mkv_args, log_args = [str(file_path)], []
 
     def apply_flags(tracks: list[Track], track_modes: list[str]) -> None:
         nonlocal embedded_subtitles, mkv_args, log_args
@@ -500,7 +498,7 @@ def process_tracks(
 
 
 def process_file(
-    file_path: str,
+    file_path: Path,
     config: Config,
     database: Database | None = None,
     restore: bool = False,
@@ -581,27 +579,20 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
         config = configs.get(tag, configs['untagged'])
+        input_path = Path(input_path)
 
-        file_paths: list[str] = []
-        if os.path.isdir(input_path):
+        if input_path.is_dir():
             mkvpriority_logger.info(dry_run + f"scanning '{input_path}'")
-            for root, _, files in os.walk(input_path):
-                file_paths.extend(os.path.join(root, f) for f in files)
-        elif os.path.isfile(input_path):
-            file_paths.append(input_path)
+            file_paths = list(input_path.rglob('*.mkv'))
+        elif input_path.is_file():
+            file_paths = [input_path]
         else:
             mkvpriority_logger.warning(dry_run + f"skipping (not found) '{input_path}'")
+            continue
 
         for file_path in file_paths:
-            suffix = Path(file_path).suffix.lower()
-            if suffix != '.mkv':
-                if suffix in UNSUPPORTED_FORMATS:
-                    mkvpriority_logger.warning(
-                        dry_run + f"skipping (unsupported format) '{file_path}'"
-                    )
-                continue
             if database is not None:
-                file_mtime = int(os.path.getmtime(file_path))
+                file_mtime = file_path.stat().st_mtime
                 is_archived = database.contains(file_path, file_mtime)
                 if not args.restore and is_archived:
                     mkvpriority_logger.info(dry_run + f"skipping (archived) '{file_path}'")

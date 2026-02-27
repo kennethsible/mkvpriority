@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import signal
+from pathlib import Path
 from typing import cast
 
 import pycountry
@@ -146,21 +147,27 @@ def main() -> None:
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
 
-    os.makedirs('/config', exist_ok=True)
-    if not os.path.exists('/config/config.toml'):
-        shutil.copy2('config.toml', '/config/')
-    if not os.path.exists('/config/mkvpriority.sh'):
-        shutil.copy2('mkvpriority.sh', '/config/')
-    open('/config/archive.db', 'a').close()
+    config_dir = Path('/config')
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_file = config_dir / 'config.toml'
+    if not config_file.is_file():
+        shutil.copy2('config.toml', config_file)
 
-    os.makedirs('/config/logs', exist_ok=True)
+    script_file = config_dir / 'mkvpriority.sh'
+    if not script_file.is_file():
+        shutil.copy2('mkvpriority.sh', script_file)
+
+    database_file = config_dir / 'archive.db'
+    database_file.touch(exist_ok=True)
+
+    logs_dir = config_dir / 'logs'
+    logs_dir.mkdir(parents=True, exist_ok=True)
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
     setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
+
     logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
-
-    logger.info(f'MKVPriority {__version__}')
 
     async def run_all() -> None:
         stop_event = asyncio.Event()
@@ -192,6 +199,7 @@ def main() -> None:
         if scheduler:
             scheduler.shutdown(wait=False)
 
+    logger.info(f'MKVPriority {__version__}')
     asyncio.run(run_all())
 
 
