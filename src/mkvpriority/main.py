@@ -274,9 +274,9 @@ def identify_tracks(file_path: Path) -> Any:
         return json.loads(result.stdout)
 
 
-def modify_tracks(mkv_args: list[str]) -> None:
+def modify_tracks(arguments: list[str]) -> None:
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump(mkv_args, temp_file)
+        json.dump(arguments, temp_file)
         temp_file.flush()
         result = subprocess.run(
             ['mkvpropedit', f'@{temp_file.name}'],
@@ -382,7 +382,8 @@ def restore_tracks(
         mkvpriority_logger.error('cannot restore without a database')
         return
 
-    mkv_args, log_args = [str(file_path)], []
+    modify_args = [str(file_path)]
+    logger_args: list[str] = []
 
     def apply_flags(track: Track, use_index: bool = False) -> list[str]:
         track_id = track.index if use_index else track.uid
@@ -398,14 +399,14 @@ def restore_tracks(
         ]
 
     for track in [*audio_tracks, *subtitle_tracks]:
-        mkv_args += apply_flags(track, use_index=False)
-        log_args += apply_flags(track, use_index=True)
+        modify_args += apply_flags(track, use_index=False)
+        logger_args += apply_flags(track, use_index=True)
 
-    if len(mkv_args) > 1:
-        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(log_args))
+    if len(modify_args) > 1:
+        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
         if not dry_run:
             try:
-                modify_tracks(mkv_args)
+                modify_tracks(modify_args)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
                 return
@@ -423,28 +424,25 @@ def process_tracks(
 ) -> None:
     archive_tracks: list[Track] = []
     embedded_subtitles: Track | None = None
-    mkv_args, log_args = [str(file_path)], []
+    modify_args = [str(file_path)]
+    logger_args: list[str] = []
 
     def apply_flags(tracks: list[Track], track_modes: list[str]) -> None:
-        nonlocal embedded_subtitles, mkv_args, log_args
+        nonlocal embedded_subtitles, modify_args, logger_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
 
         if tracks[0].score > 0:
             if default_mode:
-                if tracks[0].default:
-                    track_modes.remove('default')
-                else:
+                if not tracks[0].default:
                     mkv_flags[tracks[0].uid].append('flag-default=1')
                 if tracks[0].kind == 'subtitles':
                     if embedded_subtitles is None:
                         embedded_subtitles = replace(tracks[0])
                     embedded_subtitles.default = True
             if forced_mode:
-                if tracks[0].forced:
-                    track_modes.remove('forced')
-                else:
+                if not tracks[0].forced:
                     mkv_flags[tracks[0].uid].append('flag-forced=1')
                 if tracks[0].kind == 'subtitles':
                     if embedded_subtitles is None:
@@ -453,8 +451,6 @@ def process_tracks(
             if disabled_mode or enabled_mode:
                 if not tracks[0].enabled:
                     mkv_flags[tracks[0].uid].append('flag-enabled=1')
-                elif enabled_mode:
-                    track_modes.remove('enabled')
             unwanted_tracks = tracks[1:]
         else:
             unwanted_tracks = tracks
@@ -471,11 +467,11 @@ def process_tracks(
 
         for track in tracks:
             if mkv_flags[track.uid]:
-                mkv_args += ['--edit', f'track:={track.uid}']
-                log_args += ['--edit', f'track:={track.index}']
+                modify_args += ['--edit', f'track:={track.uid}']
+                logger_args += ['--edit', f'track:={track.index}']
                 for flag in mkv_flags[track.uid]:
-                    mkv_args += ['--set', flag]
-                    log_args += ['--set', flag]
+                    modify_args += ['--set', flag]
+                    logger_args += ['--set', flag]
                 archive_tracks.append(track)
 
     if audio_tracks:
@@ -483,11 +479,11 @@ def process_tracks(
     if subtitle_tracks:
         apply_flags(subtitle_tracks, config.subtitle_mode)
 
-    if len(mkv_args) > 1:
-        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(log_args))
+    if len(modify_args) > 1:
+        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
         if not dry_run:
             try:
-                modify_tracks(mkv_args)
+                modify_tracks(modify_args)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error(e.stdout.rstrip())
                 return
