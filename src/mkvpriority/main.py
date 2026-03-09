@@ -59,6 +59,7 @@ class Config:
     subtitle_languages: dict[str, int]
     subtitle_codecs: dict[str, int]
     subtitle_filters: dict[str, int]
+    penalize_unscored_languages: bool
 
     @classmethod
     def from_file(cls, toml_path: str) -> 'Config':
@@ -80,6 +81,7 @@ class Config:
             subtitle_languages=toml_file.get('subtitle_languages', {}),
             subtitle_codecs=toml_file.get('subtitle_codecs', {}),
             subtitle_filters=toml_file.get('subtitle_filters', {}),
+            penalize_unscored_languages=toml_file.get('penalize_unscored_languages', False),
         )
 
 
@@ -347,7 +349,8 @@ def extract_tracks(
 
         elif track.kind == 'audio':
             if config:
-                track.score += config.audio_languages.get(track.language, 0)
+                default_language_score = -10000 if config.penalize_unscored_languages else 0
+                track.score += config.audio_languages.get(track.language, default_language_score)
                 track.score += config.audio_codecs.get(track.codec, 0)
                 track.score += config.audio_channels.get(str(track.channels), 0)
                 if track.name:
@@ -359,7 +362,8 @@ def extract_tracks(
 
         elif track.kind == 'subtitles':
             if config:
-                track.score += config.subtitle_languages.get(track.language, 0)
+                default_language_score = -10000 if config.penalize_unscored_languages else 0
+                track.score += config.subtitle_languages.get(track.language, default_language_score)
                 track.score += config.subtitle_codecs.get(track.codec, 0)
                 if track.name:
                     for key, value in config.subtitle_filters.items():
@@ -456,6 +460,8 @@ def process_tracks(
             unwanted_tracks = tracks
 
         for track in unwanted_tracks:
+            if track.score == 0:
+                continue
             if default_mode and track.default:
                 mkv_flags[track.uid].append('flag-default=0')
             if forced_mode and track.forced:

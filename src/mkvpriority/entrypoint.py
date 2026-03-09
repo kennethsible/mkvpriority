@@ -17,7 +17,7 @@ from apscheduler.triggers.cron import CronTrigger
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
 
-__version__ = 'v1.2.2'
+__version__ = 'v1.3.0'
 
 logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()

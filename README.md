@@ -156,14 +156,14 @@ mkvpriority:
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-e] [-n] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] -c TOML_PATH[::TAG] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-e] [-n] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
 
 options:
-  -c TOML_PATH[::TAG], --config TOML_PATH[::TAG]
-  -a DB_PATH, --archive DB_PATH
+  -c, --config TOML_PATH[::TAG]
+  -a, --archive DB_PATH
   -v, --verbose         print track information
   -x, --debug           show mkvtoolnix results
   -q, --quiet           suppress logging output
@@ -171,6 +171,12 @@ options:
   -r, --restore         restore original flags
   -e, --extract         extract embedded subtitles
   -n, --dry-run         leave tracks unchanged
+```
+
+To use MKVPriority without Docker, run the following `pip` command:
+
+```bash
+pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
 ```
 
 ### Subtitle Extractor

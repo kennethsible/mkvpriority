@@ -317,6 +317,43 @@ def test_entrypoint() -> None:
                     assert not track.forced
 
 
+def test_unscored() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        _, _, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        mkv_args = [str(file_path)]
+        for subtitle_track in subtitle_tracks:
+            if subtitle_track.language != 'eng':
+                track_uid = subtitle_track.uid
+                mkv_args.extend(['--edit', f'track:={track_uid}', '--set', 'flag-forced=1'])
+        mkvpriority.modify_tracks(mkv_args)
+
+        config = mkvpriority.Config.from_file('config.toml')
+        config.subtitle_codecs = config.subtitle_filters = {}
+        config.penalize_unscored_languages = True
+        config.subtitle_languages = {'eng': 0}
+
+        tracks = mkvpriority.process_file(file_path, config)
+        for track in chain.from_iterable(tracks):
+            if track.kind == 'subtitles':
+                if track.language == 'eng':
+                    assert track.score == 0
+                else:
+                    assert track.forced
+                    assert track.score == -10000
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        for track in chain.from_iterable(tracks):
+            if track.name == 'Signs & Songs [FanSub]':
+                assert track.forced
+            elif track.kind == 'subtitles':
+                assert not track.default and not track.forced
+
+
 def test_restore() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)

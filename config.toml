@@ -1,19 +1,25 @@
 # === Audio Operation Mode ===
 # Determines how the best-scoring audio track will be flagged:
-# - 'default' = Sets the chosen track as default (recommended for most players)
-# - 'forced'  = Stronger flag; some players prioritize forced tracks
-# - 'disabled' = Disables non-selected tracks (ignored by most players)
-# - 'enabled'  = Re-enables tracks previously disabled (used to undo 'disabled')
+# - "default"  = Sets the chosen track as default (recommended for most players)
+# - "forced"   = Stronger flag; some players prioritize forced tracks
+# - "disabled" = Disables non-selected tracks (ignored by most players)
+# - "enabled"  = Re-enables disabled tracks (used to undo "disabled")
 audio_mode = ["default"]
 
 # === Subtitle Operation Mode ===
-# Similar to audio_mode, controls track flags for subtitles:
-# - 'default' = Sets the chosen track as default (recommended for most players)
-# - 'forced'  = Stronger flag; some players prioritize forced tracks
-# - 'disabled' = Disables non-selected tracks (ignored by most players)
-# - 'enabled'  = Re-enables tracks previously disabled (used to undo 'disabled')
+# Determines how the best-scoring subtitle track will be flagged:
+# - "default"  = Sets the chosen track as default (recommended for most players)
+# - "forced"   = Stronger flag; some players prioritize forced tracks
+# - "disabled" = Disables non-selected tracks (ignored by most players)
+# - "enabled"  = Re-enables disabled tracks (used to undo "disabled")
 # Ensures subtitles are shown even if the player isn't configured properly.
 subtitle_mode = ["default", "forced"]
+
+# === Penalize Unscored Languages ===
+# Determines how languages without defined scores are handled:
+# - true  = Heavily penalizes unscored languages (score: -10000)
+# - false = Assigns a neutral score (0) to unscored languages
+penalize_unscored_languages = false
 
 # === Audio Language Preferences ===
 # Example: Prioritize Japanese subs over English dubs.
