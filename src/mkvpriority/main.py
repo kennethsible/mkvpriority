@@ -349,8 +349,7 @@ def extract_tracks(
 
         elif track.kind == 'audio':
             if config:
-                default_language_score = -10000 if config.penalize_unscored_languages else 0
-                track.score += config.audio_languages.get(track.language, default_language_score)
+                track.score += config.audio_languages.get(track.language, 0)
                 track.score += config.audio_codecs.get(track.codec, 0)
                 track.score += config.audio_channels.get(str(track.channels), 0)
                 if track.name:
