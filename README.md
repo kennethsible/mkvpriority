@@ -149,7 +149,7 @@ mkvpriority:
 ```
 
 > [!NOTE]
-> MKVPriority supports all non-standard macros defined on [Wikipedia](https://en.wikipedia.org/wiki/Cron#Overview), except for `@reboot` (use `docker run` instead).
+> MKVPriority supports [non-standard macros](https://en.wikipedia.org/wiki/Cron#Nonstandard_predefined_scheduling_definitions) for cron expressions, such as `@daily` and `@hourly`.
 
 ## CLI Usage
 
@@ -173,11 +173,16 @@ options:
   -n, --dry-run         leave tracks unchanged
 ```
 
+### Python Package
+
 To use MKVPriority without Docker, run the following `pip` command:
 
 ```bash
 pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
 ```
+
+> [!NOTE]
+> If the CLI tool is not installed in your environment (e.g. `docker exec`), use `python -m mkvpriority`.
 
 ### Subtitle Extractor
 
@@ -198,12 +203,12 @@ A single TOML file controls all behavior by assigning priority scores to track p
 
 ```toml
 [subtitle_codecs]
-"S_TEXT/ASS" = 2    # Stylized Subtitles (Advanced SubStationAlpha)
-"S_TEXT/SSA" = 2    # Legacy Stylized Subtitles (SubStationAlpha)
-"S_TEXT/UTF8" = 1   # Plain Text Subtitles (SubRip/SRT)
-"S_TEXT/WEBVTT" = 1 # Web-Based Video Text (Used in Streaming)
-"S_HDMV/PGS" = 0    # Image-Based (Used in Blu-rays)
-S_VOBSUB = 0        # Legacy Image-Based (Used in DVDs)
+"S_TEXT/ASS" = 30    # Stylized (Advanced SubStationAlpha)
+"S_TEXT/SSA" = 30    # Legacy Stylized (SubStationAlpha)
+"S_TEXT/UTF8" = 20   # Plain Text (SubRip/SRT)
+"S_TEXT/WEBVTT" = 20 # Web-Based Video Text (Used in Streaming)
+"S_HDMV/PGS" = 10    # Image-Based (Used in Blu-rays)
+S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 ```
 
 ## Limitations

@@ -268,20 +268,20 @@ def test_mkvpriority() -> None:
         for track in chain.from_iterable(tracks):
             match track.name:
                 case '5.1 FLAC (Japanese)':
-                    assert track.score == 116
+                    assert track.score == 256
                 case 'Stereo AAC (Japanese)':
-                    assert track.score == 107
+                    assert track.score == 222
                 case 'Stereo AAC (English)':
-                    assert track.score == 77
+                    assert track.score == 122
                 case 'Full Subtitles [FanSub]':
-                    assert track.score == 112
+                    assert track.score == 133
                 case 'Signs & Songs [FanSub]':
-                    assert track.score == 72
+                    assert track.score == 120
                 case 'Dialogue [Blu-ray]':
                     if track.language == 'eng':
-                        assert track.score == 108
+                        assert track.score == 122
                     else:
-                        assert track.score == 8
+                        assert track.score == 22
 
 
 def test_entrypoint() -> None:
