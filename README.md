@@ -156,7 +156,7 @@ mkvpriority:
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: mkvpriority [-h] -c TOML_PATH[::TAG] [-a DB_PATH] [-v] [-x] [-q] [-p] [-r] [-e] [-n] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] -c TOML_PATH[::TAG] [-a DB_PATH] [-v] [-x] [-q] [-p] [-n] [-r] [-e] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
@@ -164,13 +164,13 @@ positional arguments:
 options:
   -c, --config TOML_PATH[::TAG]
   -a, --archive DB_PATH
-  -v, --verbose         print track information
-  -x, --debug           show mkvtoolnix results
+  -v, --verbose         inspect track metadata
+  -x, --debug           show mkvtoolnix output
   -q, --quiet           suppress logging output
   -p, --prune           prune database entries
-  -r, --restore         restore original flags
+  -n, --dry-run         simulate track changes
+  -r, --restore         restore original tracks
   -e, --extract         extract embedded subtitles
-  -n, --dry-run         leave tracks unchanged
 ```
 
 ### Python Package
@@ -186,7 +186,7 @@ pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
 
 ### Subtitle Extractor
 
-You can use the `--extract` argument to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, the entire MKV container must be demuxed and processed first. However, external subtitles avoid this additional processing step.
+You can use the `--extract` argument to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container.
 
 ```text
 Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
@@ -197,7 +197,7 @@ Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
 
 ## TOML Configuration
 
-A single TOML file controls all behavior by assigning priority scores to track properties, such as languages and codecs, and by defining custom filters for track names, such as signs and songs.
+All behavior is configured through TOML files, which assign priority scores to track properties, such as languages and codecs, and define custom filters for track names, such as "signs" and "songs."
 
 ### Example: Subtitle Codecs
 
@@ -211,10 +211,6 @@ A single TOML file controls all behavior by assigning priority scores to track p
 S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 ```
 
-## Limitations
+## Hardlinks Limitation
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects [hardlinks](https://trash-guides.info/File-and-Folder-Structure/Hardlinks-and-Instant-Moves/) since the metadata is modified. To avoid breaking hardlinks, use the `--dry-run` argument with `--extract` for external subtitles only (see [Subtitle Extractor](#subtitle-extractor)).
-
-## Acknowledgments
-
-I've been using the excellent script from [TheCaptain989/radarr-striptracks](https://github.com/TheCaptain989/radarr-striptracks) to remove unwanted audio and subtitle tracks. However, I've always wanted a solution that automatically sets my preferred tracks as default/forced and doesn't require remuxing. After searching GitHub, I found an unmaintained project ([Andy2244/subby](https://github.com/Andy2244/subby)) that I decided to revive and package into a Docker image.
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the `--dry-run` argument with `--extract` for external subtitles only (see [Subtitle Extractor](#subtitle-extractor)).

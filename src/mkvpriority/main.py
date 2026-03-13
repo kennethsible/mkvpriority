@@ -20,13 +20,35 @@ mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
+class StreamFilter(logging.Filter):
+    def __init__(self, stream_level: int = logging.INFO):
+        super().__init__()
+        self.stream_level = stream_level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == 'mkvpriority':
+            return record.levelno >= self.stream_level
+        return True
+
+
+stream_filter = StreamFilter()
+
+
 def setup_logging(log_path: str | None = None, max_bytes: int = 0, max_files: int = 1) -> None:
-    if logging.getLogger().hasHandlers():
+    root_logger = logging.getLogger()
+    if root_logger.hasHandlers():
         return
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
-    if log_path is not None:
-        assert max_bytes >= 0 and max_files >= 1, 'invalid log rotation parameters'
-        handlers.append(RotatingFileHandler(log_path, 'a', max_bytes, max_files - 1))
+
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.addFilter(stream_filter)
+
+    handlers: list[logging.Handler] = [stream_handler]
+    if log_path:
+        file_handler = RotatingFileHandler(log_path, maxBytes=max_bytes, backupCount=max_files)
+        file_handler.setLevel(logging.DEBUG)
+        handlers.append(file_handler)
+
     logging.basicConfig(
         format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s', handlers=handlers
     )
@@ -522,26 +544,28 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         '-c', '--config', action='append', required=True, metavar='TOML_PATH[::TAG]'
     )
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
-    parser.add_argument('-v', '--verbose', action='store_true', help='print track information')
-    parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix results')
+    parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
+    parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix output')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
     parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
-    parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
+    parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
+    parser.add_argument('-r', '--restore', action='store_true', help='restore original tracks')
     parser.add_argument('-e', '--extract', action='store_true', help='extract embedded subtitles')
-    parser.add_argument('-n', '--dry-run', action='store_true', help='leave tracks unchanged')
     parser.add_argument(
         'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
     )
     args = parser.parse_args(argv)
 
+    main_level = logging.DEBUG if args.verbose else logging.INFO
+    tool_level = logging.DEBUG if args.debug else logging.INFO
+    if args.quiet:
+        main_level = tool_level = logging.ERROR
     setup_logging()
-    mkvpriority_logger.setLevel(
-        logging.ERROR if args.quiet else logging.DEBUG if args.verbose else logging.INFO
-    )
-    log_level = logging.ERROR if args.quiet else logging.DEBUG if args.debug else logging.INFO
-    mkvpropedit_logger.setLevel(log_level)
-    mkvextract_logger.setLevel(log_level)
-    mkvmerge_logger.setLevel(log_level)
+
+    stream_filter.stream_level = main_level
+    mkvpriority_logger.setLevel(logging.DEBUG)
+    for logger in (mkvpropedit_logger, mkvextract_logger, mkvmerge_logger):
+        logger.setLevel(tool_level)
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:

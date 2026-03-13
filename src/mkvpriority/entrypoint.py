@@ -19,7 +19,7 @@ from mkvpriority.main import setup_logging
 
 __version__ = 'v1.3.0'
 
-logger = logging.getLogger('entrypoint')
+entrypoint_logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
 
@@ -56,7 +56,7 @@ def get_orig_lang(item_id: str, item_type: str) -> str | None:
             if SONARR_URL is None:
                 return None
             if SONARR_API_KEY is None:
-                logger.warning('set SONARR_API_KEY to use SONARR_URL')
+                entrypoint_logger.warning('set SONARR_API_KEY to use SONARR_URL')
                 return None
             endpoint = f'{SONARR_URL}/api/v3/series/{item_id}'
             headers = {'X-Api-Key': SONARR_API_KEY}
@@ -64,7 +64,7 @@ def get_orig_lang(item_id: str, item_type: str) -> str | None:
             if RADARR_URL is None:
                 return None
             if RADARR_API_KEY is None:
-                logger.warning('set RADARR_API_KEY to use RADARR_URL')
+                entrypoint_logger.warning('set RADARR_API_KEY to use RADARR_URL')
                 return None
             endpoint = f'{RADARR_URL}/api/v3/movie/{item_id}'
             headers = {'X-Api-Key': RADARR_API_KEY}
@@ -74,7 +74,7 @@ def get_orig_lang(item_id: str, item_type: str) -> str | None:
         response = requests.get(endpoint, headers=headers)
         response.raise_for_status()
     except requests.RequestException:
-        logger.exception(f"error occurred while sending request: '{endpoint}'")
+        entrypoint_logger.exception(f"error occurred while sending request: '{endpoint}'")
         raise
     lang_info = response.json().get('originalLanguage', {})
     return get_alpha_3_code(lang_info.get('name', ''))
@@ -90,7 +90,7 @@ async def queue_worker() -> None:
             orig_lang = get_orig_lang(item_id, item_type)
             await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv, orig_lang))
         except Exception:
-            logger.error(f"error occurred while processing file: '{file_path}'")
+            entrypoint_logger.error(f"error occurred while processing file: '{file_path}'")
         finally:
             processing_queue.task_done()
 
@@ -134,7 +134,7 @@ async def init_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     try:
         trigger = CronTrigger.from_crontab(expr, timezone)
     except ValueError:
-        logger.exception(f"invalid expression or unsupported macro: '{expr}'")
+        entrypoint_logger.exception(f"invalid expression or unsupported macro: '{expr}'")
         raise
     scheduler.add_job(lambda: main_cli(MKVPRIORITY_ARGS), trigger)
     scheduler.start()
@@ -166,7 +166,7 @@ def main() -> None:
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
     setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
 
-    logger.setLevel(logging.INFO)
+    entrypoint_logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 
     async def run_all() -> None:
@@ -181,16 +181,16 @@ def main() -> None:
             expr = CRON_MACROS.get(CRON_SCHEDULE, CRON_SCHEDULE)
             timezone = os.getenv('TZ', 'UTC')
             if timezone:
-                logger.info(f'setting time zone to {timezone}')
-            logger.info(f"scheduling task to run at '{expr}'")
+                entrypoint_logger.info(f'setting time zone to {timezone}')
+            entrypoint_logger.info(f"scheduling task to run at '{expr}'")
             scheduler = await init_scheduler(expr, timezone)
 
         runner = None
         if WEBHOOK_RECEIVER:
             if CRON_SCHEDULE:
-                logger.warning('unset CRON_SCHEDULE to use WEBHOOK_RECEIVER')
+                entrypoint_logger.warning('unset CRON_SCHEDULE to use WEBHOOK_RECEIVER')
             else:
-                logger.info(f'running webhook receiver on port {args.port}')
+                entrypoint_logger.info(f'running webhook receiver on port {args.port}')
                 runner = await init_api(args.host, args.port)
 
         await stop_event.wait()
@@ -199,13 +199,13 @@ def main() -> None:
         if scheduler:
             scheduler.shutdown(wait=False)
 
-    logger.info(f'MKVPriority {__version__}')
+    entrypoint_logger.info(f'MKVPriority {__version__}')
     asyncio.run(run_all())
 
 
 if __name__ == '__main__':
     if CUSTOM_SCRIPT:
-        logger.warning('CUSTOM_SCRIPT is deprecated; use WEBHOOK_RECEIVER instead')
+        entrypoint_logger.warning('CUSTOM_SCRIPT is deprecated; use WEBHOOK_RECEIVER instead')
         main()
     elif WEBHOOK_RECEIVER or CRON_SCHEDULE:
         main()
