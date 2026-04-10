@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv
-COPY config.toml mkvpriority.sh ./
+COPY config.toml mkvpriority.sh pyproject.toml ./
 COPY src ./src
 
 ENV PYTHONPATH="/app/src"

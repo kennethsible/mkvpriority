@@ -578,7 +578,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             config = Config.from_file(toml_path)
         except FileNotFoundError, tomllib.TOMLDecodeError:
             mkvpriority_logger.exception(f"error occurred while loading config: '{toml_path}'")
-            raise
+            sys.exit(1)
         if orig_lang and 'org' in config.audio_languages:
             config.audio_languages[orig_lang] = config.audio_languages['org']
         if orig_lang and 'org' in config.subtitle_languages:
@@ -591,7 +591,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             database = Database(args.archive, args.dry_run)
         except FileNotFoundError, sqlite3.OperationalError:
             mkvpriority_logger.exception(f"error occurred while loading database: '{args.archive}'")
-            raise
+            sys.exit(1)
     if args.prune:
         if database is None:
             parser.error('cannot use --prune without --archive')

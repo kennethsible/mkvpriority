@@ -15,10 +15,9 @@ from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from mkvpriority import __version__
 from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
-
-__version__ = 'v1.3.0'
 
 entrypoint_logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
@@ -183,8 +182,12 @@ def main() -> None:
         stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
 
-        loop.add_signal_handler(signal.SIGTERM, lambda: stop_event.set())
-        loop.add_signal_handler(signal.SIGINT, lambda: stop_event.set())
+        def handle_signal(sig_name: str) -> None:
+            entrypoint_logger.info(f'received {sig_name} signal; shutting down...')
+            stop_event.set()
+
+        loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
+        loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
 
         scheduler = None
         if CRON_SCHEDULE:
