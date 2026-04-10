@@ -4,13 +4,13 @@ import logging
 import sqlite3
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass, replace
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from string.templatelib import Template
 from tempfile import NamedTemporaryFile
 from typing import Any
-
-import tomllib
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt'}
 
@@ -91,7 +91,7 @@ class Config:
             mkvpriority_logger.warning(
                 f"'{toml_path}' [track_filters] is deprecated; use [subtitle_filters] instead"
             )
-            toml_file['subtitle_filters'] = toml_file['track_filters']
+            toml_file['subtitle_filters'] = toml_file.pop('track_filters')
         return cls(
             toml_path=toml_path,
             audio_mode=toml_file.get('audio_mode', []),
@@ -150,23 +150,22 @@ class Database:
             return
 
         file_mtime = file_path.stat().st_mtime
-        self.cur.execute(
-            """
+        self.execute_t(
+            t"""
             INSERT INTO archive (
                 file_path,
                 file_mtime,
                 schema_version
             )
-            VALUES (?, ?, ?)
+            VALUES ({str(file_path)}, {int(file_mtime)}, {self.SCHEMA_VERSION})
             ON CONFLICT(file_path) DO UPDATE SET
                 file_mtime = excluded.file_mtime,
                 schema_version = excluded.schema_version
-            """,
-            (str(file_path), int(file_mtime), self.SCHEMA_VERSION),
+            """
         )
         for track in tracks:
-            self.cur.execute(
-                """
+            self.execute_t(
+                t"""
                 INSERT INTO metadata (
                     file_path,
                     track_uid,
@@ -174,16 +173,9 @@ class Database:
                     forced_flag,
                     enabled_flag
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES ({str(file_path)}, {str(track.uid)}, {int(track.default)}, {int(track.forced)}, {int(track.enabled)})
                 ON CONFLICT(file_path, track_uid) DO NOTHING
-                """,
-                (
-                    str(file_path),
-                    str(track.uid),
-                    int(track.default),
-                    int(track.forced),
-                    int(track.enabled),
-                ),
+                """
             )
         self.con.commit()
 
@@ -196,23 +188,21 @@ class Database:
         else:
             mkvpriority_logger.info(dry_run + f"deleting from database '{self.db_path}'")
         if not self.dry_run:
-            self.cur.execute('DELETE FROM archive WHERE file_path = ?', (str(file_path),))
+            self.execute_t(t'DELETE FROM archive WHERE file_path = {str(file_path)}')
             self.con.commit()
 
     def contains(self, file_path: Path, file_mtime: float | None = None) -> bool:
         if file_mtime is None:
-            self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (str(file_path),))
+            self.execute_t(t'SELECT 1 FROM archive WHERE file_path = {str(file_path)}')
         else:
-            self.cur.execute(
-                'SELECT 1 FROM archive WHERE file_path = ? AND file_mtime = ?',
-                (str(file_path), int(file_mtime)),
+            self.execute_t(
+                t'SELECT 1 FROM archive WHERE file_path = {str(file_path)} AND file_mtime = {int(file_mtime)}'
             )
         return self.cur.fetchone() is not None
 
     def restore(self, file_path: Path, track: Track) -> bool:
-        self.cur.execute(
-            'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = ? AND track_uid = ?',
-            (str(file_path), str(track.uid)),
+        self.execute_t(
+            t'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = {str(file_path)} AND track_uid = {str(track.uid)}'
         )
         result = self.cur.fetchone()
         if result:
@@ -249,6 +239,11 @@ class Database:
             self.cur.execute('INSERT INTO archive (schema_version) VALUES (1)')
         self.con.commit()
 
+    def execute_t(self, template: Template):
+        query = '?'.join(template.strings)
+        params = tuple(interp.value for interp in template.interpolations)
+        return self.cur.execute(query, params)
+
 
 def extract_subtitles(file_path: Path, subtitle_track: Track) -> Path | None:
     if not subtitle_track.codec.startswith('S_TEXT/'):
@@ -278,7 +273,7 @@ def extract_subtitles(file_path: Path, subtitle_track: Track) -> Path | None:
             check=True,
             text=True,
         )
-        mkvextract_logger.debug(result.stdout.rstrip())
+        mkvextract_logger.debug(result.stdout.strip())
 
     return subtitle_path
 
@@ -294,7 +289,7 @@ def identify_tracks(file_path: Path) -> Any:
             check=True,
             text=True,
         )
-        mkvmerge_logger.debug(result.stdout.rstrip())
+        mkvmerge_logger.debug(result.stdout.strip())
         return json.loads(result.stdout)
 
 
@@ -308,7 +303,7 @@ def modify_tracks(arguments: list[str]) -> None:
             check=True,
             text=True,
         )
-        mkvpropedit_logger.debug(result.stdout.rstrip())
+        mkvpropedit_logger.debug(result.stdout.strip())
 
 
 def extract_tracks(
@@ -324,7 +319,11 @@ def extract_tracks(
     try:
         json_object = identify_tracks(file_path)
     except subprocess.CalledProcessError as e:
-        json_object = json.loads(e.stdout)
+        try:
+            json_object = json.loads(e.stdout)
+        except json.JSONDecodeError:
+            mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
+            return video_tracks, audio_tracks, subtitle_tracks
         for warning in json_object.get('warnings', []):
             mkvmerge_logger.warning(warning)
         for error in json_object.get('errors', []):
@@ -366,32 +365,35 @@ def extract_tracks(
                     subtitle_tracks.append(track)
             continue
 
-        if track.kind == 'video':
-            video_tracks.append(track)
+        match track.kind:
+            case 'video':
+                video_tracks.append(track)
 
-        elif track.kind == 'audio':
-            if config:
-                track.score += config.audio_languages.get(track.language, 0)
-                track.score += config.audio_codecs.get(track.codec, 0)
-                track.score += config.audio_channels.get(str(track.channels), 0)
-                if track.name:
-                    for key, value in config.audio_filters.items():
-                        if key in track.name.lower():
-                            track.score += value
-            audio_tracks.append(track)
-            mkvpriority_logger.debug(track)
+            case 'audio':
+                if config:
+                    track.score += config.audio_languages.get(track.language, 0)
+                    track.score += config.audio_codecs.get(track.codec, 0)
+                    track.score += config.audio_channels.get(str(track.channels), 0)
+                    if track.name:
+                        for key, value in config.audio_filters.items():
+                            if key in track.name.lower():
+                                track.score += value
+                audio_tracks.append(track)
+                mkvpriority_logger.debug(track)
 
-        elif track.kind == 'subtitles':
-            if config:
-                default_language_score = -10000 if config.penalize_unscored_languages else 0
-                track.score += config.subtitle_languages.get(track.language, default_language_score)
-                track.score += config.subtitle_codecs.get(track.codec, 0)
-                if track.name:
-                    for key, value in config.subtitle_filters.items():
-                        if key in track.name.lower():
-                            track.score += value
-            subtitle_tracks.append(track)
-            mkvpriority_logger.debug(track)
+            case 'subtitles':
+                if config:
+                    default_language_score = -10000 if config.penalize_unscored_languages else 0
+                    track.score += config.subtitle_languages.get(
+                        track.language, default_language_score
+                    )
+                    track.score += config.subtitle_codecs.get(track.codec, 0)
+                    if track.name:
+                        for key, value in config.subtitle_filters.items():
+                            if key in track.name.lower():
+                                track.score += value
+                subtitle_tracks.append(track)
+                mkvpriority_logger.debug(track)
 
     return video_tracks, audio_tracks, subtitle_tracks
 
@@ -433,7 +435,7 @@ def restore_tracks(
             try:
                 modify_tracks(modify_args)
             except subprocess.CalledProcessError as e:
-                mkvpropedit_logger.error(e.stdout.rstrip())
+                mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
     database.delete(file_path)
 
@@ -512,7 +514,7 @@ def process_tracks(
             try:
                 modify_tracks(modify_args)
             except subprocess.CalledProcessError as e:
-                mkvpropedit_logger.error(e.stdout.rstrip())
+                mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
     if extract and embedded_subtitles:
         extract_subtitles(file_path, embedded_subtitles)
@@ -574,7 +576,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             toml_path, tag = toml_path.rsplit('::', 1)
         try:
             config = Config.from_file(toml_path)
-        except (FileNotFoundError, tomllib.TOMLDecodeError):
+        except FileNotFoundError, tomllib.TOMLDecodeError:
             mkvpriority_logger.exception(f"error occurred while loading config: '{toml_path}'")
             raise
         if orig_lang and 'org' in config.audio_languages:
@@ -587,7 +589,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     if args.archive:
         try:
             database = Database(args.archive, args.dry_run)
-        except (FileNotFoundError, sqlite3.OperationalError):
+        except FileNotFoundError, sqlite3.OperationalError:
             mkvpriority_logger.exception(f"error occurred while loading database: '{args.archive}'")
             raise
     if args.prune:

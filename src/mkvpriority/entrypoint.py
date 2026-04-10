@@ -8,6 +8,7 @@ import signal
 from pathlib import Path
 from typing import cast
 
+import aiohttp
 import pycountry
 import requests
 from aiohttp import web
@@ -50,7 +51,7 @@ def get_alpha_3_code(lang_name: str) -> str | None:
         return None
 
 
-def get_orig_lang(item_id: str, item_type: str) -> str | None:
+async def get_orig_lang(item_id: str, item_type: str) -> str | None:
     match item_type:
         case 'series':
             if SONARR_URL is None:
@@ -70,13 +71,17 @@ def get_orig_lang(item_id: str, item_type: str) -> str | None:
             headers = {'X-Api-Key': RADARR_API_KEY}
         case _:
             return None
+
     try:
-        response = requests.get(endpoint, headers=headers)
-        response.raise_for_status()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(endpoint, headers=headers) as response:
+                response.raise_for_status()
+                data = await response.json()
     except requests.RequestException:
         entrypoint_logger.exception(f"error occurred while sending request: '{endpoint}'")
         raise
-    lang_info = response.json().get('originalLanguage', {})
+
+    lang_info = data.get('originalLanguage', {})
     return get_alpha_3_code(lang_info.get('name', ''))
 
 
@@ -87,8 +92,8 @@ async def queue_worker() -> None:
             file_path += f'::{item_tags.split(",")[0]}'
         try:
             argv = [*MKVPRIORITY_ARGS, file_path]
-            orig_lang = get_orig_lang(item_id, item_type)
-            await asyncio.get_event_loop().run_in_executor(None, lambda: main_cli(argv, orig_lang))
+            orig_lang = await get_orig_lang(item_id, item_type)
+            await asyncio.to_thread(main_cli, argv, orig_lang)
         except Exception:
             entrypoint_logger.error(f"error occurred while processing file: '{file_path}'")
         finally:
@@ -148,20 +153,25 @@ def main() -> None:
     args = parser.parse_args()
 
     config_dir = Path('/config')
-    config_dir.mkdir(parents=True, exist_ok=True)
-    config_file = config_dir / 'config.toml'
-    if not config_file.is_file():
-        shutil.copy2('config.toml', config_file)
+    try:
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_file = config_dir / 'config.toml'
+        if not config_file.is_file():
+            shutil.copy2('config.toml', config_file)
 
-    script_file = config_dir / 'mkvpriority.sh'
-    if not script_file.is_file():
-        shutil.copy2('mkvpriority.sh', script_file)
+        script_file = config_dir / 'mkvpriority.sh'
+        if not script_file.is_file():
+            shutil.copy2('mkvpriority.sh', script_file)
 
-    database_file = config_dir / 'archive.db'
-    database_file.touch(exist_ok=True)
+        database_file = config_dir / 'archive.db'
+        database_file.touch(exist_ok=True)
 
-    logs_dir = config_dir / 'logs'
-    logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = config_dir / 'logs'
+        logs_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        e.add_note('If using Docker, `/config` must already exist on the host machine.')
+        raise
+
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
     setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
