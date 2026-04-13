@@ -307,33 +307,30 @@ def modify_tracks(arguments: list[str]) -> None:
 
 
 def extract_tracks(
-    file_path: Path,
-    config: Config | None = None,
-    database: Database | None = None,
-    restore: bool = False,
+    file_path: Path, scorer: Config | Database | None = None
 ) -> tuple[list[Track], list[Track], list[Track]]:
     video_tracks: list[Track] = []
     audio_tracks: list[Track] = []
     subtitle_tracks: list[Track] = []
 
     try:
-        json_object = identify_tracks(file_path)
+        track_data = identify_tracks(file_path)
     except subprocess.CalledProcessError as e:
         try:
-            json_object = json.loads(e.stdout)
+            track_data = json.loads(e.stdout)
         except json.JSONDecodeError:
             mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
             return video_tracks, audio_tracks, subtitle_tracks
-        for warning in json_object.get('warnings', []):
+        for warning in track_data.get('warnings', []):
             mkvmerge_logger.warning(warning)
-        for error in json_object.get('errors', []):
+        for error in track_data.get('errors', []):
             mkvmerge_logger.error(error)
         return video_tracks, audio_tracks, subtitle_tracks
     else:
-        for warning in json_object.get('warnings', []):
+        for warning in track_data.get('warnings', []):
             mkvmerge_logger.warning(warning)
 
-    for metadata in json_object.get('tracks', {}):
+    for metadata in track_data.get('tracks', []):
         properties = metadata.get('properties', {})
 
         track = Track(
@@ -352,44 +349,39 @@ def extract_tracks(
         if track.uid is None:
             continue
 
-        if config and restore:
-            if database is None:
-                mkvpriority_logger.error('cannot restore without a database')
-                return [], [], []
-            mkvpriority_logger.debug(track)
+        if isinstance(scorer, Database):
             if track.kind == 'audio':
-                if database.restore(file_path, track):
+                if scorer.restore(file_path, track):
                     audio_tracks.append(track)
             elif track.kind == 'subtitles':
-                if database.restore(file_path, track):
+                if scorer.restore(file_path, track):
                     subtitle_tracks.append(track)
+            mkvpriority_logger.debug(track)
             continue
 
         match track.kind:
             case 'video':
                 video_tracks.append(track)
-
             case 'audio':
-                if config:
-                    track.score += config.audio_languages.get(track.language, 0)
-                    track.score += config.audio_codecs.get(track.codec, 0)
-                    track.score += config.audio_channels.get(str(track.channels), 0)
+                if scorer:
+                    track.score += scorer.audio_languages.get(track.language, 0)
+                    track.score += scorer.audio_codecs.get(track.codec, 0)
+                    track.score += scorer.audio_channels.get(str(track.channels), 0)
                     if track.name:
-                        for key, value in config.audio_filters.items():
+                        for key, value in scorer.audio_filters.items():
                             if key in track.name.lower():
                                 track.score += value
                 audio_tracks.append(track)
                 mkvpriority_logger.debug(track)
-
             case 'subtitles':
-                if config:
-                    default_language_score = -10000 if config.penalize_unscored_languages else 0
-                    track.score += config.subtitle_languages.get(
+                if scorer:
+                    default_language_score = -10000 if scorer.penalize_unscored_languages else 0
+                    track.score += scorer.subtitle_languages.get(
                         track.language, default_language_score
                     )
-                    track.score += config.subtitle_codecs.get(track.codec, 0)
+                    track.score += scorer.subtitle_codecs.get(track.codec, 0)
                     if track.name:
-                        for key, value in config.subtitle_filters.items():
+                        for key, value in scorer.subtitle_filters.items():
                             if key in track.name.lower():
                                 track.score += value
                 subtitle_tracks.append(track)
@@ -402,13 +394,9 @@ def restore_tracks(
     file_path: Path,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
-    database: Database | None = None,
+    database: Database,
     dry_run: bool = False,
 ) -> None:
-    if database is None:
-        mkvpriority_logger.error('cannot restore without a database')
-        return
-
     modify_args = [str(file_path)]
     logger_args: list[str] = []
 
@@ -522,29 +510,33 @@ def process_tracks(
         database.insert(file_path, archive_tracks)
 
 
+def restore_file(
+    file_path: Path, database: Database, dry_run: bool = False
+) -> tuple[list[Track], list[Track]]:
+    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
+    for tracks in (audio_tracks, subtitle_tracks):
+        tracks.sort(reverse=True, key=lambda track: track.score)
+    restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
+    return audio_tracks, subtitle_tracks
+
+
 def process_file(
     file_path: Path,
     config: Config,
     database: Database | None = None,
-    restore: bool = False,
     extract: bool = False,
     dry_run: bool = False,
 ) -> tuple[list[Track], list[Track]]:
-    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config, database, restore)
+    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
-    if restore:
-        restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
-    else:
-        process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, extract, dry_run)
+    process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, extract, dry_run)
     return audio_tracks, subtitle_tracks
 
 
 def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '-c', '--config', action='append', required=True, metavar='TOML_PATH[::TAG]'
-    )
+    parser.add_argument('-c', '--config', action='append', metavar='TOML_PATH[::TAG]')
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
     parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix output')
@@ -571,27 +563,22 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
-        tag = 'untagged'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
-        try:
-            config = Config.from_file(toml_path)
-        except FileNotFoundError, tomllib.TOMLDecodeError:
-            mkvpriority_logger.exception(f"error occurred while loading config: '{toml_path}'")
-            sys.exit(1)
+        else:
+            tag = 'untagged'
+        config = Config.from_file(toml_path)
         if orig_lang and 'org' in config.audio_languages:
             config.audio_languages[orig_lang] = config.audio_languages['org']
         if orig_lang and 'org' in config.subtitle_languages:
             config.subtitle_languages[orig_lang] = config.subtitle_languages['org']
+        if tag in configs:
+            raise ValueError(f"duplicate ::{tag}: '{configs[tag]}' and '{config}'")
         configs[tag] = config
 
     database = None
     if args.archive:
-        try:
-            database = Database(args.archive, args.dry_run)
-        except FileNotFoundError, sqlite3.OperationalError:
-            mkvpriority_logger.exception(f"error occurred while loading database: '{args.archive}'")
-            sys.exit(1)
+        database = Database(args.archive, args.dry_run)
     if args.prune:
         if database is None:
             parser.error('cannot use --prune without --archive')
@@ -602,10 +589,13 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
-        tag = 'untagged'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-        config = configs.get(tag, configs['untagged'])
+            if not (config := configs.get(tag)):
+                mkvpriority_logger.warning(f"skipping (undefined ::{tag}) '{input_path}'")
+                continue
+        elif not (config := configs.get(tag)):
+            parser.error('cannot process file(s) without --config')
         input_path = Path(input_path)
 
         if input_path.is_dir():
@@ -628,10 +618,13 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                     mkvpriority_logger.info(dry_run + f"skipping (not archived) '{file_path}'")
                     continue
 
-            operation = 'restoring' if args.restore else 'processing'
-            mkvpriority_logger.info(dry_run + f"{operation} '{file_path}'")
-            mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
-            process_file(file_path, config, database, args.restore, args.extract, args.dry_run)
+            if args.restore:
+                mkvpriority_logger.info(dry_run + f"restoring '{file_path}'")
+                restore_file(file_path, database, args.dry_run)
+            else:
+                mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
+                mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
+                process_file(file_path, config, database, args.extract, args.dry_run)
 
 
 if __name__ == '__main__':

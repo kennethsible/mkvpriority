@@ -156,7 +156,7 @@ mkvpriority:
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: mkvpriority [-h] -c TOML_PATH[::TAG] [-a DB_PATH] [-v] [-x] [-q] [-p] [-n] [-r] [-e] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-n] [-r] [-e] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
@@ -180,9 +180,6 @@ To use MKVPriority without Docker, run the following `pip` command:
 ```bash
 pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
 ```
-
-> [!NOTE]
-> If the CLI tool is not installed in your environment (e.g. `docker exec`), use `python -m mkvpriority`.
 
 ### Subtitle Extractor
 

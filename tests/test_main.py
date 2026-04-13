@@ -376,7 +376,7 @@ def test_restore() -> None:
                     case _:
                         assert not track.default and not track.forced
 
-            mkvpriority.process_file(file_path, config, database, restore=True)
+            mkvpriority.restore_file(file_path, database)
 
             tracks = mkvpriority.extract_tracks(file_path)
             for track in chain.from_iterable(tracks):

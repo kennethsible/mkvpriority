@@ -10,7 +10,6 @@ from typing import cast
 
 import aiohttp
 import pycountry
-import requests
 from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -71,14 +70,10 @@ async def get_orig_lang(item_id: str, item_type: str) -> str | None:
         case _:
             return None
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(endpoint, headers=headers) as response:
-                response.raise_for_status()
-                data = await response.json()
-    except requests.RequestException:
-        entrypoint_logger.exception(f"error occurred while sending request: '{endpoint}'")
-        raise
+    async with aiohttp.ClientSession() as session:
+        async with session.get(endpoint, headers=headers) as response:
+            response.raise_for_status()
+            data = await response.json()
 
     lang_info = data.get('originalLanguage', {})
     return get_alpha_3_code(lang_info.get('name', ''))
@@ -94,7 +89,7 @@ async def queue_worker() -> None:
             orig_lang = await get_orig_lang(item_id, item_type)
             await asyncio.to_thread(main_cli, argv, orig_lang)
         except Exception:
-            entrypoint_logger.error(f"error occurred while processing file: '{file_path}'")
+            entrypoint_logger.exception(f"error occurred: '{file_path}'")
         finally:
             processing_queue.task_done()
 
@@ -135,11 +130,7 @@ async def init_api(host: str, port: int) -> web.AppRunner:
 
 async def init_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
-    try:
-        trigger = CronTrigger.from_crontab(expr, timezone)
-    except ValueError:
-        entrypoint_logger.exception(f"invalid expression or unsupported macro: '{expr}'")
-        raise
+    trigger = CronTrigger.from_crontab(expr, timezone)
     scheduler.add_job(lambda: main_cli(MKVPRIORITY_ARGS), trigger)
     scheduler.start()
     return scheduler
@@ -164,16 +155,13 @@ def main() -> None:
 
         database_file = config_dir / 'archive.db'
         database_file.touch(exist_ok=True)
-
-        logs_dir = config_dir / 'logs'
-        logs_dir.mkdir(parents=True, exist_ok=True)
-    except PermissionError as e:
-        e.add_note('If using Docker, `/config` must already exist on the host machine.')
+    except PermissionError:
+        entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID')
         raise
 
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
-    setup_logging('/config/logs/mkvpriority.log', max_bytes, max_files)
+    setup_logging('/config/mkvpriority.log', max_bytes, max_files)
 
     entrypoint_logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
@@ -183,15 +171,21 @@ def main() -> None:
         loop = asyncio.get_running_loop()
 
         def handle_signal(sig_name: str) -> None:
-            entrypoint_logger.info(f'received {sig_name} signal; shutting down...')
+            task = 'scheduler' if CRON_SCHEDULE else 'webhook receiver'
+            entrypoint_logger.info(f'received {sig_name} signal; stopping {task}')
             stop_event.set()
 
         loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
         loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
 
         scheduler = None
-        if CRON_SCHEDULE:
-            expr = CRON_MACROS.get(CRON_SCHEDULE, CRON_SCHEDULE)
+        if expr := CRON_SCHEDULE:
+            if expr.startswith('@'):
+                try:
+                    expr = CRON_MACROS[expr]
+                except KeyError as e:
+                    e.add_note(f"unsupported macro: '{expr}'")
+                    raise
             timezone = os.getenv('TZ', 'UTC')
             if timezone:
                 entrypoint_logger.info(f'setting time zone to {timezone}')

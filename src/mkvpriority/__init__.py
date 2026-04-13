@@ -12,6 +12,7 @@ from .main import (
     modify_tracks,
     process_file,
     process_tracks,
+    restore_file,
     restore_tracks,
 )
 
@@ -36,5 +37,6 @@ __all__ = [
     'modify_tracks',
     'process_file',
     'process_tracks',
+    'restore_file',
     'restore_tracks',
 ]
