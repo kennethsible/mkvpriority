@@ -176,11 +176,6 @@ def main() -> None:
         loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
         loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
 
-        runner = None
-        if WEBHOOK_PORT:
-            entrypoint_logger.info(f'listening for webhooks on port {WEBHOOK_PORT}')
-            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)
-
         scheduler = None
         if expr := CRON_SCHEDULE:
             if expr.startswith('@'):
@@ -194,6 +189,11 @@ def main() -> None:
                 entrypoint_logger.info(f'setting time zone to {timezone}')
             entrypoint_logger.info(f"scheduling task to run at '{expr}'")
             scheduler = await create_scheduler(expr, timezone)
+
+        runner = None
+        if WEBHOOK_PORT:
+            entrypoint_logger.info(f'listening for webhooks on port {WEBHOOK_PORT}')
+            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)
 
         await stop_event.wait()
         if runner:
