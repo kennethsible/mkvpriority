@@ -18,17 +18,18 @@ services:
     container_name: mkvpriority
     user: ${PUID:-1000}:${PGID:-1000}
     environment:
-      # TZ: "America/New_York"
-      # CRON_SCHEDULE: "0 0 * * *"
-      # LOG_MAX_BYTES: 5242880
-      # LOG_MAX_FILES: 3
-      WEBHOOK_RECEIVER: "true"
+      WEBHOOK_PORT: "8080"
       MKVPRIORITY_ARGS: >
         --archive /config/archive.db
+      # TZ: "America/New_York"
+      # CRON_SCHEDULE: "0 0 * * *"
+      # CRON_TARGET_PATH: /media
       # SONARR_URL: http://sonarr:8989
       # SONARR_API_KEY: ${SONARR_API_KEY}
       # RADARR_URL: http://radarr:7878
       # RADARR_API_KEY: ${RADARR_API_KEY}
+      # LOG_MAX_BYTES: 5242880
+      # LOG_MAX_FILES: 3
     volumes:
       - /path/to/media:/media # <-- same mount point
       - /path/to/mkvpriority/config:/config

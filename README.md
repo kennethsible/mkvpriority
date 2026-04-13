@@ -67,7 +67,7 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: "true"
+    WEBHOOK_PORT: '8080'
     MKVPRIORITY_ARGS: >
       --archive /config/archive.db
   volumes:
@@ -90,7 +90,7 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: "true"
+    WEBHOOK_PORT: '8080'
     MKVPRIORITY_ARGS: >
       --config /config/anime.toml::anime
       --archive /config/archive.db
@@ -113,7 +113,7 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_RECEIVER: "true"
+    WEBHOOK_PORT: '8080'
     MKVPRIORITY_ARGS: >
       --archive /config/archive.db
     SONARR_URL: http://sonarr:8989
@@ -141,7 +141,9 @@ mkvpriority:
   environment:
     TZ: "America/New_York"
     CRON_SCHEDULE: "0 0 * * *"
-    MKVPRIORITY_ARGS: -a /config/archive.db /media
+    CRON_TARGET_PATHS: /media
+    MKVPRIORITY_ARGS: >
+      --archive /config/archive.db
   volumes:
     - /path/to/media:/media
     - /path/to/mkvpriority/config:/config

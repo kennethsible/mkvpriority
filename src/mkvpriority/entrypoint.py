@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import logging
 import os
@@ -22,12 +21,15 @@ entrypoint_logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
 
-CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
-WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1', 't')
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
 SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
 RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
 LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
+
+CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
+WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1', 't')
+WEBHOOK_PORT_STR = os.getenv('WEBHOOK_PORT') or ('8080' if WEBHOOK_RECEIVER else None)
+WEBHOOK_PORT = int(WEBHOOK_PORT_STR) if WEBHOOK_PORT_STR else None
 
 CRON_MACROS = {
     '@yearly': '0 0 1 1 *',
@@ -39,6 +41,7 @@ CRON_MACROS = {
     '@hourly': '0 * * * *',
 }
 CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
+CRON_TARGET_PATHS = shlex.split(os.getenv('CRON_TARGET_PATHS', ''))
 
 
 def get_alpha_3_code(lang_name: str) -> str | None:
@@ -101,10 +104,10 @@ async def process_handler(request: web.Request) -> web.Response:
     item_tags = args.get('item_tags', '')
     item_id = args.get('item_id', '')
     await processing_queue.put((file_path, item_type, item_tags, item_id))
-    return web.json_response({'message': f"recieved '{file_path}'"})
+    return web.json_response({'message': f"received '{file_path}'"})
 
 
-async def init_api(host: str, port: int) -> web.AppRunner:
+async def create_runner(host: str, port: int) -> web.AppRunner:
     app = web.Application()
     app.router.add_post('/process', process_handler)
 
@@ -128,20 +131,16 @@ async def init_api(host: str, port: int) -> web.AppRunner:
     return runner
 
 
-async def init_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
+async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     trigger = CronTrigger.from_crontab(expr, timezone)
-    scheduler.add_job(lambda: main_cli(MKVPRIORITY_ARGS), trigger)
+    cron_argv = MKVPRIORITY_ARGS + CRON_TARGET_PATHS
+    scheduler.add_job(lambda: main_cli(cron_argv), trigger)
     scheduler.start()
     return scheduler
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', type=str, default='0.0.0.0')
-    parser.add_argument('--port', type=int, default=8080)
-    args = parser.parse_args()
-
     config_dir = Path('/config')
     try:
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -171,12 +170,16 @@ def main() -> None:
         loop = asyncio.get_running_loop()
 
         def handle_signal(sig_name: str) -> None:
-            task = 'scheduler' if CRON_SCHEDULE else 'webhook receiver'
-            entrypoint_logger.info(f'received {sig_name} signal; stopping {task}')
+            entrypoint_logger.info(f'received {sig_name} signal; stopping tasks')
             stop_event.set()
 
         loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
         loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
+
+        runner = None
+        if WEBHOOK_PORT:
+            entrypoint_logger.info(f'listening for webhooks on port {WEBHOOK_PORT}')
+            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)
 
         scheduler = None
         if expr := CRON_SCHEDULE:
@@ -190,15 +193,7 @@ def main() -> None:
             if timezone:
                 entrypoint_logger.info(f'setting time zone to {timezone}')
             entrypoint_logger.info(f"scheduling task to run at '{expr}'")
-            scheduler = await init_scheduler(expr, timezone)
-
-        runner = None
-        if WEBHOOK_RECEIVER:
-            if CRON_SCHEDULE:
-                entrypoint_logger.warning('unset CRON_SCHEDULE to use WEBHOOK_RECEIVER')
-            else:
-                entrypoint_logger.info(f'running webhook receiver on port {args.port}')
-                runner = await init_api(args.host, args.port)
+            scheduler = await create_scheduler(expr, timezone)
 
         await stop_event.wait()
         if runner:
@@ -211,10 +206,12 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    if CUSTOM_SCRIPT:
-        entrypoint_logger.warning('CUSTOM_SCRIPT is deprecated; use WEBHOOK_RECEIVER instead')
+    if CUSTOM_SCRIPT or WEBHOOK_RECEIVER:
+        entrypoint_logger.warning(
+            'CUSTOM_SCRIPT and WEBHOOK_RECEIVER are deprecated; use WEBHOOK_PORT instead'
+        )
         main()
-    elif WEBHOOK_RECEIVER or CRON_SCHEDULE:
+    elif WEBHOOK_PORT or CRON_SCHEDULE:
         main()
     else:
         main_cli()
