@@ -563,17 +563,14 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
+        tag = 'untagged'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
-        else:
-            tag = 'untagged'
         config = Config.from_file(toml_path)
         if orig_lang and 'org' in config.audio_languages:
             config.audio_languages[orig_lang] = config.audio_languages['org']
         if orig_lang and 'org' in config.subtitle_languages:
             config.subtitle_languages[orig_lang] = config.subtitle_languages['org']
-        if tag in configs:
-            raise ValueError(f"duplicate ::{tag}: '{configs[tag]}' and '{config}'")
         configs[tag] = config
 
     database = None
@@ -589,12 +586,10 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
+        tag = 'untagged'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-            if not (config := configs.get(tag)):
-                mkvpriority_logger.warning(f"skipping (undefined ::{tag}) '{input_path}'")
-                continue
-        elif not (config := configs.get(tag)):
+        if not (config := configs.get(tag)):
             parser.error('cannot process file(s) without --config')
         input_path = Path(input_path)
 
