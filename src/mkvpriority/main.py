@@ -72,6 +72,7 @@ class Track:
 @dataclass
 class Config:
     toml_path: str
+    label_tag: str
     audio_mode: list[str]
     audio_languages: dict[str, int]
     audio_codecs: dict[str, int]
@@ -84,7 +85,7 @@ class Config:
     penalize_unscored_languages: bool
 
     @classmethod
-    def from_file(cls, toml_path: str) -> 'Config':
+    def from_file(cls, toml_path: str, label_tag: str = 'untagged') -> 'Config':
         with open(toml_path, 'rb') as f:
             toml_file = tomllib.load(f)
         if 'track_filters' in toml_file and 'subtitle_filters' not in toml_file:
@@ -94,6 +95,7 @@ class Config:
             toml_file['subtitle_filters'] = toml_file.pop('track_filters')
         return cls(
             toml_path=toml_path,
+            label_tag=label_tag,
             audio_mode=toml_file.get('audio_mode', []),
             audio_languages=toml_file.get('audio_languages', {}),
             audio_codecs=toml_file.get('audio_codecs', {}),
@@ -566,12 +568,14 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         tag = 'untagged'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
-        config = Config.from_file(toml_path)
+        config = Config.from_file(toml_path, tag)
         if orig_lang and 'org' in config.audio_languages:
             config.audio_languages[orig_lang] = config.audio_languages['org']
         if orig_lang and 'org' in config.subtitle_languages:
             config.subtitle_languages[orig_lang] = config.subtitle_languages['org']
         configs[tag] = config
+    if not configs and not (args.prune or args.restore):
+        parser.error('cannot process file(s) without --config')
 
     database = None
     if args.archive:
@@ -589,9 +593,8 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         tag = 'untagged'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-        if not (config := configs.get(tag)):
-            mkvpriority_logger.warning(dry_run + f"no config associated with '::{tag}'")
-            mkvpriority_logger.warning(dry_run + f"skipping (config issue) '{input_path}'")
+        if not (config := configs.get(tag) or configs.get('untagged')):
+            mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
         input_path = Path(input_path)
 
@@ -619,8 +622,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 mkvpriority_logger.info(dry_run + f"restoring '{file_path}'")
                 restore_file(file_path, database, args.dry_run)
             else:
+                toml_path, tag = config.toml_path, config.label_tag
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
-                mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}::{tag}'")
+                mkvpriority_logger.info(dry_run + f"using config '{toml_path}::{tag}'")
                 process_file(file_path, config, database, args.extract, args.dry_run)
 
 
