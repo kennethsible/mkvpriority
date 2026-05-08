@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -86,7 +87,7 @@ async def queue_worker() -> None:
     while True:
         file_path, item_type, item_tags, item_id = await processing_queue.get()
         if item_tags:
-            file_path += f'::{item_tags.split(",")[0]}'
+            file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
         try:
             argv = [*MKVPRIORITY_ARGS, file_path]
             orig_lang = await get_orig_lang(item_id, item_type)

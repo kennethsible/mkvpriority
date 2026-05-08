@@ -590,7 +590,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
         if not (config := configs.get(tag)):
-            parser.error('cannot process file(s) without --config')
+            mkvpriority_logger.warning(dry_run + f"no config associated with '::{tag}'")
+            mkvpriority_logger.warning(dry_run + f"skipping (config issue) '{input_path}'")
+            continue
         input_path = Path(input_path)
 
         if input_path.is_dir():
@@ -618,7 +620,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 restore_file(file_path, database, args.dry_run)
             else:
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
-                mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}' ({tag})")
+                mkvpriority_logger.info(dry_run + f"using config '{config.toml_path}::{tag}'")
                 process_file(file_path, config, database, args.extract, args.dry_run)
 
 
