@@ -83,19 +83,21 @@ async def get_orig_lang(item_id: str, item_type: str) -> str | None:
     return get_alpha_3_code(lang_info.get('name', ''))
 
 
+async def process_item(file_path: str, item_type: str, item_tags: str, item_id: str) -> None:
+    if item_tags:
+        file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
+    try:
+        argv = [*MKVPRIORITY_ARGS, file_path]
+        orig_lang = await get_orig_lang(item_id, item_type)
+        await asyncio.to_thread(main_cli, argv, orig_lang)
+    except Exception:
+        entrypoint_logger.exception(f"error occurred: '{file_path}'")
+
+
 async def queue_worker() -> None:
-    while True:
-        file_path, item_type, item_tags, item_id = await processing_queue.get()
-        if item_tags:
-            file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
-        try:
-            argv = [*MKVPRIORITY_ARGS, file_path]
-            orig_lang = await get_orig_lang(item_id, item_type)
-            await asyncio.to_thread(main_cli, argv, orig_lang)
-        except Exception:
-            entrypoint_logger.exception(f"error occurred: '{file_path}'")
-        finally:
-            processing_queue.task_done()
+    file_path, item_type, item_tags, item_id = await processing_queue.get()
+    await process_item(file_path, item_type, item_tags, item_id)
+    processing_queue.task_done()
 
 
 async def process_handler(request: web.Request) -> web.Response:
