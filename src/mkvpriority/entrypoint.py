@@ -95,9 +95,10 @@ async def process_item(file_path: str, item_type: str, item_tags: str, item_id: 
 
 
 async def queue_worker() -> None:
-    file_path, item_type, item_tags, item_id = await processing_queue.get()
-    await process_item(file_path, item_type, item_tags, item_id)
-    processing_queue.task_done()
+    while True:
+        file_path, item_type, item_tags, item_id = await processing_queue.get()
+        await process_item(file_path, item_type, item_tags, item_id)
+        processing_queue.task_done()
 
 
 async def process_handler(request: web.Request) -> web.Response:
