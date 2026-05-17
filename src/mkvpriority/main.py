@@ -73,7 +73,7 @@ class Extension(ABC):
 
 def load_extension(module_name: str) -> Extension | None:
     try:
-        module = importlib.import_module(f'.{module_name}', 'mkvpriority.extensions')
+        module = importlib.import_module(f'.{module_name}', 'extensions')
     except ImportError:
         mkvpriority_logger.error(f"could not import extension '{module_name}'")
         return None

@@ -10,7 +10,7 @@ from aiohttp import web
 
 import mkvpriority
 import mkvpriority.entrypoint as entrypoint
-from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
+from extensions.subtitle_extractor import SubtitleExtractor
 
 
 def create_dummy(temp_dir: Path) -> dict[str, Path]:
