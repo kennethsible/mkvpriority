@@ -594,6 +594,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     if args.include:
         for module_name in args.include:
             if extension := load_extension(module_name):
+                extension.extension_logger.setLevel(tool_level)
                 extensions.append(extension)
 
     dry_run = '[DRY RUN] ' if args.dry_run else ''
