@@ -10,6 +10,7 @@ from aiohttp import web
 
 import mkvpriority
 import mkvpriority.entrypoint as entrypoint
+from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
 
 
 def create_dummy(temp_dir: Path) -> dict[str, Path]:
@@ -269,8 +270,9 @@ def test_mkvpriority() -> None:
         multiplex_dummy(file_path, track_files)
 
         config = mkvpriority.Config.from_file('config.toml')
-        tracks = mkvpriority.process_file(file_path, config)
+        mkvpriority.process_file(file_path, config)
 
+        tracks = mkvpriority.extract_tracks(file_path, config)
         for track in chain.from_iterable(tracks):
             match track.name:
                 case '5.1 FLAC (Japanese)':
@@ -309,6 +311,39 @@ def test_entrypoint() -> None:
                     assert not track.forced
 
         mkvpriority.main.main(['-c', 'config.toml', str(file_path)])
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        for track in chain.from_iterable(tracks):
+            match track.name:
+                case '5.1 FLAC (Japanese)':
+                    assert track.default
+                case 'Full Subtitles [FanSub]':
+                    assert track.default
+                    assert track.forced
+                case _:
+                    assert not track.default
+                    assert not track.forced
+
+
+def test_extension() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        for track in chain.from_iterable(tracks):
+            match track.name:
+                case 'Stereo AAC (English)':
+                    assert track.default
+                case 'Signs & Songs [FanSub]':
+                    assert track.forced
+                case _:
+                    assert not track.default
+                    assert not track.forced
+
+        mkvpriority.main.main(['-c', 'config.toml', '-i', 'subtitle_extractor', str(file_path)])
 
         tracks = mkvpriority.extract_tracks(file_path)
         for track in chain.from_iterable(tracks):
@@ -379,7 +414,8 @@ def test_unscored() -> None:
         config.penalize_unscored_languages = True
         config.subtitle_languages = {'eng': 0}
 
-        tracks = mkvpriority.process_file(file_path, config)
+        tracks = mkvpriority.extract_tracks(file_path, config)
+        mkvpriority.process_file(file_path, config)
         for track in chain.from_iterable(tracks):
             if track.kind == 'subtitles':
                 if track.language == 'eng':
@@ -388,7 +424,7 @@ def test_unscored() -> None:
                     assert track.forced
                     assert track.score == -10000
 
-        tracks = mkvpriority.extract_tracks(file_path)
+        tracks = mkvpriority.extract_tracks(file_path, config)
         for track in chain.from_iterable(tracks):
             if track.name == 'Signs & Songs [FanSub]':
                 assert track.forced
@@ -420,7 +456,7 @@ def test_restore() -> None:
 
             mkvpriority.restore_file(file_path, database)
 
-            tracks = mkvpriority.extract_tracks(file_path)
+            tracks = mkvpriority.extract_tracks(file_path, database)
             for track in chain.from_iterable(tracks):
                 match track.name:
                     case 'Stereo AAC (English)':
@@ -439,7 +475,7 @@ def test_extract() -> None:
         multiplex_dummy(file_path, track_files)
 
         config = mkvpriority.Config.from_file('config.toml')
-        mkvpriority.process_file(file_path, config, extract=True)
+        mkvpriority.process_file(file_path, config, extensions=[SubtitleExtractor()])
 
         subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
         assert subtitle_path.is_file()

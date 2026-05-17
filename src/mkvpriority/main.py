@@ -1,18 +1,19 @@
 import argparse
+import importlib
+import inspect
 import json
 import logging
 import sqlite3
 import subprocess
 import sys
 import tomllib
-from dataclasses import dataclass, replace
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from string.templatelib import Template
 from tempfile import NamedTemporaryFile
 from typing import Any
-
-SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt'}
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -52,6 +53,46 @@ def setup_logging(log_path: str | None = None, max_bytes: int = 0, max_files: in
     logging.basicConfig(
         format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s', handlers=handlers
     )
+
+
+class Extension(ABC):
+    def __init__(self, extension_name: str):
+        self.extension_logger = logging.getLogger(extension_name)
+
+    @abstractmethod
+    def process_file(
+        self,
+        file_path: Path,
+        audio_tracks: list[Track],
+        subtitle_tracks: list[Track],
+        config: Config,
+        dry_run: bool = False,
+    ) -> None:
+        raise NotImplementedError
+
+
+def load_extension(module_name: str) -> Extension | None:
+    try:
+        module = importlib.import_module(f'.{module_name}', 'mkvpriority.extensions')
+    except ImportError:
+        mkvpriority_logger.error(f"could not import extension '{module_name}'")
+        return None
+    for name, obj in inspect.getmembers(module, inspect.isclass):
+        if (
+            issubclass(obj, Extension)
+            and obj is not Extension
+            and obj.__module__ == module.__name__
+        ):
+            if not callable(obj):
+                mkvpriority_logger.error(f"'{name}' in '{module_name}' is not callable")
+                return None
+            try:
+                return obj()
+            except TypeError:
+                mkvpriority_logger.error(f"could not instantiate '{name}'")
+                return None
+    mkvpriority_logger.error(f"no valid extension subclass found in '{module_name}'")
+    return None
 
 
 @dataclass
@@ -247,39 +288,6 @@ class Database:
         return self.cur.execute(query, params)
 
 
-def extract_subtitles(file_path: Path, subtitle_track: Track) -> Path | None:
-    if not subtitle_track.codec.startswith('S_TEXT/'):
-        return None
-    subtitle_format = subtitle_track.codec.split('/')[-1]
-    if subtitle_format not in SUBTITLE_EXTENSIONS:
-        return None
-    extension = SUBTITLE_EXTENSIONS[subtitle_format]
-
-    subtitle_suffix = f'.{subtitle_track.language}'
-    if subtitle_track.default:
-        subtitle_suffix += '.default'
-    if subtitle_track.forced:
-        subtitle_suffix += '.forced'
-    subtitle_path = Path(file_path).with_suffix(f'{subtitle_suffix}.{extension}')
-    if subtitle_path.is_file():
-        return None
-    mkvextract_logger.info(f"extracting subtitles to '{subtitle_path.parent}'")
-
-    with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
-        json.dump(['tracks', str(file_path), f'{subtitle_track.index}:{subtitle_path}'], temp_file)
-        temp_file.flush()
-        result = subprocess.run(
-            ['mkvextract', f'@{temp_file.name}'],
-            capture_output=True,
-            encoding='utf-8',
-            check=True,
-            text=True,
-        )
-        mkvextract_logger.debug(result.stdout.strip())
-
-    return subtitle_path
-
-
 def identify_tracks(file_path: Path) -> Any:
     with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', str(file_path)], temp_file)
@@ -436,16 +444,14 @@ def process_tracks(
     subtitle_tracks: list[Track],
     config: Config,
     database: Database | None = None,
-    extract: bool = False,
     dry_run: bool = False,
 ) -> None:
     archive_tracks: list[Track] = []
-    embedded_subtitles: Track | None = None
     modify_args = [str(file_path)]
     logger_args: list[str] = []
 
     def apply_flags(tracks: list[Track], track_modes: list[str]) -> None:
-        nonlocal embedded_subtitles, modify_args, logger_args
+        nonlocal modify_args, logger_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
         mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
@@ -454,20 +460,15 @@ def process_tracks(
             if default_mode:
                 if not tracks[0].default:
                     mkv_flags[tracks[0].uid].append('flag-default=1')
-                if tracks[0].kind == 'subtitles':
-                    if embedded_subtitles is None:
-                        embedded_subtitles = replace(tracks[0])
-                    embedded_subtitles.default = True
+                    tracks[0].default = True
             if forced_mode:
                 if not tracks[0].forced:
                     mkv_flags[tracks[0].uid].append('flag-forced=1')
-                if tracks[0].kind == 'subtitles':
-                    if embedded_subtitles is None:
-                        embedded_subtitles = replace(tracks[0])
-                    embedded_subtitles.forced = True
+                    tracks[0].forced = True
             if disabled_mode or enabled_mode:
                 if not tracks[0].enabled:
                     mkv_flags[tracks[0].uid].append('flag-enabled=1')
+                    tracks[0].enabled = True
             unwanted_tracks = tracks[1:]
         else:
             unwanted_tracks = tracks
@@ -477,12 +478,16 @@ def process_tracks(
                 continue
             if default_mode and track.default:
                 mkv_flags[track.uid].append('flag-default=0')
+                track.default = False
             if forced_mode and track.forced:
                 mkv_flags[track.uid].append('flag-forced=0')
+                track.forced = False
             if disabled_mode and track.enabled:
                 mkv_flags[track.uid].append('flag-enabled=0')
+                track.enabled = False
             if enabled_mode and not track.enabled:
                 mkv_flags[track.uid].append('flag-enabled=1')
+                track.enabled = True
 
         for track in tracks:
             if mkv_flags[track.uid]:
@@ -506,34 +511,31 @@ def process_tracks(
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
-    if extract and embedded_subtitles:
-        extract_subtitles(file_path, embedded_subtitles)
     if database is not None:
         database.insert(file_path, archive_tracks)
 
 
-def restore_file(
-    file_path: Path, database: Database, dry_run: bool = False
-) -> tuple[list[Track], list[Track]]:
+def restore_file(file_path: Path, database: Database, dry_run: bool = False) -> None:
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
     restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
-    return audio_tracks, subtitle_tracks
 
 
 def process_file(
     file_path: Path,
     config: Config,
     database: Database | None = None,
-    extract: bool = False,
+    extensions: list[Extension] | None = None,
     dry_run: bool = False,
-) -> tuple[list[Track], list[Track]]:
+) -> None:
     _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
-    process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, extract, dry_run)
-    return audio_tracks, subtitle_tracks
+    process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
+    if extensions is not None:
+        for extension in extensions:
+            extension.process_file(file_path, audio_tracks, subtitle_tracks, config, dry_run)
 
 
 def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
@@ -546,7 +548,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
     parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original tracks')
-    parser.add_argument('-e', '--extract', action='store_true', help='extract embedded subtitles')
+    parser.add_argument('-i', '--include', action='append', help='include extension module')
     parser.add_argument(
         'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
     )
@@ -588,6 +590,12 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     if args.restore and database is None:
         parser.error('cannot use --restore without --archive')
 
+    extensions: list[Extension] = []
+    if args.include:
+        for module_name in args.include:
+            if extension := load_extension(module_name):
+                extensions.append(extension)
+
     dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
         tag = 'untagged'
@@ -625,7 +633,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 toml_path, tag = config.toml_path, config.label_tag
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
                 mkvpriority_logger.info(dry_run + f"using config '{toml_path}::{tag}'")
-                process_file(file_path, config, database, args.extract, args.dry_run)
+                process_file(file_path, config, database, extensions, args.dry_run)
 
 
 if __name__ == '__main__':

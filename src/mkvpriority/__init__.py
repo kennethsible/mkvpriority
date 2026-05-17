@@ -5,8 +5,8 @@ from pathlib import Path
 from .main import (
     Config,
     Database,
+    Extension,
     Track,
-    extract_subtitles,
     extract_tracks,
     identify_tracks,
     modify_tracks,
@@ -30,8 +30,8 @@ except importlib.metadata.PackageNotFoundError:
 __all__ = [
     'Config',
     'Database',
+    'Extension',
     'Track',
-    'extract_subtitles',
     'extract_tracks',
     'identify_tracks',
     'modify_tracks',
