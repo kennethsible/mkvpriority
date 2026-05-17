@@ -11,6 +11,7 @@ from aiohttp import web
 import mkvpriority
 import mkvpriority.entrypoint as entrypoint
 from extensions.subtitle_extractor import SubtitleExtractor
+from extensions.subtitle_restyler import SubtitleRestyler
 
 
 def create_dummy(temp_dir: Path) -> dict[str, Path]:
@@ -113,8 +114,12 @@ Format: Name, Fontname, Fontsize, PrimaryColour, Outline, Shadow, Alignment, Enc
 Style: Default,Arial,20,&H00FFFFFF,2,1,2,1
 
 [Events]
-Format: Layer, Start, End, Style, Text
-Dialogue: 0,0:00:00.00,0:00:01.00,Default,Dummy Subtitle
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Dummy Subtitle 1
+Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Dummy Subtitle 2
+Dialogue: 0,0:00:02.00,0:00:03.00,Default,,0,0,0,,Dummy Subtitle 3
+Dialogue: 0,0:00:03.00,0:00:04.00,Default,,0,0,0,,Dummy Subtitle 4
+Dialogue: 0,0:00:04.00,0:00:05.00,Default,,0,0,0,,Dummy Subtitle 5
 """
 
     srt_template = """1
@@ -480,6 +485,27 @@ def test_extract() -> None:
         subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
         assert subtitle_path.is_file()
         assert subtitle_path.stat().st_size > 0
+
+
+def test_restyle() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        style_override = 'fontname = "Cabin"\nfontsize = 75\noutline = 3.6\nshadow = 1.8\n'
+        toml_path.write_text(f'{toml_text}\n[subtitle_styles]\n{style_override}', encoding='utf-8')
+        config = mkvpriority.Config.from_file(toml_path)
+
+        extensions = [SubtitleExtractor(), SubtitleRestyler()]
+        mkvpriority.process_file(file_path, config, extensions=extensions)
+
+        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
+        restyled_content = subtitle_path.read_text(encoding='utf-8-sig')
+        assert 'Style: Default,Cabin,75.0,&H00FFFFFF,3.6,1.8,2,1' in restyled_content
 
 
 def test_prune() -> None:
