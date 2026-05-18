@@ -308,11 +308,13 @@ class Database:
 
 
 def identify_tracks(file_path: Path) -> Any:
-    with NamedTemporaryFile('w+', suffix='.json', encoding='utf-8') as temp_file:
+    with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
         json.dump(['--identification-format', 'json', '--identify', str(file_path)], temp_file)
-        temp_file.flush()
+        temp_file_path = Path(temp_file.name)
+
+    try:
         result = subprocess.run(
-            ['mkvmerge', f'@{temp_file.name}'],
+            ['mkvmerge', f'@{temp_file_path}'],
             capture_output=True,
             encoding='utf-8',
             check=True,
@@ -320,19 +322,25 @@ def identify_tracks(file_path: Path) -> Any:
         )
         mkvmerge_logger.debug(result.stdout.strip())
         return json.loads(result.stdout)
+    finally:
+        temp_file_path.unlink(missing_ok=True)
 
 
 def modify_tracks(arguments: list[str]) -> None:
-    with NamedTemporaryFile('w+', suffix='.json', encoding='utf-8') as temp_file:
+    with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
         json.dump(arguments, temp_file)
-        temp_file.flush()
+        temp_file_path = Path(temp_file.name)
+
+    try:
         result = subprocess.run(
-            ['mkvpropedit', f'@{temp_file.name}'],
+            ['mkvpropedit', f'@{temp_file_path}'],
             capture_output=True,
             check=True,
             text=True,
         )
         mkvpropedit_logger.debug(result.stdout.strip())
+    finally:
+        temp_file_path.unlink(missing_ok=True)
 
 
 def extract_tracks(

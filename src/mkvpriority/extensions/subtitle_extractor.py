@@ -55,14 +55,18 @@ class SubtitleExtractor(Extension):
 
     def extract_subtitles(self, file_path: Path, subtitle_path: Path, index: int) -> None:
         self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path.parent}'")
-        with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
+        with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(['tracks', str(file_path), f'{index}:{subtitle_path}'], temp_file)
-            temp_file.flush()
+            temp_file_path = Path(temp_file.name)
+
+        try:
             result = subprocess.run(
-                ['mkvextract', f'@{temp_file.name}'],
+                ['mkvextract', f'@{temp_file_path}'],
                 capture_output=True,
                 encoding='utf-8',
                 check=True,
                 text=True,
             )
             self.extension_logger.debug(result.stdout.strip())
+        finally:
+            temp_file_path.unlink(missing_ok=True)

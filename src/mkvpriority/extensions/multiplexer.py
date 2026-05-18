@@ -34,14 +34,22 @@ class Multiplexer(Extension):
         self.reorder: bool = parameters.get('reorder_tracks', False)
         self.filter_tracks(file_path, video_tracks, audio_tracks, subtitle_tracks, config, dry_run)
 
-    def multiplex_tracks(self, arguments: list[str]):
-        with NamedTemporaryFile('w+', suffix='.json', encoding='utf-8') as temp_file:
+    def multiplex_tracks(self, arguments: list[str]) -> None:
+        with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(arguments, temp_file)
-            temp_file.flush()
+            temp_file_path = Path(temp_file.name)
+
+        try:
             result = subprocess.run(
-                ['mkvmerge', f'@{temp_file.name}'], capture_output=True, check=True, text=True
+                ['mkvmerge', f'@{temp_file_path}'],
+                capture_output=True,
+                encoding='utf-8',
+                check=True,
+                text=True,
             )
             mkvmerge_logger.debug(result.stdout.strip())
+        finally:
+            temp_file_path.unlink(missing_ok=True)
 
     def filter_tracks(
         self,
