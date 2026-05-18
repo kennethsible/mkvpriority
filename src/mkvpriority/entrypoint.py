@@ -162,6 +162,17 @@ def main() -> None:
         entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID')
         raise
 
+    extensions_dir = Path('/extensions')
+    if extensions_dir.is_dir():
+        try:
+            for src_file in Path('./extensions').glob('*.py'):
+                dest_file = extensions_dir / src_file.name
+                if not dest_file.exists():
+                    shutil.copy2(src_file, dest_file)
+        except PermissionError:
+            entrypoint_logger.warning(f'recreate {extensions_dir} with correct PUID/PGID')
+            raise
+
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
     setup_logging('/config/mkvpriority.log', max_bytes, max_files)
