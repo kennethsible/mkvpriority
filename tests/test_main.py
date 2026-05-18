@@ -10,6 +10,7 @@ from aiohttp import web
 
 import mkvpriority
 import mkvpriority.entrypoint as entrypoint
+from mkvpriority.extensions.multiplexer import Multiplexer
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
 from mkvpriority.extensions.subtitle_restyler import SubtitleRestyler
 
@@ -472,42 +473,6 @@ def test_restore() -> None:
                         assert not track.default and not track.forced
 
 
-def test_extract() -> None:
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        file_path = temp_path / 'dummy.mkv'
-        track_files = create_dummy(temp_path)
-        multiplex_dummy(file_path, track_files)
-
-        config = mkvpriority.Config.from_file('config.toml')
-        mkvpriority.process_file(file_path, config, extensions=[SubtitleExtractor()])
-
-        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
-        assert subtitle_path.is_file()
-        assert subtitle_path.stat().st_size > 0
-
-
-def test_restyle() -> None:
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-        file_path = temp_path / 'dummy.mkv'
-        track_files = create_dummy(temp_path)
-        multiplex_dummy(file_path, track_files)
-
-        toml_path = temp_path / 'config.toml'
-        toml_text = Path('config.toml').read_text(encoding='utf-8')
-        style_override = 'fontname = "Cabin"\nfontsize = 75\noutline = 3.6\nshadow = 1.8\n'
-        toml_path.write_text(f'{toml_text}\n[subtitle_styles]\n{style_override}', encoding='utf-8')
-        config = mkvpriority.Config.from_file(toml_path)
-
-        extensions = [SubtitleExtractor(), SubtitleRestyler()]
-        mkvpriority.process_file(file_path, config, extensions=extensions)
-
-        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
-        restyled_content = subtitle_path.read_text(encoding='utf-8-sig')
-        assert 'Style: Default,Cabin,75.0,&H00FFFFFF,3.6,1.8,2,1' in restyled_content
-
-
 def test_prune() -> None:
     with tempfile.NamedTemporaryFile() as archive_file:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -526,3 +491,91 @@ def test_prune() -> None:
 
         database.prune()
         assert not database.contains(file_path)
+
+
+def test_extract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_path.write_text(f'extract_embedded_subtitles = true\n{toml_text}', encoding='utf-8')
+        config = mkvpriority.Config.from_file(toml_path)
+
+        mkvpriority.process_file(file_path, config, extensions=[SubtitleExtractor()])
+
+        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
+        assert subtitle_path.is_file()
+        assert subtitle_path.stat().st_size > 0
+
+
+def test_restyle() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        style_override = (
+            '[subtitle_styles]\nfontname = "Cabin"\nfontsize = 75\noutline = 3.6\nshadow = 1.8\n'
+        )
+        toml_path.write_text(
+            f'extract_embedded_subtitles = true\n{toml_text}\n{style_override}', encoding='utf-8'
+        )
+        config = mkvpriority.Config.from_file(toml_path)
+
+        extensions = [SubtitleExtractor(), SubtitleRestyler()]
+        mkvpriority.process_file(file_path, config, extensions=extensions)
+
+        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
+        restyled_content = subtitle_path.read_text(encoding='utf-8-sig')
+        assert 'Style: Default,Cabin,75.0,&H00FFFFFF,3.6,1.8,2,1' in restyled_content
+
+
+def test_reorder() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_path.write_text(f'{toml_text}\n[multiplexer]\nreorder_tracks = true', encoding='utf-8')
+        config = mkvpriority.Config.from_file(toml_path)
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        second_track = next(track for track in chain.from_iterable(tracks) if track.index == 1)
+        assert second_track.name == 'Stereo AAC (Japanese)'
+
+        mkvpriority.process_file(file_path, config, extensions=[Multiplexer()])
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        second_track = next(track for track in chain.from_iterable(tracks) if track.index == 1)
+        assert second_track.name == '5.1 FLAC (Japanese)'
+
+
+def test_strip() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_path.write_text(f'{toml_text}\n[multiplexer]\nstrip_tracks = true', encoding='utf-8')
+        config = mkvpriority.Config.from_file(toml_path)
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        assert 'ger' in [track.language for track in chain.from_iterable(tracks)]
+
+        mkvpriority.process_file(file_path, config, extensions=[Multiplexer()])
+
+        tracks = mkvpriority.extract_tracks(file_path)
+        assert 'ger' not in [track.language for track in chain.from_iterable(tracks)]

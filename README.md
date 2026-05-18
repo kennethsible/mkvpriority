@@ -209,7 +209,7 @@ You can easily write your own post-processing scripts to handle custom logic.
    - `~/.config/mkvpriority/extensions` (recommended for `pip`)
    - `/config/extensions` (recommended for Docker)
 2. Import the `Extension` class and implement the `process_file` method:
-   
+
    ```python
    class Extension(ABC):
     def __init__(self, extension_name: str | None = None):
@@ -220,6 +220,7 @@ You can easily write your own post-processing scripts to handle custom logic.
     def process_file(
         self,
         file_path: Path,
+        video_tracks: list[Track],
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
@@ -235,7 +236,7 @@ You can easily write your own post-processing scripts to handle custom logic.
     ```
 
 > [!NOTE]
-> Check the `extensions` folder in the GitHub repository for example scripts.
+> Check the `extensions` folder in the GitHub repository for example scripts. In addition to the **subtitle extractor**, there's also a **subtitle restyler** that lets you define style overrides in your config file, and there's a **multiplexer** that lets you strip tracks for languages not included in your config file (as well as reorder tracks by priority scores).
 
 ## TOML Configuration
 
@@ -255,4 +256,4 @@ S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 
 ## Hardlinks Limitation
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--dry-run` argument (see [Subtitle Extractor](#subtitle-extractor)).
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--dry-run` argument (see [Subtitle Extractor](#example-subtitle-extractor)).

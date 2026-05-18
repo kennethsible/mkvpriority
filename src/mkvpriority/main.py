@@ -65,6 +65,7 @@ class Extension(ABC):
     def process_file(
         self,
         file_path: Path,
+        video_tracks: list[Track],
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
@@ -307,7 +308,7 @@ class Database:
 
 
 def identify_tracks(file_path: Path) -> Any:
-    with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
+    with NamedTemporaryFile('w+', suffix='.json', encoding='utf-8') as temp_file:
         json.dump(['--identification-format', 'json', '--identify', str(file_path)], temp_file)
         temp_file.flush()
         result = subprocess.run(
@@ -322,7 +323,7 @@ def identify_tracks(file_path: Path) -> Any:
 
 
 def modify_tracks(arguments: list[str]) -> None:
-    with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
+    with NamedTemporaryFile('w+', suffix='.json', encoding='utf-8') as temp_file:
         json.dump(arguments, temp_file)
         temp_file.flush()
         result = subprocess.run(
@@ -547,13 +548,15 @@ def process_file(
     extensions: list[Extension] | None = None,
     dry_run: bool = False,
 ) -> None:
-    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, config)
+    video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path, config)
     for tracks in (audio_tracks, subtitle_tracks):
         tracks.sort(reverse=True, key=lambda track: track.score)
     process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
     if extensions is not None:
         for extension in extensions:
-            extension.process_file(file_path, audio_tracks, subtitle_tracks, config, dry_run)
+            extension.process_file(
+                file_path, video_tracks, audio_tracks, subtitle_tracks, config, dry_run
+            )
 
 
 def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:

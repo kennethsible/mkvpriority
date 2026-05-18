@@ -1,7 +1,9 @@
 import json
 import subprocess
+import tomllib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Any
 
 from mkvpriority import Config, Extension, Track
 
@@ -11,10 +13,12 @@ SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt
 class SubtitleExtractor(Extension):
     def __init__(self):
         super().__init__('subtitle_extractor')
+        self.parameters: dict[str, Any] = {}
 
     def process_file(
         self,
         file_path: Path,
+        video_tracks: list[Track],
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
@@ -22,10 +26,18 @@ class SubtitleExtractor(Extension):
     ) -> None:
         if not subtitle_tracks:
             return
-        subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
-        subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
-        if not subtitle_path.is_file():
-            self.extract_subtitles(file_path, subtitle_path, subtitle_track.index)
+        if config.toml_path in self.parameters:
+            extract = self.parameters[config.toml_path]
+        else:
+            with open(config.toml_path, 'rb') as f:
+                toml_file = tomllib.load(f)
+            extract = toml_file.get('extract_embedded_subtitles', False)
+            self.parameters[config.toml_path] = extract
+        if extract:
+            subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
+            subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
+            if not subtitle_path.is_file():
+                self.extract_subtitles(file_path, subtitle_path, subtitle_track.index)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path:
         if not subtitle_track.codec.startswith('S_TEXT/'):

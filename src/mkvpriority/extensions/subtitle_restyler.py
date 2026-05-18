@@ -30,12 +30,13 @@ ASS_ATTR_MAP = {attr.lower(): attr for attr in SAFE_ATTRS | RES_DEP_X | RES_DEP_
 class SubtitleRestyler(Extension):
     def __init__(self, max_ratio: float = 0.15):
         super().__init__('subtitle_restyler')
-        self.attributes: dict[str, Any] = {}
+        self.parameters: dict[str, Any] = {}
         self.max_ratio = max_ratio
 
     def process_file(
         self,
         file_path: Path,
+        video_tracks: list[Track],
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
@@ -45,13 +46,13 @@ class SubtitleRestyler(Extension):
             return
         subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
         subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
-        if config.toml_path in self.attributes:
-            attributes = self.attributes[config.toml_path]
+        if config.toml_path in self.parameters:
+            attributes = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
             attributes = toml_file.get('subtitle_styles', {})
-            self.attributes[config.toml_path] = attributes
+            self.parameters[config.toml_path] = attributes
         if subtitle_path.is_file() and attributes:
             self.modify_subtitle_styles(subtitle_path, attributes)
 
