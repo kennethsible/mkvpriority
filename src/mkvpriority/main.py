@@ -560,13 +560,15 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', action='append', default=[], metavar='TOML_PATH[::TAG]')
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
+    parser.add_argument(
+        '-i', '--include', action='append', metavar='MODULE_NAME', help='include extension module'
+    )
     parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix output')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
     parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
     parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
     parser.add_argument('-r', '--restore', action='store_true', help='restore original tracks')
-    parser.add_argument('-i', '--include', action='append', help='include extension module')
     parser.add_argument(
         'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
     )

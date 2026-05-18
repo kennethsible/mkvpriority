@@ -18,6 +18,7 @@
 - Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
 - Periodically scans your media library using a **cron schedule** and processes new MKV files with a database
 - Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
+- Supports extension modules for optional, user-defined **post-processors**, allowing for edge-case handling
 
 ## Docker Image
 
@@ -158,7 +159,7 @@ mkvpriority:
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-v] [-x] [-q] [-p] [-n] [-r] [-e] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
@@ -166,13 +167,14 @@ positional arguments:
 options:
   -c, --config TOML_PATH[::TAG]
   -a, --archive DB_PATH
+  -i, --include MODULE_NAME
+                        include extension module
   -v, --verbose         inspect track metadata
   -x, --debug           show mkvtoolnix output
   -q, --quiet           suppress logging output
   -p, --prune           prune database entries
   -n, --dry-run         simulate track changes
   -r, --restore         restore original tracks
-  -e, --extract         extract embedded subtitles
 ```
 
 ### Python Package
@@ -183,16 +185,57 @@ To use MKVPriority without Docker, run the following `pip` command:
 pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
 ```
 
-### Subtitle Extractor
+## Extension Modules
 
-You can use the `--extract` argument to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container.
+MKVPriority supports user-defined extension modules for optional post-processing. This feature is designed to handle complex library edge cases, integrate your workflow with external tools, and provide an open-ended automation framework, such as automatically extracting embedded subtitles or dynamically restyling subtitle fonts.
+
+### Example: Subtitle Extractor
+
+You can use the `subtitle_extractor` extension to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container.
 
 ```text
 Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
 ```
 
 > [!NOTE]
-> To avoid changing internal track flags and *only* use external subtitles, use the `--dry-run` argument with `--extract` since subtitle extraction still runs during a dry run, which only prevents changes to the MKV container.
+> To avoid changing internal track flags and *only* use external subtitles, use the subtitle extractor with the `--dry-run` argument since subtitle extraction still runs during a dry run, which only prevents changes to the MKV container.
+
+### Creating Extensions
+
+You can easily write your own post-processing scripts to handle custom logic.
+
+1. Create a Python script (e.g., `my_extension.py`) inside any of the following:
+   - current working directory (recommend for local development)
+   - `~/.config/mkvpriority/extensions` (recommended for `pip`)
+   - `/config/extensions` (recommended for Docker)
+2. Import the `Extension` class and implement the `process_file` method:
+   
+   ```python
+   class Extension(ABC):
+    def __init__(self, extension_name: str | None = None):
+        name = extension_name or self.__class__.__name__
+        self.extension_logger = logging.getLogger(name)
+
+    @abstractmethod
+    def process_file(
+        self,
+        file_path: Path,
+        audio_tracks: list[Track],
+        subtitle_tracks: list[Track],
+        config: Config,
+        dry_run: bool = False,
+    ) -> None:
+        raise NotImplementedError
+   ```
+
+3. Use `-i/--include` with the script name (without the `.py` extension):
+
+    ```bash
+    mkvpriority -i my_extension
+    ```
+
+> [!NOTE]
+> Check the `extensions` folder in the GitHub repository for example scripts.
 
 ## TOML Configuration
 
@@ -212,4 +255,4 @@ S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 
 ## Hardlinks Limitation
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the `--dry-run` argument with `--extract` for external subtitles only (see [Subtitle Extractor](#subtitle-extractor)).
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--dry-run` argument (see [Subtitle Extractor](#subtitle-extractor)).
