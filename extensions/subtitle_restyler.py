@@ -53,7 +53,7 @@ class SubtitleRestyler(Extension):
             attributes = toml_file.get('subtitle_styles', {})
             self.attributes[config.toml_path] = attributes
         if subtitle_path.is_file() and attributes:
-            self.modify_styles(subtitle_path, attributes)
+            self.modify_subtitle_styles(subtitle_path, attributes)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path:
         if not subtitle_track.codec.startswith('S_TEXT/'):
@@ -129,9 +129,9 @@ class SubtitleRestyler(Extension):
 
         return subtitle_styles
 
-    def modify_styles(self, file_path: Path, attributes: dict[str, Any]) -> None:
+    def modify_subtitle_styles(self, file_path: Path, attributes: dict[str, Any]) -> None:
         with open(file_path, encoding='utf-8-sig') as f:
-            input_lines = [line.strip() for line in f.readlines()]
+            input_lines = f.readlines()
         scaled_attributes = self.scale_style_attributes(input_lines, attributes)
         if not scaled_attributes:
             return
@@ -167,6 +167,6 @@ class SubtitleRestyler(Extension):
                         line = 'Style: ' + ','.join(style_parts) + '\n'
             output_lines.append(line)
 
-        self.extension_logger.info(f'modifying styles {sorted(subtitle_styles)}')
+        self.extension_logger.info(f'modifying subtitle styles {sorted(subtitle_styles)}')
         with open(file_path, 'w', encoding='utf-8-sig') as f:
             f.writelines(output_lines)

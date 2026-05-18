@@ -42,7 +42,7 @@ class SubtitleExtractor(Extension):
         return Path(file_path).with_suffix(f'{subtitle_suffix}.{extension}')
 
     def extract_subtitles(self, file_path: Path, subtitle_path: Path, index: int) -> None:
-        self.extension_logger.info(f"extracting subtitles to '{subtitle_path.parent}'")
+        self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path.parent}'")
         with NamedTemporaryFile('w+', suffix='.json', delete=False, encoding='utf-8') as temp_file:
             json.dump(['tracks', str(file_path), f'{index}:{subtitle_path}'], temp_file)
             temp_file.flush()
