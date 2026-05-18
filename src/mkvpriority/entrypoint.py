@@ -162,7 +162,7 @@ def main() -> None:
         entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID')
         raise
 
-    extensions_dir = Path('/extensions')
+    extensions_dir = Path('/app/src/extensions')
     if extensions_dir.is_dir():
         try:
             for src_file in Path('./extensions').glob('*.py'):
