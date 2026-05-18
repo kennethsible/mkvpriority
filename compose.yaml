@@ -21,6 +21,7 @@ services:
       WEBHOOK_PORT: "8080"
       MKVPRIORITY_ARGS: >
         --archive /config/archive.db
+      # MKVPRIORITY_EXT_DIR: /config/extensions
       # TZ: "America/New_York"
       # CRON_SCHEDULE: "0 0 * * *"
       # CRON_TARGET_PATH: /media

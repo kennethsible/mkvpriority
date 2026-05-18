@@ -28,8 +28,9 @@ if __name__ == '__main__':
 EOF
 
 COPY config.toml mkvpriority.sh pyproject.toml ./
-COPY extensions ./extensions
 COPY src ./src
+
+ENV MKVPRIORITY_EXT_DIR="/config/extensions"
 
 ENV PYTHONPATH="/app/src"
 ENV PATH="/app/.venv/bin:$PATH"

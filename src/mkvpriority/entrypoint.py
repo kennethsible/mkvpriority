@@ -152,6 +152,11 @@ def main() -> None:
         if not config_file.is_file():
             shutil.copy2('config.toml', config_file)
 
+        extensions_dir = Path('/config/extensions')
+        extensions_dir.mkdir(parents=True, exist_ok=True)
+        init_file = extensions_dir / '__init__.py'
+        init_file.touch(exist_ok=True)
+
         script_file = config_dir / 'mkvpriority.sh'
         if not script_file.is_file():
             shutil.copy2('mkvpriority.sh', script_file)
@@ -161,17 +166,6 @@ def main() -> None:
     except PermissionError:
         entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID')
         raise
-
-    extensions_dir = Path('/app/src/extensions')
-    if extensions_dir.is_dir():
-        try:
-            for src_file in Path('./extensions').glob('*.py'):
-                dest_file = extensions_dir / src_file.name
-                if not dest_file.exists():
-                    shutil.copy2(src_file, dest_file)
-        except PermissionError:
-            entrypoint_logger.warning(f'recreate {extensions_dir} with correct PUID/PGID')
-            raise
 
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)

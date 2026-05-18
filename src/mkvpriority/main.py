@@ -3,6 +3,7 @@ import importlib
 import inspect
 import json
 import logging
+import os
 import sqlite3
 import subprocess
 import sys
@@ -56,8 +57,9 @@ def setup_logging(log_path: str | None = None, max_bytes: int = 0, max_files: in
 
 
 class Extension(ABC):
-    def __init__(self, extension_name: str):
-        self.extension_logger = logging.getLogger(extension_name)
+    def __init__(self, extension_name: str | None = None):
+        name = extension_name or self.__class__.__name__
+        self.extension_logger = logging.getLogger(name)
 
     @abstractmethod
     def process_file(
@@ -71,12 +73,27 @@ class Extension(ABC):
         raise NotImplementedError
 
 
+def setup_extension_paths():
+    ext_dirs: list[Path] = []
+    if env_dir := os.environ.get('MKVPRIORITY_EXT_DIR'):
+        ext_dirs.append(Path(env_dir))
+    ext_dirs.append(Path.home() / '.config' / 'mkvpriority' / 'extensions')
+    ext_dirs.append(Path.cwd())
+    for ext_dir in ext_dirs:
+        if ext_dir.is_dir() and str(ext_dir) not in sys.path:
+            sys.path.insert(0, str(ext_dir))
+
+
 def load_extension(module_name: str) -> Extension | None:
     try:
-        module = importlib.import_module(f'.{module_name}', 'extensions')
+        module = importlib.import_module(module_name)
     except ImportError:
-        mkvpriority_logger.error(f"could not import extension '{module_name}'")
-        return None
+        try:
+            module = importlib.import_module(f'mkvpriority.extensions.{module_name}')
+        except ImportError:
+            mkvpriority_logger.error(f"could not locate extension '{module_name}'")
+            return None
+
     for name, obj in inspect.getmembers(module, inspect.isclass):
         if (
             issubclass(obj, Extension)
@@ -91,6 +108,7 @@ def load_extension(module_name: str) -> Extension | None:
             except TypeError:
                 mkvpriority_logger.error(f"could not instantiate '{name}'")
                 return None
+
     mkvpriority_logger.error(f"no valid extension subclass found in '{module_name}'")
     return None
 
@@ -592,6 +610,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     extensions: list[Extension] = []
     if args.include:
+        setup_extension_paths()
         for module_name in args.include:
             if extension := load_extension(module_name):
                 extension.extension_logger.setLevel(tool_level)
