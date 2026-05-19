@@ -109,11 +109,14 @@ class SubtitleRestyler(Extension):
 
     def detect_dialogue_styles(self, input_lines: list[str]) -> set[str]:
         style_stats: dict[str, dict[str, int]] = defaultdict(
-            lambda: {'count': 0, 'count_karaoke': 0, 'total': 0}
+            lambda: {'count_spatial': 0, 'count_karaoke': 0, 'count_drawing': 0, 'total': 0}
         )
         in_events_section = False
 
+        position_pattern = re.compile(r'\\(pos|move|org|clip|iclip)\s*\(|\\an[1-9]', re.IGNORECASE)
+        rotation_pattern = re.compile(r'\\(fr[xyz]|fa[xy])\s*-?\d', re.IGNORECASE)
         karaoke_pattern = re.compile(r'\\[kK][fo]?[0-9]+')
+        drawing_pattern = re.compile(r'\\[pP][1-9]')
 
         for line in input_lines:
             if line.startswith('[Events]'):
@@ -123,22 +126,31 @@ class SubtitleRestyler(Extension):
                 in_events_section = False
 
             if in_events_section and line.startswith('Dialogue:'):
-                parts = line.replace('Dialogue: ', '', 1).split(',', 9)
+                parts = line.split(':', 1)[1].strip().split(',', 9)
                 if len(parts) > 9:
                     style_name = parts[3].strip()
                     text = parts[9]
                     style_stats[style_name]['total'] += 1
-                    if '\\pos' in text or '\\move' in text:
-                        style_stats[style_name]['count'] += 1
+                    if position_pattern.search(text) or rotation_pattern.search(text):
+                        style_stats[style_name]['count_spatial'] += 1
                     if karaoke_pattern.search(text):
                         style_stats[style_name]['count_karaoke'] += 1
+                    if drawing_pattern.search(text):
+                        style_stats[style_name]['count_drawing'] += 1
 
         subtitle_styles: set[str] = set()
         for style, stats in style_stats.items():
-            if stats['count_karaoke'] > 0 and (stats['count_karaoke'] / stats['total']) > 0.10:
+            ratio_karaoke = stats['count_karaoke'] / stats['total']
+            if stats['count_karaoke'] > 0 and ratio_karaoke > 0.1:
                 continue
-            ratio = stats['count'] / stats['total']
-            if ratio <= self.max_ratio or stats['count'] <= self.max_allowance:
+            if stats['count_drawing'] > 0:
+                continue
+            ratio_spatial = stats['count_spatial'] / stats['total']
+            is_dialogue = ratio_spatial <= self.max_ratio
+            if not is_dialogue and stats['count_spatial'] <= self.max_allowance:
+                if ratio_spatial < 1.0:
+                    is_dialogue = True
+            if is_dialogue:
                 subtitle_styles.add(style)
 
         return subtitle_styles
@@ -166,12 +178,13 @@ class SubtitleRestyler(Extension):
 
             if in_styles_section:
                 if line.startswith('Format:'):
-                    format_parts = [p.strip() for p in line.replace('Format:', '', 1).split(',')]
+                    format_string = line.split(':', 1)[1].strip()
+                    format_parts = [p.strip() for p in format_string.split(',')]
                     for attr in scaled_attributes.keys():
                         if attr in format_parts:
                             attr_indices[attr] = format_parts.index(attr)
                 elif line.startswith('Style:') and attr_indices:
-                    style_parts = line.replace('Style: ', '', 1).split(',')
+                    style_parts = line.split(':', 1)[1].strip().split(',')
                     style_name = style_parts[0].strip()
                     if style_name in subtitle_styles:
                         for attr, val in scaled_attributes.items():
