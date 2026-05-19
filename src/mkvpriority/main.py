@@ -1,4 +1,5 @@
 import argparse
+import glob
 import importlib
 import inspect
 import json
@@ -638,16 +639,19 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         if not (active_config := configs.get(tag) or configs.get('untagged')):
             mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
-        input_path = Path(input_path)
-
-        if input_path.is_dir():
-            mkvpriority_logger.info(dry_run + f"scanning '{input_path}'")
-            file_paths = list(input_path.rglob('*.mkv'))
-        elif input_path.is_file():
-            file_paths = [input_path]
-        else:
+        if not (matched_paths := glob.glob(input_path, recursive=True)):
             mkvpriority_logger.warning(dry_run + f"skipping (not found) '{input_path}'")
             continue
+
+        file_paths: list[Path] = []
+        for matched_path in matched_paths:
+            file_path = Path(matched_path)
+            if file_path.is_dir():
+                mkvpriority_logger.info(dry_run + f"scanning '{file_path}'")
+                file_paths.extend(file_path.rglob('*.mkv'))
+            elif file_path.is_file():
+                file_paths.append(file_path)
+        file_paths = list(dict.fromkeys(file_paths))
 
         for file_path in file_paths:
             if database is not None:
