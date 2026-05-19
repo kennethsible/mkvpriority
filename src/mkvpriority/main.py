@@ -639,7 +639,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         if not (active_config := configs.get(tag) or configs.get('untagged')):
             mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
-        if not (matched_paths := glob.glob(input_path, recursive=True)):
+        if not (matched_paths := glob.glob(input_path.replace('[', '[[]'), recursive=True)):
             mkvpriority_logger.warning(dry_run + f"skipping (not found) '{input_path}'")
             continue
 
