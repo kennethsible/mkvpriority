@@ -3,16 +3,21 @@ import subprocess
 import tempfile
 from itertools import chain
 from pathlib import Path
+from typing import Awaitable, Callable
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from aiohttp import web
+from aiohttp.test_utils import TestClient
 
 import mkvpriority
 import mkvpriority.entrypoint as entrypoint
 from mkvpriority.extensions.multiplexer import Multiplexer
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
 from mkvpriority.extensions.subtitle_restyler import SubtitleRestyler
+
+AIOTestClient = TestClient[web.Request, web.Application]
+AIOClientFixture = Callable[[web.Application], Awaitable[AIOTestClient]]
 
 
 def create_dummy(temp_dir: Path) -> dict[str, Path]:
@@ -246,7 +251,7 @@ def test_mkvpropedit() -> None:
         assert track_count == 2
         assert total_count == 8
 
-        config = mkvpriority.Config.from_file('config.toml')
+        config = mkvpriority.Config.from_file(Path('config.toml'))
         mkvpriority.process_file(file_path, config)
 
         track_count = total_count = 0
@@ -275,7 +280,7 @@ def test_mkvpriority() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        config = mkvpriority.Config.from_file('config.toml')
+        config = mkvpriority.Config.from_file(Path('config.toml'))
         mkvpriority.process_file(file_path, config)
 
         tracks = mkvpriority.extract_tracks(file_path, config)
@@ -365,7 +370,7 @@ def test_extension() -> None:
 
 
 @pytest.mark.asyncio
-async def test_webhook(aiohttp_client) -> None:
+async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
     with (
         patch('mkvpriority.entrypoint.get_orig_lang', new_callable=AsyncMock) as mock_get_orig_lang,
         patch('mkvpriority.entrypoint.main_cli') as mock_main_cli,
@@ -415,7 +420,7 @@ def test_unscored() -> None:
                 mkv_args.extend(['--edit', f'track:={track_uid}', '--set', 'flag-forced=1'])
         mkvpriority.modify_tracks(mkv_args)
 
-        config = mkvpriority.Config.from_file('config.toml')
+        config = mkvpriority.Config.from_file(Path('config.toml'))
         config.subtitle_codecs = config.subtitle_filters = {}
         config.penalize_unscored_languages = True
         config.subtitle_languages = {'eng': 0}
@@ -446,7 +451,7 @@ def test_restore() -> None:
         multiplex_dummy(file_path, track_files)
 
         with tempfile.NamedTemporaryFile() as archive_file:
-            config = mkvpriority.Config.from_file('config.toml')
+            config = mkvpriority.Config.from_file(Path('config.toml'))
             database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(file_path, config, database)
 
@@ -481,7 +486,7 @@ def test_prune() -> None:
             track_files = create_dummy(temp_path)
             multiplex_dummy(file_path, track_files)
 
-            config = mkvpriority.Config.from_file('config.toml')
+            config = mkvpriority.Config.from_file(Path('config.toml'))
             database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(file_path, config, database)
 

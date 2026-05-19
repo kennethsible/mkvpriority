@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from sqlite3 import Cursor
 from string.templatelib import Template
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -74,7 +75,7 @@ class Extension(ABC):
         raise NotImplementedError
 
 
-def setup_extension_paths():
+def setup_extension_paths() -> None:
     ext_dirs: list[Path] = []
     if env_dir := os.environ.get('MKVPRIORITY_EXT_DIR'):
         ext_dirs.append(Path(env_dir))
@@ -145,7 +146,7 @@ class Config:
     penalize_unscored_languages: bool
 
     @classmethod
-    def from_file(cls, toml_path: str, label_tag: str = 'untagged') -> 'Config':
+    def from_file(cls, toml_path: Path, label_tag: str = 'untagged') -> 'Config':
         with open(toml_path, 'rb') as f:
             toml_file = tomllib.load(f)
         if 'track_filters' in toml_file and 'subtitle_filters' not in toml_file:
@@ -154,7 +155,7 @@ class Config:
             )
             toml_file['subtitle_filters'] = toml_file.pop('track_filters')
         return cls(
-            toml_path=toml_path,
+            toml_path=str(toml_path),
             label_tag=label_tag,
             audio_mode=toml_file.get('audio_mode', []),
             audio_languages=toml_file.get('audio_languages', {}),
@@ -301,7 +302,7 @@ class Database:
             self.cur.execute('INSERT INTO archive (schema_version) VALUES (1)')
         self.con.commit()
 
-    def execute_t(self, template: Template):
+    def execute_t(self, template: Template) -> Cursor:
         query = '?'.join(template.strings)
         params = tuple(interp.value for interp in template.interpolations)
         return self.cur.execute(query, params)
@@ -601,7 +602,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         tag = 'untagged'
         if '::' in toml_path:
             toml_path, tag = toml_path.rsplit('::', 1)
-        config = Config.from_file(toml_path, tag)
+        config = Config.from_file(Path(toml_path), tag)
         if orig_lang and 'org' in config.audio_languages:
             config.audio_languages[orig_lang] = config.audio_languages['org']
         if orig_lang and 'org' in config.subtitle_languages:
@@ -634,7 +635,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         tag = 'untagged'
         if '::' in input_path:
             input_path, tag = input_path.rsplit('::', 1)
-        if not (config := configs.get(tag) or configs.get('untagged')):
+        if not (active_config := configs.get(tag) or configs.get('untagged')):
             mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
         input_path = Path(input_path)
@@ -660,13 +661,14 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                     continue
 
             if args.restore:
+                assert database is not None
                 mkvpriority_logger.info(dry_run + f"restoring '{file_path}'")
                 restore_file(file_path, database, args.dry_run)
             else:
-                toml_path, tag = config.toml_path, config.label_tag
+                toml_path, tag = active_config.toml_path, active_config.label_tag
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
                 mkvpriority_logger.info(dry_run + f"using config '{toml_path}::{tag}'")
-                process_file(file_path, config, database, extensions, args.dry_run)
+                process_file(file_path, active_config, database, extensions, args.dry_run)
 
 
 if __name__ == '__main__':

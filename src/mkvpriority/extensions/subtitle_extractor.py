@@ -11,7 +11,7 @@ SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt
 
 
 class SubtitleExtractor(Extension):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__('subtitle_extractor')
         self.parameters: dict[str, Any] = {}
 
@@ -26,6 +26,7 @@ class SubtitleExtractor(Extension):
     ) -> None:
         if not subtitle_tracks:
             return
+
         if config.toml_path in self.parameters:
             extract = self.parameters[config.toml_path]
         else:
@@ -33,13 +34,14 @@ class SubtitleExtractor(Extension):
                 toml_file = tomllib.load(f)
             extract = toml_file.get('extract_embedded_subtitles', False)
             self.parameters[config.toml_path] = extract
+
         if extract:
             subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
             subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
-            if not subtitle_path.is_file():
+            if subtitle_path and not subtitle_path.is_file():
                 self.extract_subtitles(file_path, subtitle_path, subtitle_track.index)
 
-    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path:
+    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         if not subtitle_track.codec.startswith('S_TEXT/'):
             return None
         subtitle_format = subtitle_track.codec.split('/')[-1]

@@ -10,7 +10,7 @@ from mkvpriority.main import mkvmerge_logger
 
 
 class Multiplexer(Extension):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__('multiplexer')
         self.parameters: dict[str, Any] = {}
 
@@ -59,7 +59,7 @@ class Multiplexer(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         dry_run: bool = False,
-    ):
+    ) -> None:
         track_order: list[str] = []
         audio_strip: list[str] = []
         subtitle_strip: list[str] = []
@@ -69,7 +69,7 @@ class Multiplexer(Extension):
             track_order: list[str],
             track_strip: list[str],
             track_langs: dict[str, int],
-        ):
+        ) -> None:
             for track in tracks:
                 if self.strip and self.reorder:
                     if track.language in track_langs:

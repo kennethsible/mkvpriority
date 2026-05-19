@@ -1,3 +1,4 @@
+import re
 import tomllib
 from collections import defaultdict
 from pathlib import Path
@@ -28,10 +29,11 @@ ASS_ATTR_MAP = {attr.lower(): attr for attr in SAFE_ATTRS | RES_DEP_X | RES_DEP_
 
 
 class SubtitleRestyler(Extension):
-    def __init__(self, max_ratio: float = 0.15):
+    def __init__(self, max_ratio: float = 0.15, max_allowance: int = 2):
         super().__init__('subtitle_restyler')
         self.parameters: dict[str, Any] = {}
         self.max_ratio = max_ratio
+        self.max_allowance = max_allowance
 
     def process_file(
         self,
@@ -44,8 +46,7 @@ class SubtitleRestyler(Extension):
     ) -> None:
         if not subtitle_tracks:
             return
-        subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
-        subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
+
         if config.toml_path in self.parameters:
             attributes = self.parameters[config.toml_path]
         else:
@@ -53,10 +54,14 @@ class SubtitleRestyler(Extension):
                 toml_file = tomllib.load(f)
             attributes = toml_file.get('subtitle_styles', {})
             self.parameters[config.toml_path] = attributes
-        if subtitle_path.is_file() and attributes:
-            self.modify_subtitle_styles(subtitle_path, attributes)
 
-    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path:
+        if attributes:
+            subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
+            subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
+            if subtitle_path and subtitle_path.is_file():
+                self.modify_subtitle_styles(subtitle_path, attributes)
+
+    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         if not subtitle_track.codec.startswith('S_TEXT/'):
             return None
         if subtitle_track.codec.split('/')[-1] != 'ASS':
@@ -103,8 +108,13 @@ class SubtitleRestyler(Extension):
         return scaled_attributes
 
     def detect_dialogue_styles(self, input_lines: list[str]) -> set[str]:
-        style_stats: dict[str, dict[str, int]] = defaultdict(lambda: {'count': 0, 'total': 0})
+        style_stats: dict[str, dict[str, int]] = defaultdict(
+            lambda: {'count': 0, 'count_karaoke': 0, 'total': 0}
+        )
         in_events_section = False
+
+        karaoke_pattern = re.compile(r'\\[kK][fo]?[0-9]+')
+
         for line in input_lines:
             if line.startswith('[Events]'):
                 in_events_section = True
@@ -120,13 +130,16 @@ class SubtitleRestyler(Extension):
                     style_stats[style_name]['total'] += 1
                     if '\\pos' in text or '\\move' in text:
                         style_stats[style_name]['count'] += 1
+                    if karaoke_pattern.search(text):
+                        style_stats[style_name]['count_karaoke'] += 1
 
         subtitle_styles: set[str] = set()
         for style, stats in style_stats.items():
-            if stats['total'] >= 5:
-                ratio = stats['count'] / stats['total']
-                if ratio <= self.max_ratio:
-                    subtitle_styles.add(style)
+            if stats['count_karaoke'] > 0 and (stats['count_karaoke'] / stats['total']) > 0.10:
+                continue
+            ratio = stats['count'] / stats['total']
+            if ratio <= self.max_ratio or stats['count'] <= self.max_allowance:
+                subtitle_styles.add(style)
 
         return subtitle_styles
 
