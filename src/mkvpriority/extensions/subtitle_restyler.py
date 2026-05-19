@@ -181,6 +181,6 @@ class SubtitleRestyler(Extension):
                         line = 'Style: ' + ','.join(style_parts) + '\n'
             output_lines.append(line)
 
-        self.extension_logger.info(f'modifying subtitle styles {sorted(subtitle_styles)}')
+        self.extension_logger.info(f'modifying subtitle styles for {sorted(subtitle_styles)}')
         with open(file_path, 'w', encoding='utf-8-sig') as f:
             f.writelines(output_lines)

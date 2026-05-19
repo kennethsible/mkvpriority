@@ -373,7 +373,7 @@ def test_extension() -> None:
 async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
     with (
         patch('mkvpriority.entrypoint.get_orig_lang', new_callable=AsyncMock) as mock_get_orig_lang,
-        patch('mkvpriority.entrypoint.main_cli') as mock_main_cli,
+        patch('mkvpriority.main.main') as mock_main,
     ):
         app = web.Application()
         app.router.add_post('/process', entrypoint.process_handler)
@@ -402,7 +402,7 @@ async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
 
         mock_get_orig_lang.assert_called_once_with('98765', 'movie')
         expected_argv = [*entrypoint.MKVPRIORITY_ARGS, '/movies/dummy.mkv::anime']
-        mock_main_cli.assert_called_once_with(expected_argv, 'jpn')
+        mock_main.assert_called_once_with(expected_argv, 'jpn')
 
 
 def test_unscored() -> None:

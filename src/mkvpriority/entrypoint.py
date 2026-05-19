@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import cast
 
 import aiohttp
+import cron_descriptor
 import pycountry
 from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from cron_descriptor import FormatError
 
+import mkvpriority
 from mkvpriority import __version__
-from mkvpriority.main import main as main_cli
 from mkvpriority.main import setup_logging
 
 entrypoint_logger = logging.getLogger('entrypoint')
@@ -89,7 +91,7 @@ async def process_item(file_path: str, item_type: str, item_tags: str, item_id: 
     try:
         argv = [*MKVPRIORITY_ARGS, file_path]
         orig_lang = await get_orig_lang(item_id, item_type)
-        await asyncio.to_thread(main_cli, argv, orig_lang)
+        await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang)
     except Exception:
         entrypoint_logger.exception(f"error occurred: '{file_path}'")
 
@@ -139,7 +141,7 @@ async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     trigger = CronTrigger.from_crontab(expr, timezone)
     cron_argv = MKVPRIORITY_ARGS + CRON_TARGET_PATHS
-    scheduler.add_job(lambda: main_cli(cron_argv), trigger)
+    scheduler.add_job(lambda: mkvpriority.main.main(cron_argv), trigger)
     scheduler.start()
     return scheduler
 
@@ -164,7 +166,7 @@ def main() -> None:
         database_file = config_dir / 'archive.db'
         database_file.touch(exist_ok=True)
     except PermissionError:
-        entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID')
+        entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID ownership')
         raise
 
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
@@ -179,36 +181,44 @@ def main() -> None:
         loop = asyncio.get_running_loop()
 
         def handle_signal(sig_name: str) -> None:
-            entrypoint_logger.info(f'received {sig_name} signal; stopping tasks')
+            entrypoint_logger.info(f'received {sig_name} signal')
             stop_event.set()
 
         loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
         loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
 
-        scheduler = None
-        if expr := CRON_SCHEDULE:
-            if expr.startswith('@'):
+        try:
+            runner = None
+            if WEBHOOK_PORT:
+                runner = await create_runner('0.0.0.0', WEBHOOK_PORT)
+                entrypoint_logger.info(f'webhook listener started on 0.0.0.0:{WEBHOOK_PORT}')
+
+            scheduler = None
+            if expr := CRON_SCHEDULE:
+                if expr.startswith('@'):
+                    macro = expr
+                    try:
+                        expr = CRON_MACROS[macro]
+                    except KeyError as e:
+                        e.add_note(f"unsupported cron macro '{macro}'")
+                        raise
+                timezone = os.getenv('TZ', 'UTC')
                 try:
-                    expr = CRON_MACROS[expr]
-                except KeyError as e:
-                    e.add_note(f"unsupported macro: '{expr}'")
+                    expr_desc = cron_descriptor.get_description(expr)
+                    expr_desc = expr_desc[0].lower() + expr_desc[1:]
+                    scheduler = await create_scheduler(expr, timezone)
+                except (FormatError, ValueError) as e:
+                    e.add_note(f"unsupported cron expression '{expr}'")
                     raise
-            timezone = os.getenv('TZ', 'UTC')
-            if timezone:
-                entrypoint_logger.info(f'setting time zone to {timezone}')
-            entrypoint_logger.info(f"scheduling task to run at '{expr}'")
-            scheduler = await create_scheduler(expr, timezone)
+                entrypoint_logger.info(f'scheduled task to run {expr_desc} ({timezone})')
 
-        runner = None
-        if WEBHOOK_PORT:
-            entrypoint_logger.info(f'listening for webhooks on port {WEBHOOK_PORT}')
-            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)
+            await stop_event.wait()
 
-        await stop_event.wait()
-        if runner:
-            await runner.cleanup()
-        if scheduler:
-            scheduler.shutdown(wait=False)
+        finally:
+            if scheduler:
+                scheduler.shutdown(wait=False)
+            if runner:
+                await runner.cleanup()
 
     entrypoint_logger.info(f'MKVPriority {__version__}')
     asyncio.run(run_all())
@@ -223,4 +233,4 @@ if __name__ == '__main__':
     elif WEBHOOK_PORT or CRON_SCHEDULE:
         main()
     else:
-        main_cli()
+        mkvpriority.main.main()

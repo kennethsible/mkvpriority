@@ -161,6 +161,18 @@ wheels = [
 ]
 
 [[package]]
+name = "cron-descriptor"
+version = "2.0.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/ce/cd3cc454ea73e8a38be79723b925611d2556037f938372ad594373f187b4/cron_descriptor-2.0.8.tar.gz", hash = "sha256:7e487efe14a99a3c1c23bb5302bb75c8bf5d54bca82931bf71f5ae2855939772", size = 49971, upload-time = "2026-03-23T13:19:17.963Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/8c/ae74b17ea1672844a14c176a88f6d2718fa2c10948dc8401824d62265e9e/cron_descriptor-2.0.8-py3-none-any.whl", hash = "sha256:21fae0e6e0e28b19fd6a08e032c700077fe759e9bc1deb1ebe32f277fbc8ba6c", size = 74703, upload-time = "2026-03-23T13:19:16.486Z" },
+]
+
+[[package]]
 name = "frozenlist"
 version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -228,6 +240,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "apscheduler" },
+    { name = "cron-descriptor" },
     { name = "pycountry" },
     { name = "requests" },
 ]
@@ -247,6 +260,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.13.5" },
     { name = "apscheduler", specifier = ">=3.11.2" },
+    { name = "cron-descriptor", specifier = ">=2.0.8" },
     { name = "pycountry", specifier = ">=26.2.16" },
     { name = "requests", specifier = ">=2.34.2" },
 ]

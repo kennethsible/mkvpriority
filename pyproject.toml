@@ -10,6 +10,7 @@ dependencies = [
     "apscheduler>=3.11.2",
     "requests>=2.34.2",
     "pycountry>=26.2.16",
+    "cron_descriptor>=2.0.8",
 ]
 
 [dependency-groups]
