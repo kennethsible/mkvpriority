@@ -5,6 +5,7 @@ import inspect
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -20,7 +21,6 @@ from typing import Any
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
-mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
@@ -309,6 +309,16 @@ class Database:
         return self.cur.execute(query, params)
 
 
+class MissingCommandError(Exception):
+    pass
+
+
+def verify_mkvtoolnix_install() -> None:
+    for command in ('mkvpropedit', 'mkvmerge'):
+        if shutil.which(command) is None:
+            raise MissingCommandError(f"'{command}' is not installed or missing from your PATH")
+
+
 def identify_tracks(file_path: Path) -> Any:
     with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
         json.dump(['--identification-format', 'json', '--identify', str(file_path)], temp_file)
@@ -586,6 +596,10 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
     )
     args = parser.parse_args(argv)
+    try:
+        verify_mkvtoolnix_install()
+    except MissingCommandError as e:
+        parser.error(str(e))
 
     main_level = logging.DEBUG if args.verbose else logging.INFO
     tool_level = logging.DEBUG if args.debug else logging.INFO
@@ -595,7 +609,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     stream_filter.stream_level = main_level
     mkvpriority_logger.setLevel(logging.DEBUG)
-    for logger in (mkvpropedit_logger, mkvextract_logger, mkvmerge_logger):
+    for logger in (mkvpropedit_logger, mkvmerge_logger):
         logger.setLevel(tool_level)
 
     configs: dict[str, Config] = {}

@@ -1,9 +1,11 @@
+<!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
   <img alt="MKVPriority Banner" src="images/mkvpriority_banner.svg" width="600">
 </div>
 <p align="center">
-<img src="https://github.com/kennethsible/mkvpriority/actions/workflows/publish.yaml/badge.svg" alt="MKVPriority Release" />
-<img src="https://github.com/kennethsible/mkvpriority/actions/workflows/pytest.yaml/badge.svg" alt="MKVPriority CI">
+<img src="https://github.com/kennethsible/mkvpriority/actions/workflows/docker-release.yaml/badge.svg" alt="Docker Release" />
+<img src="https://github.com/kennethsible/mkvpriority/actions/workflows/pypi-release.yaml/badge.svg" alt="PyPI Release" />
+<img src="https://github.com/kennethsible/mkvpriority/actions/workflows/pytest.yaml/badge.svg" alt="Python CI">
 </p>
 
 **MKVPriority** assigns configurable priority scores to audio and subtitle tracks, similar to custom formats in Radarr/Sonarr. MKV flags, such as default and forced, are automatically set for the highest-priority tracks (e.g., 5.1 surround and ASS subtitles), while lower-priority tracks (e.g., stereo audio and PGS subtitles) are deprioritized.
@@ -244,11 +246,20 @@ options:
 
 ### Python Package
 
-To use MKVPriority without Docker, run the following `pip` command:
+To install the standalone CLI tool (without Docker), you can use `pip`:
 
 ```bash
-pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
+pip install mkvpriority
 ```
+
+To keep the CLI tool isolated from your environment, you can use [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install mkvpriority
+```
+
+> [!NOTE]
+> If you have `uv` installed, you can also run MKVPriority without installing using `uvx mkvpriority`.
 
 ## Hardlinks Limitation
 

@@ -1,6 +1,10 @@
 version = 1
 revision = 3
-requires-python = "==3.14.*"
+requires-python = ">=3.14"
+resolution-markers = [
+    "python_full_version >= '3.15'",
+    "python_full_version < '3.15'",
+]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -235,15 +239,8 @@ wheels = [
 
 [[package]]
 name = "mkvpriority"
-version = "1.5.0"
+version = "1.5.1"
 source = { editable = "." }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "apscheduler" },
-    { name = "cron-descriptor" },
-    { name = "pycountry" },
-    { name = "requests" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -255,15 +252,15 @@ dev = [
     { name = "types-aiofiles" },
     { name = "types-requests" },
 ]
+docker = [
+    { name = "aiohttp" },
+    { name = "apscheduler" },
+    { name = "cron-descriptor" },
+    { name = "pycountry" },
+    { name = "requests" },
+]
 
 [package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.13.5" },
-    { name = "apscheduler", specifier = ">=3.11.2" },
-    { name = "cron-descriptor", specifier = ">=2.0.8" },
-    { name = "pycountry", specifier = ">=26.2.16" },
-    { name = "requests", specifier = ">=2.34.2" },
-]
 
 [package.metadata.requires-dev]
 dev = [
@@ -274,6 +271,13 @@ dev = [
     { name = "ruff", specifier = ">=0.15.13" },
     { name = "types-aiofiles" },
     { name = "types-requests" },
+]
+docker = [
+    { name = "aiohttp", specifier = ">=3.13.5" },
+    { name = "apscheduler", specifier = ">=3.11.2" },
+    { name = "cron-descriptor", specifier = ">=2.0.8" },
+    { name = "pycountry", specifier = ">=26.2.16" },
+    { name = "requests", specifier = ">=2.34.2" },
 ]
 
 [[package]]

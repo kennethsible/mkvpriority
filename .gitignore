@@ -11,6 +11,7 @@ media/
 config/
 *.yaml
 !compose.yaml
+!.github/workflows/*.yaml
 *.toml
 !config.toml
 *.db
