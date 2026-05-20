@@ -4,7 +4,7 @@ import tempfile
 from itertools import chain
 from pathlib import Path
 from typing import Awaitable, Callable
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from aiohttp import web
@@ -371,20 +371,12 @@ def test_extension() -> None:
 
 @pytest.mark.asyncio
 async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
-    with (
-        patch('mkvpriority.entrypoint.get_orig_lang', new_callable=AsyncMock) as mock_get_orig_lang,
-        patch('mkvpriority.main.main') as mock_main,
-    ):
+    with patch('mkvpriority.main.main') as mock_main:
         app = web.Application()
         app.router.add_post('/process', entrypoint.process_handler)
         client = await aiohttp_client(app)
 
-        payload = {
-            'file_path': '/movies/dummy.mkv',
-            'item_type': 'movie',
-            'item_tags': 'anime|1080p',
-            'item_id': '98765',
-        }
+        payload = {'file_path': '/movies/dummy.mkv', 'item_tags': 'anime|1080p', 'orig_lang': 'jpn'}
         response = await client.post('/process', json=payload)
 
         assert response.status == 200
@@ -393,14 +385,12 @@ async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
 
         assert not entrypoint.processing_queue.empty()
         queued_item = await entrypoint.processing_queue.get()
-        assert queued_item == ('/movies/dummy.mkv', 'movie', 'anime|1080p', '98765')
+        assert queued_item == ('/movies/dummy.mkv', 'anime|1080p', 'jpn')
 
         os.environ['MKVPRIORITY_ARGS'] = '-c config.toml'
-        mock_get_orig_lang.return_value = 'jpn'
         await entrypoint.process_item(*queued_item)
         entrypoint.processing_queue.task_done()
 
-        mock_get_orig_lang.assert_called_once_with('98765', 'movie')
         expected_argv = [*entrypoint.MKVPRIORITY_ARGS, '/movies/dummy.mkv::anime']
         mock_main.assert_called_once_with(expected_argv, 'jpn')
 

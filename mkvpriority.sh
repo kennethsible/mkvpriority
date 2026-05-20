@@ -10,9 +10,8 @@ if [ -n "$sonarr_eventtype" ]; then
       -H "Content-Type: application/json" \
       -d '{
             "file_path": "'"$FILE_PATH"'",
-            "item_type": "series",
             "item_tags": "'"$sonarr_series_tags"'",
-            "item_id": "'"$sonarr_series_id"'"
+            "orig_lang": "'"$sonarr_series_originallanguage"'"
             
           }'
 elif [ -n "$radarr_eventtype" ]; then
@@ -20,8 +19,7 @@ elif [ -n "$radarr_eventtype" ]; then
       -H "Content-Type: application/json" \
       -d '{
             "file_path": "'"$FILE_PATH"'",
-            "item_type": "movie",
             "item_tags": "'"$radarr_movie_tags"'",
-            "item_id": "'"$radarr_movie_id"'"
+            "orig_lang": "'"$radarr_movie_originallanguage"'"
           }'
 fi

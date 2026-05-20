@@ -8,7 +8,6 @@ import signal
 from pathlib import Path
 from typing import cast
 
-import aiohttp
 import cron_descriptor
 import pycountry
 from aiohttp import web
@@ -21,19 +20,10 @@ from mkvpriority import __version__
 from mkvpriority.main import setup_logging
 
 entrypoint_logger = logging.getLogger('entrypoint')
-processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
-
-
-def get_secret(var_name: str) -> str | None:
-    file_path = os.getenv(f'{var_name}_FILE')
-    if file_path and Path(file_path).is_file():
-        return Path(file_path).read_text().strip()
-    return os.getenv(var_name)
+processing_queue: asyncio.Queue[tuple[str, str, str | None]] = asyncio.Queue()
 
 
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
-SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), get_secret('SONARR_API_KEY')
-RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), get_secret('RADARR_API_KEY')
 LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
 
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
@@ -62,42 +52,11 @@ def get_alpha_3_code(lang_name: str) -> str | None:
         return None
 
 
-async def get_orig_lang(item_id: str, item_type: str) -> str | None:
-    match item_type:
-        case 'series':
-            if SONARR_URL is None:
-                return None
-            if SONARR_API_KEY is None:
-                entrypoint_logger.warning('set SONARR_API_KEY to use SONARR_URL')
-                return None
-            endpoint = f'{SONARR_URL}/api/v3/series/{item_id}'
-            headers = {'X-Api-Key': SONARR_API_KEY}
-        case 'movie':
-            if RADARR_URL is None:
-                return None
-            if RADARR_API_KEY is None:
-                entrypoint_logger.warning('set RADARR_API_KEY to use RADARR_URL')
-                return None
-            endpoint = f'{RADARR_URL}/api/v3/movie/{item_id}'
-            headers = {'X-Api-Key': RADARR_API_KEY}
-        case _:
-            return None
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(endpoint, headers=headers) as response:
-            response.raise_for_status()
-            data = await response.json()
-
-    lang_info = data.get('originalLanguage', {})
-    return get_alpha_3_code(lang_info.get('name', ''))
-
-
-async def process_item(file_path: str, item_type: str, item_tags: str, item_id: str) -> None:
+async def process_item(file_path: str, item_tags: str, orig_lang: str | None) -> None:
     if item_tags:
         file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
     try:
         argv = [*MKVPRIORITY_ARGS, file_path]
-        orig_lang = await get_orig_lang(item_id, item_type)
         await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang)
     except Exception:
         entrypoint_logger.exception(f"error occurred: '{file_path}'")
@@ -105,18 +64,17 @@ async def process_item(file_path: str, item_type: str, item_tags: str, item_id: 
 
 async def queue_worker() -> None:
     while True:
-        file_path, item_type, item_tags, item_id = await processing_queue.get()
-        await process_item(file_path, item_type, item_tags, item_id)
+        file_path, item_tags, item_id = await processing_queue.get()
+        await process_item(file_path, item_tags, item_id)
         processing_queue.task_done()
 
 
 async def process_handler(request: web.Request) -> web.Response:
     args = await request.json()
     file_path = args.get('file_path')
-    item_type = args.get('item_type', '')
     item_tags = args.get('item_tags', '')
-    item_id = args.get('item_id', '')
-    await processing_queue.put((file_path, item_type, item_tags, item_id))
+    orig_lang = get_alpha_3_code(args.get('orig_lang', ''))
+    await processing_queue.put((file_path, item_tags, orig_lang))
     return web.json_response({'message': f"received '{file_path}'"})
 
 

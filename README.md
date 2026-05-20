@@ -57,7 +57,7 @@ docker run --rm -u ${PUID}:${PGID} \
 
 ## Radarr/Sonarr Integration
 
-You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. In order for Radarr/Sonarr to recognize the custom script, it must be visible inside the container.
+You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. In order for Radarr/Sonarr to recognize the custom script, it must be visible inside the container. When using Radarr/Sonarr, you can assign scores to the original audio language (`org`).
 
 > [!NOTE]
 > To add a custom script to Radarr/Sonarr, go to Settings > Connect > Add Connection > Custom Script.
@@ -103,70 +103,6 @@ mkvpriority:
 
 > [!IMPORTANT]
 > In Radarr/Sonarr, a given movie or show can have multiple tags. However, MKVPriority only uses the first tag in alphabetical order. Therefore, you may need to create new tags specifically for MKVPriority.
-
-### Original Audio Language
-
-MKVPriority supports using the Radarr/Sonarr API to identify the original language of a movie or series. You can assign priority scores to the language code `org` (original) by configuring API access with environment variables.
-
-> [!NOTE]
-> To generate an API key for Radarr/Sonarr, go to Settings > General > Security > API Key.
-
-```yaml
-mkvpriority:
-  image: ghcr.io/kennethsible/mkvpriority
-  container_name: mkvpriority
-  user: ${PUID}:${PGID}
-  environment:
-    WEBHOOK_PORT: '8080'
-    MKVPRIORITY_ARGS: >
-      --archive /config/archive.db
-    SONARR_URL: http://sonarr:8989
-    SONARR_API_KEY: ${SONARR_API_KEY}
-    RADARR_URL: http://radarr:7878
-    RADARR_API_KEY: ${RADARR_API_KEY}
-  volumes:
-    - /path/to/media:/media
-    - /path/to/mkvpriority/config:/config
-  restart: unless-stopped
-```
-
-### Docker Secrets (API Keys)
-
-MKVPriority supports Docker secrets to keep your API keys secure. To use secrets:
-
-1. Create a text file on your host machine (one per key) containing your API key.
-2. In your compose file, append `_FILE` to the environment variable for each API key.
-3. Set each variable to the secret's path inside the container (e.g., `/run/secrets`).
-
-Here is an example configuration showing how to use secrets with MKVPriority:
-
-```yaml
-mkvpriority:
-  image: ghcr.io/kennethsible/mkvpriority
-  container_name: mkvpriority
-  user: ${PUID}:${PGID}
-  environment:
-    WEBHOOK_PORT: '8080'
-    MKVPRIORITY_ARGS: >
-      --archive /config/archive.db
-    SONARR_URL: http://sonarr:8989
-    SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
-    RADARR_URL: http://radarr:7878
-    RADARR_API_KEY_FILE: /run/secrets/radarr_api_key
-  volumes:
-    - /path/to/media:/media
-    - /path/to/mkvpriority/config:/config
-  secrets:
-      - sonarr_api_key
-      - radarr_api_key
-  restart: unless-stopped
-
-secrets:
-  sonarr_api_key:
-    file: ${SECRETS_DIR}/sonarr_api_key.txt
-  radarr_api_key:
-    file: ${SECRETS_DIR}/radarr_api_key.txt
-```
 
 ## Cron Scheduler
 
@@ -294,4 +230,4 @@ S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 
 ## Hardlinks Limitation
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--dry-run` argument (see [Subtitle Extractor](#example-subtitle-extractor)).
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--dry-run` argument ([see here](#example-subtitle-extractor)).
