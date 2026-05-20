@@ -108,6 +108,9 @@ mkvpriority:
 
 MKVPriority supports using the Radarr/Sonarr API to identify the original language of a movie or series. You can assign priority scores to the language code `org` (original) by configuring API access with environment variables.
 
+> [!NOTE]
+> To generate an API key for Radarr/Sonarr, go to Settings > General > Security > API Key.
+
 ```yaml
 mkvpriority:
   image: ghcr.io/kennethsible/mkvpriority
@@ -127,8 +130,43 @@ mkvpriority:
   restart: unless-stopped
 ```
 
-> [!NOTE]
-> To generate an API key for Radarr/Sonarr, go to Settings > General > Security > API Key.
+### Docker Secrets (API Keys)
+
+MKVPriority supports Docker secrets to keep your API keys secure. To use secrets:
+
+1. Create a text file on your host machine (one per key) containing your API key.
+2. In your compose file, append `_FILE` to the environment variable for each API key.
+3. Set each variable to the secret's path inside the container (e.g., `/run/secrets`).
+
+Here is an example configuration showing how to use secrets with MKVPriority:
+
+```yaml
+mkvpriority:
+  image: ghcr.io/kennethsible/mkvpriority
+  container_name: mkvpriority
+  user: ${PUID}:${PGID}
+  environment:
+    WEBHOOK_PORT: '8080'
+    MKVPRIORITY_ARGS: >
+      --archive /config/archive.db
+    SONARR_URL: http://sonarr:8989
+    SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
+    RADARR_URL: http://radarr:7878
+    RADARR_API_KEY_FILE: /run/secrets/radarr_api_key
+  volumes:
+    - /path/to/media:/media
+    - /path/to/mkvpriority/config:/config
+  secrets:
+      - sonarr_api_key
+      - radarr_api_key
+  restart: unless-stopped
+
+secrets:
+  sonarr_api_key:
+    file: ${SECRETS_DIR}/sonarr_api_key.txt
+  radarr_api_key:
+    file: ${SECRETS_DIR}/radarr_api_key.txt
+```
 
 ## Cron Scheduler
 

@@ -24,9 +24,16 @@ entrypoint_logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str, str]] = asyncio.Queue()
 
 
+def get_secret(var_name: str) -> str | None:
+    file_path = os.getenv(f'{var_name}_FILE')
+    if file_path and Path(file_path).is_file():
+        return Path(file_path).read_text().strip()
+    return os.getenv(var_name)
+
+
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
-SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), os.getenv('SONARR_API_KEY')
-RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), os.getenv('RADARR_API_KEY')
+SONARR_URL, SONARR_API_KEY = os.getenv('SONARR_URL'), get_secret('SONARR_API_KEY')
+RADARR_URL, RADARR_API_KEY = os.getenv('RADARR_URL'), get_secret('RADARR_API_KEY')
 LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
 
 CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
