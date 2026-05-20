@@ -55,6 +55,22 @@ docker run --rm -u ${PUID}:${PGID} \
   --archive /config/archive.db
 ```
 
+## TOML Configuration
+
+All behavior is configured through TOML files, which assign priority scores to track properties, such as languages and codecs, and define custom filters for track names, such as "signs" and "songs." To get started, check the example TOML file that has been provided for anime ([see here](https://github.com/kennethsible/mkvpriority/blob/main/config.toml)).
+
+### Example: Subtitle Codecs
+
+```toml
+[subtitle_codecs]
+"S_TEXT/ASS" = 30    # Stylized (Advanced SubStationAlpha)
+"S_TEXT/SSA" = 30    # Legacy Stylized (SubStationAlpha)
+"S_TEXT/UTF8" = 20   # Plain Text (SubRip/SRT)
+"S_TEXT/WEBVTT" = 20 # Web-Based Video Text (Used in Streaming)
+"S_HDMV/PGS" = 10    # Image-Based (Used in Blu-rays)
+S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
+```
+
 ## Radarr/Sonarr Integration
 
 You can process new MKV files as they are imported into Radarr/Sonarr by adding the custom script `mkvpriority.sh` and selecting 'On File Import' and 'On File Upgrade'. In order for Radarr/Sonarr to recognize the custom script, it must be visible inside the container. When using Radarr/Sonarr, you can assign scores to the original audio language (`org`).
@@ -128,44 +144,13 @@ mkvpriority:
 > [!NOTE]
 > MKVPriority supports [non-standard macros](https://en.wikipedia.org/wiki/Cron#Nonstandard_predefined_scheduling_definitions) for cron expressions, such as `@daily` and `@hourly`.
 
-## CLI Usage
-
-[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
-
-```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
-
-positional arguments:
-  INPUT_PATH[::TAG]     files or directories
-
-options:
-  -c, --config TOML_PATH[::TAG]
-  -a, --archive DB_PATH
-  -i, --include MODULE_NAME
-                        include extension module
-  -v, --verbose         inspect track metadata
-  -x, --debug           show mkvtoolnix output
-  -q, --quiet           suppress logging output
-  -p, --prune           prune database entries
-  -n, --dry-run         simulate track changes
-  -r, --restore         restore original tracks
-```
-
-### Python Package
-
-To use MKVPriority without Docker, run the following `pip` command:
-
-```bash
-pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
-```
-
 ## Extension Modules
 
 MKVPriority supports user-defined extension modules for optional post-processing. This feature is designed to handle complex library edge cases, integrate your workflow with external tools, and provide an open-ended automation framework, such as automatically extracting embedded subtitles or dynamically restyling subtitle fonts.
 
 ### Example: Subtitle Extractor
 
-You can use the `subtitle_extractor` extension to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container.
+You can use the `subtitle_extractor` extension to extract embedded subtitles with the highest priority score. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container. To use this feature, add `extract_embedded_subtitles = true` to the top level of your config file and include this extension in your arguments.
 
 ```text
 Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
@@ -173,6 +158,28 @@ Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
 
 > [!NOTE]
 > To avoid changing internal track flags and *only* use external subtitles, use the subtitle extractor with the `--dry-run` argument since subtitle extraction still runs during a dry run, which only prevents changes to the MKV container.
+
+### Example: Subtitle Restyler
+
+You can use the `subtitle_restyler` extension to restyle external subtitles by defining style overrides in your config file. Since this extension operates on external subtitles, it can be seamlessly chained with the subtitle extractor. To ensure this extension only restyles dialogue subtitles, it filters out styles that exceed calibrated thresholds for spatial, karaoke, and drawing tags. A complete list of restylable attributes can be found in the extension's Python script on GitHub.
+
+```toml
+[subtitle_styles]
+Fontsize = 72
+Bold = -1
+Outline = 3.6
+Shadow = 1.5
+```
+
+### Example: Multiplexer (Strip/Reorder Tracks)
+
+You can use the `multiplexer` extension to strip tracks for unwanted languages and reorder tracks by priority scores. Since remuxing conflicts with the core "no-remux" design, these features are delegated to an extension module. To enable them, add the `[multiplexer]` section to your config file and include this extension in your arguments.
+
+```toml
+[multiplexer]
+strip_tracks = true
+reorder_tracks = true
+```
 
 ### Creating Extensions
 
@@ -212,20 +219,35 @@ You can easily write your own post-processing scripts to handle custom logic.
 > [!NOTE]
 > Check the `extensions` folder in the GitHub repository for example scripts. In addition to the **subtitle extractor**, there's also a **subtitle restyler** that lets you define style overrides in your config file, and there's a **multiplexer** that lets you strip tracks for languages not included in your config file (as well as reorder tracks by priority scores).
 
-## TOML Configuration
+## CLI Usage
 
-All behavior is configured through TOML files, which assign priority scores to track properties, such as languages and codecs, and define custom filters for track names, such as "signs" and "songs."
+[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
-### Example: Subtitle Codecs
+```text
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
 
-```toml
-[subtitle_codecs]
-"S_TEXT/ASS" = 30    # Stylized (Advanced SubStationAlpha)
-"S_TEXT/SSA" = 30    # Legacy Stylized (SubStationAlpha)
-"S_TEXT/UTF8" = 20   # Plain Text (SubRip/SRT)
-"S_TEXT/WEBVTT" = 20 # Web-Based Video Text (Used in Streaming)
-"S_HDMV/PGS" = 10    # Image-Based (Used in Blu-rays)
-S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
+positional arguments:
+  INPUT_PATH[::TAG]     files or directories
+
+options:
+  -c, --config TOML_PATH[::TAG]
+  -a, --archive DB_PATH
+  -i, --include MODULE_NAME
+                        include extension module
+  -v, --verbose         inspect track metadata
+  -x, --debug           show mkvtoolnix output
+  -q, --quiet           suppress logging output
+  -p, --prune           prune database entries
+  -n, --dry-run         simulate track changes
+  -r, --restore         restore original tracks
+```
+
+### Python Package
+
+To use MKVPriority without Docker, run the following `pip` command:
+
+```bash
+pip install 'git+ssh://git@github.com/kennethsible/mkvpriority.git'
 ```
 
 ## Hardlinks Limitation
