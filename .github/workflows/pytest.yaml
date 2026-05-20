@@ -22,6 +22,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg mkvtoolnix
       - name: Install Python Dependencies
-        run: uv sync
+        run: uv sync --group docker
       - name: Run Unit Tests
         run: uv run pytest -s

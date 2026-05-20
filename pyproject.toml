@@ -7,7 +7,16 @@ license = { file = "LICENSE" }
 authors = [{ name = "Ken Sible", email = "ksible@outlook.com" }]
 requires-python = ">=3.14"
 
-keywords = ["mkv", "mkvpropedit", "subtitles", "radarr", "sonarr", "anime"]
+keywords = [
+    "mkv",
+    "mkvtoolnix",
+    "mkvpropedit",
+    "subtitles",
+    "radarr",
+    "sonarr",
+    "anime",
+]
+
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -40,10 +49,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/kennethsible/mkvpriority"
-Repository = "https://github.com/kennethsible/mkvpriority"
-Tracker = "https://github.com/kennethsible/mkvpriority/issues"
-Changelog = "https://github.com/kennethsible/mkvpriority/releases"
+homepage = "https://github.com/kennethsible/mkvpriority"
+source = "https://github.com/kennethsible/mkvpriority"
+issues = "https://github.com/kennethsible/mkvpriority/issues"
+changelog = "https://github.com/kennethsible/mkvpriority/releases"
 
 [project.scripts]
 mkvpriority = "mkvpriority.main:main"
