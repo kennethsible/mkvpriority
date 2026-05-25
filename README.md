@@ -4,7 +4,7 @@
 </div>
 <p align="center">
 <img src="https://github.com/kennethsible/mkvpriority/actions/workflows/publish.yaml/badge.svg" alt="Docker Release" />
-<!-- <img src="https://github.com/kennethsible/mkvpriority/actions/workflows/pypi.yaml/badge.svg" alt="PyPI Release" /> -->
+<img src="https://github.com/kennethsible/mkvpriority/actions/workflows/pypi.yaml/badge.svg" alt="PyPI Release" />
 <img src="https://github.com/kennethsible/mkvpriority/actions/workflows/pytest.yaml/badge.svg" alt="Python CI">
 </p>
 

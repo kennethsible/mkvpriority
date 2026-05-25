@@ -1,4 +1,5 @@
 import argparse
+import copy
 import glob
 import importlib
 import inspect
@@ -126,8 +127,8 @@ class Track:
     codec: str
     channels: int
     default: bool
-    enabled: bool
     forced: bool
+    enabled: bool
     uid: int
 
 
@@ -449,7 +450,7 @@ def restore_tracks(
     modify_args = [str(file_path)]
     logger_args: list[str] = []
 
-    def apply_flags(track: Track, use_index: bool = False) -> list[str]:
+    def apply_track_modes(track: Track, use_index: bool = False) -> list[str]:
         track_id = track.index if use_index else track.uid
         return [
             '--edit',
@@ -463,8 +464,8 @@ def restore_tracks(
         ]
 
     for track in [*audio_tracks, *subtitle_tracks]:
-        modify_args += apply_flags(track, use_index=False)
-        logger_args += apply_flags(track, use_index=True)
+        modify_args += apply_track_modes(track, use_index=False)
+        logger_args += apply_track_modes(track, use_index=True)
 
     if len(modify_args) > 1:
         mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
@@ -485,28 +486,35 @@ def process_tracks(
     database: Database | None = None,
     dry_run: bool = False,
 ) -> None:
-    archive_tracks: list[Track] = []
+    orig_tracks: dict[int, Track] = {}
     modify_args = [str(file_path)]
     logger_args: list[str] = []
 
-    def apply_flags(tracks: list[Track], track_modes: list[str]) -> None:
+    def snapshot_track(track: Track) -> None:
+        if track.uid not in orig_tracks:
+            orig_tracks[track.uid] = copy.copy(track)
+
+    def apply_track_modes(tracks: list[Track], track_modes: list[str]) -> None:
         nonlocal modify_args, logger_args
         default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
         disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
-        mkv_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
+        track_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
 
         if tracks[0].score > 0:
             if default_mode:
                 if not tracks[0].default:
-                    mkv_flags[tracks[0].uid].append('flag-default=1')
+                    track_flags[tracks[0].uid].append('flag-default=1')
+                    snapshot_track(tracks[0])
                     tracks[0].default = True
             if forced_mode:
                 if not tracks[0].forced:
-                    mkv_flags[tracks[0].uid].append('flag-forced=1')
+                    track_flags[tracks[0].uid].append('flag-forced=1')
+                    snapshot_track(tracks[0])
                     tracks[0].forced = True
             if disabled_mode or enabled_mode:
                 if not tracks[0].enabled:
-                    mkv_flags[tracks[0].uid].append('flag-enabled=1')
+                    track_flags[tracks[0].uid].append('flag-enabled=1')
+                    snapshot_track(tracks[0])
                     tracks[0].enabled = True
             unwanted_tracks = tracks[1:]
         else:
@@ -516,31 +524,34 @@ def process_tracks(
             if track.score == 0:
                 continue
             if default_mode and track.default:
-                mkv_flags[track.uid].append('flag-default=0')
+                track_flags[track.uid].append('flag-default=0')
+                snapshot_track(track)
                 track.default = False
             if forced_mode and track.forced:
-                mkv_flags[track.uid].append('flag-forced=0')
+                track_flags[track.uid].append('flag-forced=0')
+                snapshot_track(track)
                 track.forced = False
             if disabled_mode and track.enabled:
-                mkv_flags[track.uid].append('flag-enabled=0')
+                track_flags[track.uid].append('flag-enabled=0')
+                snapshot_track(track)
                 track.enabled = False
             if enabled_mode and not track.enabled:
-                mkv_flags[track.uid].append('flag-enabled=1')
+                track_flags[track.uid].append('flag-enabled=1')
+                snapshot_track(track)
                 track.enabled = True
 
         for track in tracks:
-            if mkv_flags[track.uid]:
+            if track_flags[track.uid]:
                 modify_args += ['--edit', f'track:={track.uid}']
                 logger_args += ['--edit', f'track:={track.index}']
-                for flag in mkv_flags[track.uid]:
+                for flag in track_flags[track.uid]:
                     modify_args += ['--set', flag]
                     logger_args += ['--set', flag]
-                archive_tracks.append(track)
 
     if audio_tracks:
-        apply_flags(audio_tracks, config.audio_mode)
+        apply_track_modes(audio_tracks, config.audio_mode)
     if subtitle_tracks:
-        apply_flags(subtitle_tracks, config.subtitle_mode)
+        apply_track_modes(subtitle_tracks, config.subtitle_mode)
 
     if len(modify_args) > 1:
         mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
@@ -551,7 +562,7 @@ def process_tracks(
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
     if database is not None:
-        database.insert(file_path, archive_tracks)
+        database.insert(file_path, list(orig_tracks.values()))
 
 
 def restore_file(file_path: Path, database: Database, dry_run: bool = False) -> None:
