@@ -233,7 +233,7 @@ def test_mkvpropedit() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         assert {track.name for track in tracks if track.default} == {'Stereo AAC (English)'}
         assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
@@ -241,7 +241,7 @@ def test_mkvpropedit() -> None:
         config = mkvpriority.Config.from_file(Path('config.toml'))
         mkvpriority.process_file(file_path, config)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         assert {track.name for track in tracks if track.default} == {
             '5.1 FLAC (Japanese)',
@@ -260,7 +260,9 @@ def test_mkvpriority() -> None:
         config = mkvpriority.Config.from_file(Path('config.toml'))
         mkvpriority.process_file(file_path, config)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path, config)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(
+            file_path, config
+        )
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         track_scores = {(track.name, track.language): track.score for track in tracks}
         assert track_scores == {
@@ -282,14 +284,14 @@ def test_entrypoint() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         assert {track.name for track in tracks if track.default} == {'Stereo AAC (English)'}
         assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
 
         mkvpriority.main.main(['-c', 'config.toml', str(file_path)])
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         assert {track.name for track in tracks if track.default} == {
             '5.1 FLAC (Japanese)',
@@ -305,14 +307,14 @@ def test_extension() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         assert {track.name for track in tracks if track.default} == {'Stereo AAC (English)'}
         assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
 
         mkvpriority.main.main(['-c', 'config.toml', '-i', 'subtitle_extractor', str(file_path)])
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
         assert {track.name for track in tracks if track.default} == {
             '5.1 FLAC (Japanese)',
@@ -355,19 +357,21 @@ def test_unscored() -> None:
         multiplex_dummy(file_path, track_files)
 
         *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
-        mkv_args = [str(file_path)]
+        modify_args = [str(file_path)]
         for subtitle_track in subtitle_tracks:
             if subtitle_track.language != 'eng':
                 track_uid = subtitle_track.uid
-                mkv_args.extend(['--edit', f'track:={track_uid}', '--set', 'flag-forced=1'])
-        mkvpriority.modify_tracks(mkv_args)
+                modify_args.extend(['--edit', f'track:={track_uid}', '--set', 'flag-forced=1'])
+        mkvpriority.modify_tracks(modify_args)
 
         config = mkvpriority.Config.from_file(Path('config.toml'))
         config.subtitle_codecs = config.subtitle_filters = {}
         config.penalize_unscored_languages = True
         config.subtitle_languages = {'eng': 0}
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path, config)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(
+            file_path, config
+        )
         mkvpriority.process_file(file_path, config)
         assert len(video_tracks) + len(audio_tracks) + len(subtitle_tracks) == 8
         assert len(subtitle_tracks) == 4
@@ -378,7 +382,9 @@ def test_unscored() -> None:
                 assert track.forced
                 assert track.score == -10000
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path, config)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(
+            file_path, config
+        )
         assert len(video_tracks) + len(audio_tracks) + len(subtitle_tracks) == 8
         assert len(subtitle_tracks) == 4
         assert {track.name for track in subtitle_tracks if track.forced} == {
@@ -399,7 +405,7 @@ def test_restore() -> None:
             database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(file_path, config, database)
 
-            video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+            _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
             assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
             assert {track.name for track in tracks if track.default} == {
                 '5.1 FLAC (Japanese)',
@@ -409,7 +415,7 @@ def test_restore() -> None:
 
             mkvpriority.restore_file(file_path, database)
 
-            video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+            _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
             assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
             assert {track.name for track in tracks if track.default} == {'Stereo AAC (English)'}
             assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
@@ -427,12 +433,12 @@ def test_prune() -> None:
             database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(file_path, config, database)
 
-            assert database.contains(file_path)
+            assert database.select_by_path(file_path) is not None
             database.prune()
-            assert database.contains(file_path)
+            assert database.select_by_path(file_path) is not None
 
         database.prune()
-        assert not database.contains(file_path)
+        assert database.select_by_path(file_path) is None
 
 
 def test_extract() -> None:
@@ -491,14 +497,14 @@ def test_reorder() -> None:
         toml_path.write_text(f'{toml_text}\n[multiplexer]\nreorder_tracks = true', encoding='utf-8')
         config = mkvpriority.Config.from_file(toml_path)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         tracks = video_tracks + audio_tracks + subtitle_tracks
         second_track = next(track for track in tracks if track.index == 1)
         assert second_track.name == 'Stereo AAC (Japanese)'
 
         mkvpriority.process_file(file_path, config, extensions=[Multiplexer()])
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         tracks = video_tracks + audio_tracks + subtitle_tracks
         second_track = next(track for track in tracks if track.index == 1)
         assert second_track.name == '5.1 FLAC (Japanese)'
@@ -516,12 +522,12 @@ def test_strip() -> None:
         toml_path.write_text(f'{toml_text}\n[multiplexer]\nstrip_tracks = true', encoding='utf-8')
         config = mkvpriority.Config.from_file(toml_path)
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         tracks = video_tracks + audio_tracks + subtitle_tracks
         assert 'ger' in {track.language for track in tracks}
 
         mkvpriority.process_file(file_path, config, extensions=[Multiplexer()])
 
-        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         tracks = video_tracks + audio_tracks + subtitle_tracks
         assert 'ger' not in {track.language for track in tracks}
