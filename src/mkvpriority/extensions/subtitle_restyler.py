@@ -27,6 +27,11 @@ RES_DEP_X = {'Spacing', 'MarginL', 'MarginR'}
 RES_DEP_Y = {'Fontsize', 'Outline', 'Shadow', 'MarginV'}
 ASS_ATTR_MAP = {attr.lower(): attr for attr in SAFE_ATTRS | RES_DEP_X | RES_DEP_Y}
 
+POSITION_PATTERN = re.compile(r'\\(?:pos|move|org|i?clip|fade?|t)\s*\(|\\an[13-79]', re.IGNORECASE)
+ROTATION_PATTERN = re.compile(r'\\(fr[xyz]?|fa[xy])-?\d+\.?\d*', re.IGNORECASE)
+KARAOKE_PATTERN = re.compile(r'\\k[fo]?\d+\.?\d*', re.IGNORECASE)
+DRAWING_PATTERN = re.compile(r'\\p[1-9]\d*', re.IGNORECASE)
+
 
 class SubtitleRestyler(Extension):
     def __init__(self, max_ratio: float = 0.15, max_allowance: int = 2):
@@ -113,11 +118,6 @@ class SubtitleRestyler(Extension):
         )
         in_events_section = False
 
-        position_pattern = re.compile(r'\\(pos|move|org|clip|iclip)\s*\(|\\an[1-9]', re.IGNORECASE)
-        rotation_pattern = re.compile(r'\\(fr[xyz]|fa[xy])\s*-?\d', re.IGNORECASE)
-        karaoke_pattern = re.compile(r'\\[kK][fo]?[0-9]+')
-        drawing_pattern = re.compile(r'\\[pP][1-9]')
-
         for line in input_lines:
             if line.startswith('[Events]'):
                 in_events_section = True
@@ -131,15 +131,18 @@ class SubtitleRestyler(Extension):
                     style_name = parts[3].strip()
                     text = parts[9]
                     style_stats[style_name]['total'] += 1
-                    if position_pattern.search(text) or rotation_pattern.search(text):
+                    tags = ''.join(re.findall(r'\{[^}]+\}', text))
+                    if POSITION_PATTERN.search(tags) or ROTATION_PATTERN.search(tags):
                         style_stats[style_name]['count_spatial'] += 1
-                    if karaoke_pattern.search(text):
+                    if KARAOKE_PATTERN.search(tags):
                         style_stats[style_name]['count_karaoke'] += 1
-                    if drawing_pattern.search(text):
+                    if DRAWING_PATTERN.search(tags):
                         style_stats[style_name]['count_drawing'] += 1
 
         subtitle_styles: set[str] = set()
         for style, stats in style_stats.items():
+            if not stats['total']:
+                continue
             ratio_karaoke = stats['count_karaoke'] / stats['total']
             if stats['count_karaoke'] > 0 and ratio_karaoke > 0.1:
                 continue
