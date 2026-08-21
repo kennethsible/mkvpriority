@@ -12,6 +12,7 @@ from aiohttp.test_utils import TestClient
 import mkvpriority
 import mkvpriority.entrypoint as entrypoint
 from mkvpriority.extensions.multiplexer import Multiplexer
+from mkvpriority.extensions.subtitle_converter import SubtitleConverter
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
 from mkvpriority.extensions.subtitle_restyler import SubtitleRestyler
 
@@ -452,6 +453,64 @@ def test_extract() -> None:
         subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
         assert subtitle_path.is_file()
         assert subtitle_path.stat().st_size > 0
+
+
+def test_convert() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_path.write_text(
+            f'extract_embedded_subtitles = true\n'
+            f'convert_external_subtitles = true\n'
+            f'convert_target_format = "srt"\n'
+            f'convert_remove_source = false\n'
+            f'{toml_text}',
+            encoding='utf-8',
+        )
+        config = mkvpriority.Config.from_file(toml_path)
+
+        extensions = [SubtitleExtractor(), SubtitleConverter()]
+        mkvpriority.process_file(file_path, config, extensions=extensions)
+
+        extracted_ass = file_path.with_suffix('.eng.default.forced.ass')
+        converted_srt = file_path.with_suffix('.eng.default.forced.srt')
+
+        assert extracted_ass.is_file() and converted_srt.is_file()
+        assert '-->' in converted_srt.read_text(encoding='utf-8')
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_path.write_text(
+            f'extract_embedded_subtitles = true\n'
+            f'convert_external_subtitles = true\n'
+            f'convert_target_format = "ass"\n'
+            f'convert_remove_source = true\n'
+            f'{toml_text}',
+            encoding='utf-8',
+        )
+        config = mkvpriority.Config.from_file(toml_path)
+        config.subtitle_codecs['S_TEXT/ASS'] = -100
+        config.subtitle_codecs['S_TEXT/UTF8'] = 100
+
+        extensions = [SubtitleExtractor(), SubtitleConverter()]
+        mkvpriority.process_file(file_path, config, extensions=extensions)
+
+        extracted_srt = file_path.with_suffix('.eng.default.forced.srt')
+        converted_ass = file_path.with_suffix('.eng.default.forced.ass')
+
+        assert not extracted_srt.is_file() and converted_ass.is_file()
+        assert '[Script Info]' in converted_ass.read_text(encoding='utf-8')
 
 
 def test_restyle() -> None:

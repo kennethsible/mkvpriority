@@ -39,14 +39,17 @@ docker = [
     "cron_descriptor>=2.1.0",
 ]
 dev = [
-    "ruff>=0.16.3",
-    "mypy>=2.3.0",
+    "ruff>=0.16.4",
+    "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-aiohttp>=1.1.1",
     "pytest-asyncio>=1.4.0",
     "types-aiofiles",
     "types-requests",
 ]
+
+[project.optional-dependencies]
+subtitle_converter = ["pysubs2>=1.9.0"]
 
 [project.urls]
 homepage = "https://github.com/kennethsible/mkvpriority"
