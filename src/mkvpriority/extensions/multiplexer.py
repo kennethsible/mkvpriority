@@ -1,3 +1,4 @@
+import itertools
 import json
 import subprocess
 import tomllib
@@ -96,7 +97,7 @@ class Multiplexer(Extension):
         mkv_args += [str(file_path)]
         if track_order and any(
             int(id_a.split(':')[1]) > int(id_b.split(':')[1])
-            for id_a, id_b in zip(track_order, track_order[1:])
+            for id_a, id_b in itertools.pairwise(track_order)
         ):
             mkv_args += ['--track-order', ','.join(track_order)]
 

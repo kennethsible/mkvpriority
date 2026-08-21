@@ -100,12 +100,12 @@ class SubtitleRestyler(Extension):
             elif attr in RES_DEP_X:
                 scaled_val = float(val) * scale_x
                 scaled_attributes[attr] = str(
-                    int(round(scaled_val)) if 'Margin' in attr else round(scaled_val, 2)
+                    round(scaled_val) if 'Margin' in attr else round(scaled_val, 2)
                 )
             elif attr in RES_DEP_Y:
                 scaled_val = float(val) * scale_y
                 scaled_attributes[attr] = str(
-                    int(round(scaled_val)) if 'Margin' in attr else round(scaled_val, 2)
+                    round(scaled_val) if 'Margin' in attr else round(scaled_val, 2)
                 )
             else:
                 self.extension_logger.warning(f"style '{attr}' is not in [V4+ Styles]")
@@ -150,9 +150,12 @@ class SubtitleRestyler(Extension):
                 continue
             ratio_spatial = stats['count_spatial'] / stats['total']
             is_dialogue = ratio_spatial <= self.max_ratio
-            if not is_dialogue and stats['count_spatial'] <= self.max_allowance:
-                if ratio_spatial < 1.0:
-                    is_dialogue = True
+            if (
+                not is_dialogue
+                and stats['count_spatial'] <= self.max_allowance
+                and ratio_spatial < 1.0
+            ):
+                is_dialogue = True
             if is_dialogue:
                 subtitle_styles.add(style)
 
@@ -183,7 +186,7 @@ class SubtitleRestyler(Extension):
                 if line.startswith('Format:'):
                     format_string = line.split(':', 1)[1].strip()
                     format_parts = [p.strip() for p in format_string.split(',')]
-                    for attr in scaled_attributes.keys():
+                    for attr in scaled_attributes:
                         if attr in format_parts:
                             attr_indices[attr] = format_parts.index(attr)
                 elif line.startswith('Style:') and attr_indices:

@@ -152,13 +152,12 @@ def main() -> None:
         loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
         loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
 
+        runner = scheduler = None
         try:
-            runner = None
             if WEBHOOK_PORT:
                 runner = await create_runner('0.0.0.0', WEBHOOK_PORT)
                 entrypoint_logger.info(f'webhook listener started on 0.0.0.0:{WEBHOOK_PORT}')
 
-            scheduler = None
             if expr := CRON_SCHEDULE:
                 if expr.startswith('@'):
                     macro = expr

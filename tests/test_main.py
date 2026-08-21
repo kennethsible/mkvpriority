@@ -1,8 +1,8 @@
 import os
 import subprocess
 import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Awaitable, Callable
 from unittest.mock import patch
 
 import pytest
@@ -10,7 +10,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient
 
 import mkvpriority
-import mkvpriority.entrypoint as entrypoint
+from mkvpriority import entrypoint
 from mkvpriority.extensions.multiplexer import Multiplexer
 from mkvpriority.extensions.subtitle_converter import SubtitleConverter
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
@@ -227,7 +227,7 @@ def multiplex_dummy(output_path: Path, track_files: dict[str, Path]) -> None:
     )
 
 
-def test_mkvpropedit() -> None:
+def test_process_file() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -251,7 +251,7 @@ def test_mkvpropedit() -> None:
         assert {track.name for track in tracks if track.forced} == {'Full Subtitles [FanSub]'}
 
 
-def test_mkvpriority() -> None:
+def test_score_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -262,7 +262,8 @@ def test_mkvpriority() -> None:
         mkvpriority.process_file(file_path, config)
 
         video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path, config)
-        assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
+        tracks = video_tracks + audio_tracks + subtitle_tracks
+        assert len(tracks) == 8
         track_scores = {(track.name, track.language): track.score for track in tracks}
         assert track_scores == {
             ('Dummy Video', 'und'): 0,
@@ -276,7 +277,7 @@ def test_mkvpriority() -> None:
         }
 
 
-def test_entrypoint() -> None:
+def test_cli_entrypoint() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -299,7 +300,7 @@ def test_entrypoint() -> None:
         assert {track.name for track in tracks if track.forced} == {'Full Subtitles [FanSub]'}
 
 
-def test_extension() -> None:
+def test_cli_extensions() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -323,7 +324,7 @@ def test_extension() -> None:
 
 
 @pytest.mark.asyncio
-async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
+async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
     with patch('mkvpriority.main.main') as mock_main:
         app = web.Application()
         app.router.add_post('/process', entrypoint.process_handler)
@@ -348,7 +349,7 @@ async def test_webhook(aiohttp_client: AIOClientFixture) -> None:
         mock_main.assert_called_once_with(expected_argv, 'jpn')
 
 
-def test_unscored() -> None:
+def test_penalize_unscored() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -388,7 +389,7 @@ def test_unscored() -> None:
         assert {track.name for track in subtitle_tracks if track.default} == set()
 
 
-def test_restore() -> None:
+def test_restore_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -416,7 +417,7 @@ def test_restore() -> None:
             assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
 
 
-def test_prune() -> None:
+def test_prune_database() -> None:
     with tempfile.NamedTemporaryFile() as archive_file:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -436,7 +437,7 @@ def test_prune() -> None:
         assert not database.contains(file_path)
 
 
-def test_extract() -> None:
+def test_extract_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -455,7 +456,7 @@ def test_extract() -> None:
         assert subtitle_path.stat().st_size > 0
 
 
-def test_convert() -> None:
+def test_convert_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -513,7 +514,7 @@ def test_convert() -> None:
         assert '[Script Info]' in converted_ass.read_text(encoding='utf-8')
 
 
-def test_restyle() -> None:
+def test_restyle_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -538,7 +539,7 @@ def test_restyle() -> None:
         assert 'Style: Default,Cabin,75.0,&H00FFFFFF,3.6,1.8,2,1' in restyled_content
 
 
-def test_reorder() -> None:
+def test_reorder_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -563,7 +564,7 @@ def test_reorder() -> None:
         assert second_track.name == '5.1 FLAC (Japanese)'
 
 
-def test_strip() -> None:
+def test_strip_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'

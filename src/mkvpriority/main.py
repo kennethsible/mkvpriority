@@ -148,7 +148,7 @@ class Config:
     penalize_unscored_languages: bool
 
     @classmethod
-    def from_file(cls, toml_path: Path, label_tag: str = 'untagged') -> 'Config':
+    def from_file(cls, toml_path: Path, label_tag: str = 'untagged') -> Config:
         with open(toml_path, 'rb') as f:
             toml_file = tomllib.load(f)
         if 'track_filters' in toml_file and 'subtitle_filters' not in toml_file:
@@ -403,9 +403,8 @@ def extract_tracks(
             if track.kind == 'audio':
                 if scorer.restore(file_path, track):
                     audio_tracks.append(track)
-            elif track.kind == 'subtitles':
-                if scorer.restore(file_path, track):
-                    subtitle_tracks.append(track)
+            elif track.kind == 'subtitles' and scorer.restore(file_path, track):
+                subtitle_tracks.append(track)
             mkvpriority_logger.debug(track)
             continue
 
@@ -501,21 +500,18 @@ def process_tracks(
         track_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
 
         if tracks[0].score > 0:
-            if default_mode:
-                if not tracks[0].default:
-                    track_flags[tracks[0].uid].append('flag-default=1')
-                    snapshot_track(tracks[0])
-                    tracks[0].default = True
-            if forced_mode:
-                if not tracks[0].forced:
-                    track_flags[tracks[0].uid].append('flag-forced=1')
-                    snapshot_track(tracks[0])
-                    tracks[0].forced = True
-            if disabled_mode or enabled_mode:
-                if not tracks[0].enabled:
-                    track_flags[tracks[0].uid].append('flag-enabled=1')
-                    snapshot_track(tracks[0])
-                    tracks[0].enabled = True
+            if default_mode and not tracks[0].default:
+                track_flags[tracks[0].uid].append('flag-default=1')
+                snapshot_track(tracks[0])
+                tracks[0].default = True
+            if forced_mode and not tracks[0].forced:
+                track_flags[tracks[0].uid].append('flag-forced=1')
+                snapshot_track(tracks[0])
+                tracks[0].forced = True
+            if (disabled_mode or enabled_mode) and not tracks[0].enabled:
+                track_flags[tracks[0].uid].append('flag-enabled=1')
+                snapshot_track(tracks[0])
+                tracks[0].enabled = True
             unwanted_tracks = tracks[1:]
         else:
             unwanted_tracks = tracks
