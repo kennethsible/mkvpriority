@@ -25,14 +25,14 @@ class Multiplexer(Extension):
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:
-            parameters = self.parameters[config.toml_path]
+            attributes = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
-            parameters = toml_file.get('multiplexer', {})
-            self.parameters[config.toml_path] = parameters
-        self.strip: bool = parameters.get('strip_tracks', False)
-        self.reorder: bool = parameters.get('reorder_tracks', False)
+            attributes = toml_file.get('multiplexer', {})
+            self.parameters[config.toml_path] = attributes
+        self.strip: bool = attributes.get('strip_tracks', False)
+        self.reorder: bool = attributes.get('reorder_tracks', False)
         self.filter_tracks(file_path, video_tracks, audio_tracks, subtitle_tracks, config, dry_run)
 
     def multiplex_tracks(self, arguments: list[str]) -> None:

@@ -28,14 +28,14 @@ class SubtitleExtractor(Extension):
             return
 
         if config.toml_path in self.parameters:
-            extract = self.parameters[config.toml_path]
+            attributes = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
-            extract = toml_file.get('extract_embedded_subtitles', False)
-            self.parameters[config.toml_path] = extract
+            attributes = {'extract': toml_file.get('extract_embedded_subtitles', False)}
+            self.parameters[config.toml_path] = attributes
 
-        if extract:
+        if attributes['extract']:
             subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
             subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
             if subtitle_path and not subtitle_path.is_file():
@@ -47,13 +47,13 @@ class SubtitleExtractor(Extension):
         subtitle_format = subtitle_track.codec.split('/')[-1]
         if subtitle_format not in SUBTITLE_EXTENSIONS:
             return None
-        extension = SUBTITLE_EXTENSIONS[subtitle_format]
+        subtitle_ext = SUBTITLE_EXTENSIONS[subtitle_format]
         subtitle_suffix = f'.{subtitle_track.language}'
         if subtitle_track.default:
             subtitle_suffix += '.default'
         if subtitle_track.forced:
             subtitle_suffix += '.forced'
-        return Path(file_path).with_suffix(f'{subtitle_suffix}.{extension}')
+        return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
 
     def extract_subtitles(self, file_path: Path, subtitle_path: Path, index: int) -> None:
         self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path}'")
