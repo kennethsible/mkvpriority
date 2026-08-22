@@ -27,4 +27,6 @@ services:
     volumes:
       - /path/to/media:/media # <-- same mount point
       - /path/to/mkvpriority/config:/config
+    ports:
+      - 8080:8080
     restart: unless-stopped

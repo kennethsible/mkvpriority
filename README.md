@@ -86,12 +86,14 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_PORT: '8080'
+    WEBHOOK_PORT: "8080"
     MKVPRIORITY_ARGS: >
       --archive /config/archive.db
   volumes:
     - /path/to/media:/media
     - /path/to/mkvpriority/config:/config
+  ports:
+    - 8080:8080
   restart: unless-stopped
 ```
 
@@ -109,13 +111,15 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_PORT: '8080'
+    WEBHOOK_PORT: "8080"
     MKVPRIORITY_ARGS: >
       --config /config/anime.toml::anime
       --archive /config/archive.db
   volumes:
     - /path/to/media:/media
     - /path/to/mkvpriority/config:/config
+  ports:
+    - 8080:8080
   restart: unless-stopped
 ```
 
