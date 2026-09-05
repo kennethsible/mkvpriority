@@ -77,7 +77,7 @@ class SubtitleRestyler(Extension):
     def scale_style_attributes(
         self, input_lines: list[str], attributes: dict[str, Any]
     ) -> dict[str, str]:
-        playres_x, playres_y = 1920.0, 1080.0
+        playres_x, playres_y = 384.0, 288.0
         for line in input_lines:
             if line.startswith('PlayResX:'):
                 playres_x = float(line.split(':')[1].strip())

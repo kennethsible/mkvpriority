@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
-  <img alt="MKVPriority Banner" src="images/mkvpriority_banner.svg" width="600">
+  <img alt="MKVPriority Banner" src="https://raw.githubusercontent.com/kennethsible/mkvpriority/refs/heads/main/images/mkvpriority_banner.svg" width="600">
 </div>
 <p align="center">
 <img src="https://github.com/kennethsible/mkvpriority/actions/workflows/publish.yaml/badge.svg" alt="Docker Release" />

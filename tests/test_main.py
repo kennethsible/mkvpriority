@@ -536,7 +536,7 @@ def test_restyle_subtitles() -> None:
 
         subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
         restyled_content = subtitle_path.read_text(encoding='utf-8-sig')
-        assert 'Style: Default,Cabin,75.0,&H00FFFFFF,3.6,1.8,2,1' in restyled_content
+        assert 'Style: Default,Cabin,20.0,&H00FFFFFF,0.96,0.48,2,1' in restyled_content
 
 
 def test_reorder_tracks() -> None:

@@ -84,6 +84,8 @@ class SubtitleConverter(Extension):
 
         try:
             subtitle_file = pysubs2.load(str(source_path), encoding='utf-8')
+            subtitle_file.info['PlayResX'] = '1920'
+            subtitle_file.info['PlayResY'] = '1080'
             subtitle_file.save(str(target_path), encoding='utf-8')
         except (OSError, UnicodeError, Pysubs2Error) as e:
             self.extension_logger.error(str(e))
