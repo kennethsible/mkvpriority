@@ -67,10 +67,6 @@ class SubtitleRestyler(Extension):
                 self.modify_subtitle_styles(subtitle_path, attributes)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
-        if not subtitle_track.codec.startswith('S_TEXT/'):
-            return None
-        if subtitle_track.codec.split('/')[-1] != 'ASS':
-            return None
         subtitle_suffix = f'.{subtitle_track.language}'
         if subtitle_track.default:
             subtitle_suffix += '.default'

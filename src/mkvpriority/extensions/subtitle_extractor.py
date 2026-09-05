@@ -42,12 +42,9 @@ class SubtitleExtractor(Extension):
                 self.extract_subtitles(file_path, subtitle_path, subtitle_track.index)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
-        if not subtitle_track.codec.startswith('S_TEXT/'):
-            return None
         subtitle_format = subtitle_track.codec.split('/')[-1]
-        if subtitle_format not in SUBTITLE_EXTENSIONS:
+        if not (subtitle_ext := SUBTITLE_EXTENSIONS.get(subtitle_format)):
             return None
-        subtitle_ext = SUBTITLE_EXTENSIONS[subtitle_format]
         subtitle_suffix = f'.{subtitle_track.language}'
         if subtitle_track.default:
             subtitle_suffix += '.default'
