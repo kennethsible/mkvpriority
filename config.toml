@@ -54,6 +54,13 @@ descript = -10000  # Visually Impaired
 # Ensures subtitles in non-native languages are always stripped of flags.
 global.penalize_unscored_languages = false
 
+# === Native Audio Languages ===
+# Determines when default subtitle flags should be suppressed:
+# - list  = Clears default flags if the audio matches these languages
+# - empty = Follows profile subtitle modes regardless of the audio
+# Ensures full dialogue subtitles are disabled for native audio language.
+global.native_languages = ["eng"]
+
 # === Subtitle Language Preferences ===
 # Example: Prioritize English subtitles with Japanese audio.
 [subtitle_profiles.global.languages]

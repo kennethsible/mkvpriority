@@ -453,12 +453,13 @@ def test_max_size_ratio() -> None:
         )
         assert signs_track.scores['signs_songs'] > 0
 
-        config.subtitle_group.profiles['dialogue'].min_size_ratio = 2.0
+        config.audio_group.languages['eng'] = 300
         config.subtitle_group.profiles['dialogue'].filters = {}
         config.subtitle_group.profiles['signs_songs'].filters = {}
         mkvpriority.process_file(file_path, config)
 
-        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        assert {track.name for track in audio_tracks if track.default} == {'Stereo AAC (English)'}
         assert {track.name for track in subtitle_tracks if track.default} == set()
         assert {track.name for track in subtitle_tracks if track.forced} == {
             'Signs & Songs [FanSub]'

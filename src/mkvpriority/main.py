@@ -151,7 +151,6 @@ class AudioProfile(Profile):
 @dataclass
 class SubtitleProfile(Profile):
     max_size_ratio: float | None = None
-    min_size_ratio: float | None = None
 
 
 @dataclass
@@ -169,6 +168,7 @@ class AudioProfileGroup(ProfileGroup[AudioProfile]):
 @dataclass
 class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
     penalize_unscored_languages: bool = False
+    native_languages: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -207,7 +207,6 @@ class Config:
                 mode=value.get('subtitle_mode', []),
                 filters=value.get('filters', {}),
                 max_size_ratio=value.get('max_size_ratio'),
-                min_size_ratio=value.get('min_size_ratio'),
             )
             for key, value in subtitle_section.items()
             if key != 'global'
@@ -217,6 +216,7 @@ class Config:
             codecs=subtitle_global.get('codecs', {}),
             profiles=subtitle_profiles,
             penalize_unscored_languages=subtitle_global.get('penalize_unscored_languages', False),
+            native_languages=subtitle_global.get('native_languages', []),
         )
 
         return cls(
@@ -502,17 +502,9 @@ def score_tracks[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> Non
             for key, value in profile.filters.items():
                 if key in track.name.lower():
                     score += value
-        if isinstance(profile, SubtitleProfile) and (
-            profile.max_size_ratio is not None or profile.min_size_ratio is not None
-        ):
+        if isinstance(profile, SubtitleProfile) and (profile.max_size_ratio is not None):
             if track.size is not None and max_track_size > 0:
-                size_ratio = track.size / max_track_size
-                if (
-                    profile.max_size_ratio is not None
-                    and size_ratio > profile.max_size_ratio
-                    or profile.min_size_ratio is not None
-                    and size_ratio < profile.min_size_ratio
-                ):
+                if track.size / max_track_size > profile.max_size_ratio:
                     score -= 10000
             else:
                 score -= 10000
@@ -583,14 +575,17 @@ def process_tracks(
         if track.uid not in orig_tracks:
             orig_tracks[track.uid] = copy.copy(track)
 
-    def apply_profiles[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> None:
+    def apply_profiles[T: Profile](
+        tracks: list[Track], group: ProfileGroup[T], suppress_default: bool = False
+    ) -> Track | None:
+        best_track = None
         if not tracks or not group.profiles:
-            return
+            return None
 
         track_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
         for profile_name, profile in group.profiles.items():
             track_modes = profile.mode
-            default_mode = 'default' in track_modes
+            default_mode = 'default' in track_modes and not suppress_default
             forced_mode = 'forced' in track_modes
             disabled_mode = 'disabled' in track_modes
             enabled_mode = 'enabled' in track_modes
@@ -636,6 +631,13 @@ def process_tracks(
                     snapshot_track(track)
                     track.enabled = True
 
+        if suppress_default:
+            for track in tracks:
+                if track.default:
+                    track_flags[track.uid].append('flag-default=0')
+                    snapshot_track(track)
+                    track.default = False
+
         for track in tracks:
             if track_flags[track.uid]:
                 modify_args.extend(['--edit', f'track:={track.uid}'])
@@ -644,10 +646,18 @@ def process_tracks(
                     modify_args.extend(['--set', flag])
                     logger_args.extend(['--set', flag])
 
+        return best_track
+
     score_tracks(audio_tracks, config.audio_group)
-    apply_profiles(audio_tracks, config.audio_group)
+    best_audio_track = apply_profiles(audio_tracks, config.audio_group)
+
+    native_languages = config.subtitle_group.native_languages
+    suppress_default = (
+        best_audio_track is not None and best_audio_track.language in native_languages
+    )
+
     score_tracks(subtitle_tracks, config.subtitle_group)
-    apply_profiles(subtitle_tracks, config.subtitle_group)
+    apply_profiles(subtitle_tracks, config.subtitle_group, suppress_default=suppress_default)
 
     if len(modify_args) > 1:
         mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
