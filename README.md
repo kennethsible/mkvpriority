@@ -18,6 +18,8 @@
 - Assigns **configurable priority scores** to audio and subtitle tracks (similar to **custom formats** in Radarr/Sonarr)
 - Automatically sets **default/forced flags** for the highest priority tracks (e.g., Japanese audio and ASS subtitles)
 - Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
+- Detects **forced subtitle tracks** automatically using size-ratio heuristics without relying on track names
+- Suppresses default flags during **native audio playback** to prevent dialogue subtitles in your native language
 - Periodically scans your media library using a **cron schedule** and processes new MKV files with a database
 - Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
 - Supports extension modules for optional, user-defined **post-processors**, allowing for edge-case handling
