@@ -1,6 +1,6 @@
 [project]
 name = "mkvpriority"
-version = "1.5.2"
+version = "1.6.0"
 description = "Automatically Prioritize Audio/Subtitle Tracks in MKV Files"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -39,7 +39,7 @@ docker = [
     "cron_descriptor>=2.1.0",
 ]
 dev = [
-    "ruff>=0.16.4",
+    "ruff>=0.16.6",
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-aiohttp>=1.1.1",

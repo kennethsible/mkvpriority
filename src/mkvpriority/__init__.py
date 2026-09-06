@@ -14,6 +14,7 @@ from .main import (
     process_tracks,
     restore_file,
     restore_tracks,
+    score_tracks,
 )
 
 try:
@@ -39,4 +40,5 @@ __all__ = [
     'process_tracks',
     'restore_file',
     'restore_tracks',
+    'score_tracks',
 ]

@@ -1,30 +1,9 @@
-# === Audio Operation Mode ===
-# Determines how the best-scoring audio track will be flagged:
-# - "default"  = Sets the chosen track as default (recommended for most players)
-# - "forced"   = Stronger flag; some players prioritize forced tracks
-# - "disabled" = Disables non-selected tracks (ignored by most players)
-# - "enabled"  = Re-enables disabled tracks (used to undo "disabled")
-audio_mode = ["default"]
-
-# === Subtitle Operation Mode ===
-# Determines how the best-scoring subtitle track will be flagged:
-# - "default"  = Sets the chosen track as default (recommended for most players)
-# - "forced"   = Stronger flag; some players prioritize forced tracks
-# - "disabled" = Disables non-selected tracks (ignored by most players)
-# - "enabled"  = Re-enables disabled tracks (used to undo "disabled")
-# Ensures subtitles are shown even if the player isn't configured properly.
-subtitle_mode = ["default", "forced"]
-
-# === Penalize Unscored Languages ===
-# Determines how subtitle languages without scores are handled:
-# - true  = Heavily penalizes unscored languages (score: -10000)
-# - false = Assigns a neutral score (0) to unscored languages
-# Ensures subtitles in non-native languages are always stripped of flags.
-penalize_unscored_languages = false
+# === Audio Profiles ===
+[audio_profiles]
 
 # === Audio Language Preferences ===
 # Example: Prioritize Japanese subs over English dubs.
-[audio_languages]
+[audio_profiles.global.languages]
 org = 300 # Original Language (Radarr/Sonarr)
 jpn = 200 # Japanese
 eng = 100 # English
@@ -32,7 +11,7 @@ und = 0   # Undefined (Fallback)
 
 # === Audio Codec Preferences ===
 # Example: Prioritize audio tracks with higher fidelity.
-[audio_codecs]
+[audio_profiles.global.codecs]
 "A_PCM/INT/LIT" = 50 # LPCM (Linear PCM)
 A_DTSHD_MA = 50      # DTS-HD Master Audio
 A_TRUEHD = 50        # Dolby TrueHD
@@ -47,7 +26,7 @@ A_VORBIS = 20        # Vorbis
 
 # === Audio Channel Preferences ===
 # Example: Prioritize audio tracks with more channels.
-[audio_channels]
+[audio_profiles.global.channels]
 8 = 8 # 7.1 Surround
 7 = 7 # 6.1 Surround
 6 = 6 # 5.1 Surround
@@ -57,24 +36,34 @@ A_VORBIS = 20        # Vorbis
 2 = 2 # Stereo
 1 = 1 # Mono
 
-# === Audio Track Filters ===
-# Looks at the track name to detect its purpose and assign priority.
-# This is especially useful when language or codec alone isn't enough.
-[audio_filters]
+[audio_profiles.default]
+audio_mode = ["default"]
+
+[audio_profiles.default.filters]
 atmos = 5          # Dolby Atmos
 commentar = -10000 # Commentary Track
 descript = -10000  # Visually Impaired
 
+# === Subtitle Profiles ===
+[subtitle_profiles]
+
+# === Penalize Unscored Languages ===
+# Determines how subtitle languages without scores are handled:
+# - true  = Heavily penalizes unscored languages (score: -10000)
+# - false = Assigns a neutral score (0) to unscored languages
+# Ensures subtitles in non-native languages are always stripped of flags.
+global.penalize_unscored_languages = false
+
 # === Subtitle Language Preferences ===
 # Example: Prioritize English subtitles with Japanese audio.
-[subtitle_languages]
+[subtitle_profiles.global.languages]
 enm = 101 # English Modified (Anime-Specific)
 eng = 100 # English
 und = 0   # Undefined (Fallback)
 
 # === Subtitle Codec Preferences ===
 # Example: Prioritize subtitle tracks with higher stylability.
-[subtitle_codecs]
+[subtitle_profiles.global.codecs]
 "S_TEXT/ASS" = 30    # Stylized (Advanced SubStationAlpha)
 "S_TEXT/SSA" = 30    # Legacy Stylized (SubStationAlpha)
 "S_TEXT/UTF8" = 20   # Plain Text (SubRip/SRT)
@@ -82,10 +71,26 @@ und = 0   # Undefined (Fallback)
 "S_HDMV/PGS" = 10    # Image-Based (Used in Blu-rays)
 S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 
-# === Subtitle Track Filters ===
-# Looks at the track name to detect its purpose and assign priority.
-# This is especially useful when language or codec alone isn't enough.
-[subtitle_filters]
+[subtitle_profiles.signs_songs]
+subtitle_mode = ["forced"]
+
+# === Maximum Size Ratio ===
+# Determines the relative size threshold for forced subtitle detection:
+# - float = Heavily penalizes tracks exceeding this ratio (score: -10000)
+# - unset = Disables size-based filtering for subtitle tracks
+# Ensures only forced tracks (signs, songs, etc.) match this profile.
+max_size_ratio = 0.15
+
+[subtitle_profiles.signs_songs.filters]
+sign = 1           # On-Screen Text
+song = 1           # Lyrics / Karaoke
+commentar = -10000 # Commentary Track
+sdh = -10000       # Deaf / Hard of Hearing
+
+[subtitle_profiles.dialogue]
+subtitle_mode = ["default"]
+
+[subtitle_profiles.dialogue.filters]
 honorific = 5      # Dialogue + Honorifics
 full = 3           # Dialogue + On-Screen Text
 dialog = 2         # Spoken Content

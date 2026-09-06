@@ -12,13 +12,13 @@ import subprocess
 import sys
 import tomllib
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from sqlite3 import Cursor
 from string.templatelib import Template
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, TypeVar
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -120,8 +120,7 @@ def load_extension(module_name: str) -> Extension | None:
 @dataclass
 class Track:
     index: int
-    kind: str
-    score: int
+    category: str
     name: str
     language: str
     codec: str
@@ -130,45 +129,101 @@ class Track:
     forced: bool
     enabled: bool
     uid: int
+    size: int | None = None
+    scores: dict[str, int] = field(default_factory=dict)
+
+
+P = TypeVar('P', bound='Profile')
+
+
+@dataclass
+class Profile:
+    name: str
+    mode: list[str] = field(default_factory=list)
+    filters: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class AudioProfile(Profile):
+    pass
+
+
+@dataclass
+class SubtitleProfile(Profile):
+    max_size_ratio: float | None = None
+    min_size_ratio: float | None = None
+
+
+@dataclass
+class ProfileGroup[P: Profile]:
+    languages: dict[str, int] = field(default_factory=dict)
+    codecs: dict[str, int] = field(default_factory=dict)
+    profiles: dict[str, P] = field(default_factory=dict)
+
+
+@dataclass
+class AudioProfileGroup(ProfileGroup[AudioProfile]):
+    channels: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
+    penalize_unscored_languages: bool = False
 
 
 @dataclass
 class Config:
     toml_path: str
-    label_tag: str
-    audio_mode: list[str]
-    audio_languages: dict[str, int]
-    audio_codecs: dict[str, int]
-    audio_channels: dict[str, int]
-    audio_filters: dict[str, int]
-    subtitle_mode: list[str]
-    subtitle_languages: dict[str, int]
-    subtitle_codecs: dict[str, int]
-    subtitle_filters: dict[str, int]
-    penalize_unscored_languages: bool
+    label: str
+    audio_group: AudioProfileGroup = field(default_factory=AudioProfileGroup)
+    subtitle_group: SubtitleProfileGroup = field(default_factory=SubtitleProfileGroup)
 
     @classmethod
-    def from_file(cls, toml_path: Path, label_tag: str = 'untagged') -> Config:
+    def from_file(cls, toml_path: Path, label: str = 'untagged') -> Config:
         with open(toml_path, 'rb') as f:
             toml_file = tomllib.load(f)
-        if 'track_filters' in toml_file and 'subtitle_filters' not in toml_file:
-            mkvpriority_logger.warning(
-                f"'{toml_path}' [track_filters] is deprecated; use [subtitle_filters] instead"
+
+        audio_section = toml_file.get('audio_profiles', {})
+        audio_global = audio_section.get('global', {})
+        audio_profiles = {
+            key: AudioProfile(
+                name=key, mode=value.get('audio_mode', []), filters=value.get('filters', {})
             )
-            toml_file['subtitle_filters'] = toml_file.pop('track_filters')
+            for key, value in audio_section.items()
+            if key != 'global'
+        }
+        audio_group = AudioProfileGroup(
+            languages=audio_global.get('languages', {}),
+            codecs=audio_global.get('codecs', {}),
+            profiles=audio_profiles,
+            channels=audio_global.get('channels', {}),
+        )
+
+        subtitle_section = toml_file.get('subtitle_profiles', {})
+        subtitle_global = subtitle_section.get('global', {})
+        subtitle_profiles = {
+            key: SubtitleProfile(
+                name=key,
+                mode=value.get('subtitle_mode', []),
+                filters=value.get('filters', {}),
+                max_size_ratio=value.get('max_size_ratio'),
+                min_size_ratio=value.get('min_size_ratio'),
+            )
+            for key, value in subtitle_section.items()
+            if key != 'global'
+        }
+        subtitle_group = SubtitleProfileGroup(
+            languages=subtitle_global.get('languages', {}),
+            codecs=subtitle_global.get('codecs', {}),
+            profiles=subtitle_profiles,
+            penalize_unscored_languages=subtitle_global.get('penalize_unscored_languages', False),
+        )
+
         return cls(
             toml_path=str(toml_path),
-            label_tag=label_tag,
-            audio_mode=toml_file.get('audio_mode', []),
-            audio_languages=toml_file.get('audio_languages', {}),
-            audio_codecs=toml_file.get('audio_codecs', {}),
-            audio_channels=toml_file.get('audio_channels', {}),
-            audio_filters=toml_file.get('audio_filters', {}),
-            subtitle_mode=toml_file.get('subtitle_mode', []),
-            subtitle_languages=toml_file.get('subtitle_languages', {}),
-            subtitle_codecs=toml_file.get('subtitle_codecs', {}),
-            subtitle_filters=toml_file.get('subtitle_filters', {}),
-            penalize_unscored_languages=toml_file.get('penalize_unscored_languages', False),
+            label=label,
+            audio_group=audio_group,
+            subtitle_group=subtitle_group,
         )
 
 
@@ -186,7 +241,7 @@ class Database:
                 file_mtime INTEGER,
                 schema_version INTEGER
             )
-        """
+            """
         )
         self.cur.execute(
             """
@@ -199,7 +254,7 @@ class Database:
                 PRIMARY KEY (file_path, track_uid),
                 FOREIGN KEY(file_path) REFERENCES archive(file_path) ON DELETE CASCADE
             )
-        """
+            """
         )
         self.migrate(db_path)
         self.db_path = db_path
@@ -357,7 +412,7 @@ def modify_tracks(arguments: list[str]) -> None:
 
 
 def extract_tracks(
-    file_path: Path, scorer: Config | Database | None = None
+    file_path: Path, scorer: Database | None = None
 ) -> tuple[list[Track], list[Track], list[Track]]:
     video_tracks: list[Track] = []
     audio_tracks: list[Track] = []
@@ -383,60 +438,90 @@ def extract_tracks(
     for metadata in track_data.get('tracks', []):
         properties = metadata.get('properties', {})
 
+        try:
+            track_size = int(
+                properties.get('tag_number_of_bytes')
+                or properties.get('number_of_bytes')
+                or properties.get('num_index_entries')
+            )
+        except ValueError, TypeError:
+            track_size = None
+
         track = Track(
             index=metadata.get('id'),
-            kind=metadata.get('type'),
-            score=0,
-            name=properties.get('track_name'),
+            category=metadata.get('type'),
+            name=properties.get('track_name', ''),
             language=properties.get('language', 'und'),
-            codec=properties.get('codec_id'),
+            codec=properties.get('codec_id', ''),
             channels=properties.get('audio_channels', 0),
             default=properties.get('default_track', False),
             enabled=properties.get('enabled_track', False),
             forced=properties.get('forced_track', False),
             uid=properties.get('uid'),
+            size=track_size,
         )
         if track.uid is None:
             continue
 
         if isinstance(scorer, Database):
-            if track.kind == 'audio':
+            if track.category == 'audio':
                 if scorer.restore(file_path, track):
                     audio_tracks.append(track)
-            elif track.kind == 'subtitles' and scorer.restore(file_path, track):
+            elif track.category == 'subtitles' and scorer.restore(file_path, track):
                 subtitle_tracks.append(track)
             mkvpriority_logger.debug(track)
             continue
 
-        match track.kind:
+        match track.category:
             case 'video':
                 video_tracks.append(track)
             case 'audio':
-                if scorer:
-                    track.score += scorer.audio_languages.get(track.language, 0)
-                    track.score += scorer.audio_codecs.get(track.codec, 0)
-                    track.score += scorer.audio_channels.get(str(track.channels), 0)
-                    if track.name:
-                        for key, value in scorer.audio_filters.items():
-                            if key in track.name.lower():
-                                track.score += value
                 audio_tracks.append(track)
-                mkvpriority_logger.debug(track)
             case 'subtitles':
-                if scorer:
-                    default_language_score = -10000 if scorer.penalize_unscored_languages else 0
-                    track.score += scorer.subtitle_languages.get(
-                        track.language, default_language_score
-                    )
-                    track.score += scorer.subtitle_codecs.get(track.codec, 0)
-                    if track.name:
-                        for key, value in scorer.subtitle_filters.items():
-                            if key in track.name.lower():
-                                track.score += value
                 subtitle_tracks.append(track)
-                mkvpriority_logger.debug(track)
 
     return video_tracks, audio_tracks, subtitle_tracks
+
+
+def score_tracks[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> None:
+    max_track_size = 0
+    for track in tracks:
+        if track.size is not None:
+            max_track_size = max(track.size, max_track_size)
+
+    def score_track(track: Track, profile: Profile) -> int:
+        score = 0
+        if isinstance(group, SubtitleProfileGroup) and group.penalize_unscored_languages:
+            score += group.languages.get(track.language, -10000)
+        else:
+            score += group.languages.get(track.language, 0)
+        score += group.codecs.get(track.codec, 0)
+        if isinstance(group, AudioProfileGroup):
+            score += group.channels.get(str(track.channels), 0)
+        if track.name:
+            for key, value in profile.filters.items():
+                if key in track.name.lower():
+                    score += value
+        if isinstance(profile, SubtitleProfile) and (
+            profile.max_size_ratio is not None or profile.min_size_ratio is not None
+        ):
+            if track.size is not None and max_track_size > 0:
+                size_ratio = track.size / max_track_size
+                if (
+                    profile.max_size_ratio is not None
+                    and size_ratio > profile.max_size_ratio
+                    or profile.min_size_ratio is not None
+                    and size_ratio < profile.min_size_ratio
+                ):
+                    score -= 10000
+            else:
+                score -= 10000
+        return score
+
+    for track in tracks:
+        for profile_name, profile in group.profiles.items():
+            track.scores[profile_name] = score_track(track, profile)
+            mkvpriority_logger.debug(track)
 
 
 def restore_tracks(
@@ -477,6 +562,11 @@ def restore_tracks(
     database.delete(file_path)
 
 
+def restore_file(file_path: Path, database: Database, dry_run: bool = False) -> None:
+    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
+    restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
+
+
 def process_tracks(
     file_path: Path,
     audio_tracks: list[Track],
@@ -493,61 +583,71 @@ def process_tracks(
         if track.uid not in orig_tracks:
             orig_tracks[track.uid] = copy.copy(track)
 
-    def apply_track_modes(tracks: list[Track], track_modes: list[str]) -> None:
-        nonlocal modify_args, logger_args
-        default_mode, forced_mode = 'default' in track_modes, 'forced' in track_modes
-        disabled_mode, enabled_mode = 'disabled' in track_modes, 'enabled' in track_modes
+    def apply_profiles[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> None:
+        if not tracks or not group.profiles:
+            return
+
         track_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
+        for profile_name, profile in group.profiles.items():
+            track_modes = profile.mode
+            default_mode = 'default' in track_modes
+            forced_mode = 'forced' in track_modes
+            disabled_mode = 'disabled' in track_modes
+            enabled_mode = 'enabled' in track_modes
 
-        if tracks[0].score > 0:
-            if default_mode and not tracks[0].default:
-                track_flags[tracks[0].uid].append('flag-default=1')
-                snapshot_track(tracks[0])
-                tracks[0].default = True
-            if forced_mode and not tracks[0].forced:
-                track_flags[tracks[0].uid].append('flag-forced=1')
-                snapshot_track(tracks[0])
-                tracks[0].forced = True
-            if (disabled_mode or enabled_mode) and not tracks[0].enabled:
-                track_flags[tracks[0].uid].append('flag-enabled=1')
-                snapshot_track(tracks[0])
-                tracks[0].enabled = True
-            unwanted_tracks = tracks[1:]
-        else:
-            unwanted_tracks = tracks
+            sorted_tracks = sorted(tracks, key=lambda track: track.scores.get(profile_name, 0))
+            best_track = sorted_tracks[-1]
+            best_score = best_track.scores.get(profile_name, 0)
 
-        for track in unwanted_tracks:
-            if track.score == 0:
-                continue
-            if default_mode and track.default:
-                track_flags[track.uid].append('flag-default=0')
-                snapshot_track(track)
-                track.default = False
-            if forced_mode and track.forced:
-                track_flags[track.uid].append('flag-forced=0')
-                snapshot_track(track)
-                track.forced = False
-            if disabled_mode and track.enabled:
-                track_flags[track.uid].append('flag-enabled=0')
-                snapshot_track(track)
-                track.enabled = False
-            if enabled_mode and not track.enabled:
-                track_flags[track.uid].append('flag-enabled=1')
-                snapshot_track(track)
-                track.enabled = True
+            if best_score > 0:
+                if default_mode and not best_track.default:
+                    track_flags[best_track.uid].append('flag-default=1')
+                    snapshot_track(best_track)
+                    best_track.default = True
+                if forced_mode and not best_track.forced:
+                    track_flags[best_track.uid].append('flag-forced=1')
+                    snapshot_track(best_track)
+                    best_track.forced = True
+                if (disabled_mode or enabled_mode) and not best_track.enabled:
+                    track_flags[best_track.uid].append('flag-enabled=1')
+                    snapshot_track(best_track)
+                    best_track.enabled = True
+                unwanted_tracks = sorted_tracks[:-1]
+            else:
+                unwanted_tracks = sorted_tracks
+
+            for track in unwanted_tracks:
+                if not track.scores.get(profile_name, 0):
+                    continue
+                if default_mode and track.default:
+                    track_flags[track.uid].append('flag-default=0')
+                    snapshot_track(track)
+                    track.default = False
+                if forced_mode and track.forced:
+                    track_flags[track.uid].append('flag-forced=0')
+                    snapshot_track(track)
+                    track.forced = False
+                if disabled_mode and track.enabled:
+                    track_flags[track.uid].append('flag-enabled=0')
+                    snapshot_track(track)
+                    track.enabled = False
+                if enabled_mode and not track.enabled:
+                    track_flags[track.uid].append('flag-enabled=1')
+                    snapshot_track(track)
+                    track.enabled = True
 
         for track in tracks:
             if track_flags[track.uid]:
-                modify_args += ['--edit', f'track:={track.uid}']
-                logger_args += ['--edit', f'track:={track.index}']
+                modify_args.extend(['--edit', f'track:={track.uid}'])
+                logger_args.extend(['--edit', f'track:={track.index}'])
                 for flag in track_flags[track.uid]:
-                    modify_args += ['--set', flag]
-                    logger_args += ['--set', flag]
+                    modify_args.extend(['--set', flag])
+                    logger_args.extend(['--set', flag])
 
-    if audio_tracks:
-        apply_track_modes(audio_tracks, config.audio_mode)
-    if subtitle_tracks:
-        apply_track_modes(subtitle_tracks, config.subtitle_mode)
+    score_tracks(audio_tracks, config.audio_group)
+    apply_profiles(audio_tracks, config.audio_group)
+    score_tracks(subtitle_tracks, config.subtitle_group)
+    apply_profiles(subtitle_tracks, config.subtitle_group)
 
     if len(modify_args) > 1:
         mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
@@ -557,15 +657,8 @@ def process_tracks(
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
-    if database is not None:
+    if database is not None and orig_tracks:
         database.insert(file_path, list(orig_tracks.values()))
-
-
-def restore_file(file_path: Path, database: Database, dry_run: bool = False) -> None:
-    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
-    for tracks in (audio_tracks, subtitle_tracks):
-        tracks.sort(reverse=True, key=lambda track: track.score)
-    restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
 
 
 def process_file(
@@ -575,9 +668,7 @@ def process_file(
     extensions: list[Extension] | None = None,
     dry_run: bool = False,
 ) -> None:
-    video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path, config)
-    for tracks in (audio_tracks, subtitle_tracks):
-        tracks.sort(reverse=True, key=lambda track: track.score)
+    video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path)
     process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
     if extensions is not None:
         for extension in extensions:
@@ -621,15 +712,15 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
-        tag = 'untagged'
+        label = 'untagged'
         if '::' in toml_path:
-            toml_path, tag = toml_path.rsplit('::', 1)
-        config = Config.from_file(Path(toml_path), tag)
-        if orig_lang and 'org' in config.audio_languages:
-            config.audio_languages[orig_lang] = config.audio_languages['org']
-        if orig_lang and 'org' in config.subtitle_languages:
-            config.subtitle_languages[orig_lang] = config.subtitle_languages['org']
-        configs[tag] = config
+            toml_path, label = toml_path.rsplit('::', 1)
+        config = Config.from_file(Path(toml_path), label)
+        if orig_lang and 'org' in config.audio_group.languages:
+            config.audio_group.languages[orig_lang] = config.audio_group.languages['org']
+        if orig_lang and 'org' in config.subtitle_group.languages:
+            config.subtitle_group.languages[orig_lang] = config.subtitle_group.languages['org']
+        configs[label] = config
     if not configs and not (args.prune or args.restore):
         parser.error('cannot process file(s) without --config')
 
@@ -654,10 +745,10 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
-        tag = 'untagged'
+        label = 'untagged'
         if '::' in input_path:
-            input_path, tag = input_path.rsplit('::', 1)
-        if not (active_config := configs.get(tag) or configs.get('untagged')):
+            input_path, label = input_path.rsplit('::', 1)
+        if not (active_config := configs.get(label) or configs.get('untagged')):
             mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
         if not (matched_paths := glob.glob(input_path.replace('[', '[[]'), recursive=True)):
@@ -690,9 +781,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 mkvpriority_logger.info(dry_run + f"restoring '{file_path}'")
                 restore_file(file_path, database, args.dry_run)
             else:
-                toml_path, tag = active_config.toml_path, active_config.label_tag
+                toml_path, label = active_config.toml_path, active_config.label
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
-                mkvpriority_logger.info(dry_run + f"using config '{toml_path}::{tag}'")
+                mkvpriority_logger.info(dry_run + f"using config '{toml_path}::{label}'")
                 process_file(file_path, active_config, database, extensions, args.dry_run)
 
 
