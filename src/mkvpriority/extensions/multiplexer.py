@@ -85,8 +85,10 @@ class Multiplexer(Extension):
 
         for track in video_tracks:
             track_order.append(f'0:{track.index}')
-        process_tracks(audio_tracks, track_order, audio_strip, config.audio_languages)
-        process_tracks(subtitle_tracks, track_order, subtitle_strip, config.subtitle_languages)
+        process_tracks(audio_tracks, track_order, audio_strip, config.audio_group.languages)
+        process_tracks(
+            subtitle_tracks, track_order, subtitle_strip, config.subtitle_group.languages
+        )
 
         temp_output_path = file_path.with_name(f'{file_path.stem}_temp.mkv')
         mkv_args = ['-o', str(temp_output_path)]

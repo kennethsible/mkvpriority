@@ -61,10 +61,11 @@ class SubtitleRestyler(Extension):
             self.parameters[config.toml_path] = attributes
 
         if attributes:
-            subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
-            subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
-            if subtitle_path and subtitle_path.is_file():
-                self.modify_subtitle_styles(subtitle_path, attributes)
+            target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
+            for subtitle_track in target_tracks:
+                subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
+                if subtitle_path and subtitle_path.is_file():
+                    self.modify_subtitle_styles(subtitle_path, attributes)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         subtitle_suffix = f'.{subtitle_track.language}'

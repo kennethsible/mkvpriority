@@ -56,7 +56,7 @@ global.penalize_unscored_languages = false
 
 # === Native Audio Languages ===
 # Determines when default subtitle flags should be suppressed:
-# - list  = Clears default flags if the audio matches these languages
+# - list  = Strips default flags if the audio matches these languages
 # - empty = Follows profile subtitle modes regardless of the audio
 # Ensures full dialogue subtitles are disabled for native audio language.
 global.native_languages = ["eng"]

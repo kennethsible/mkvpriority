@@ -40,24 +40,25 @@ class SubtitleConverter(Extension):
             self.parameters[config.toml_path] = attributes
 
         if attributes['convert']:
-            subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
-            source_path = self.build_subtitle_path(file_path, subtitle_track)
-            if not source_path or not source_path.is_file():
-                return
+            target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
+            for subtitle_track in target_tracks:
+                source_path = self.build_subtitle_path(file_path, subtitle_track)
+                if not source_path or not source_path.is_file():
+                    continue
 
-            subtitle_ext = source_path.suffix.lstrip('.').lower()
-            target_format = attributes['target_format']
-            if subtitle_ext == target_format:
-                return
+                subtitle_ext = source_path.suffix.lstrip('.').lower()
+                target_format = attributes['target_format']
+                if subtitle_ext == target_format:
+                    continue
 
-            target_path = source_path.with_suffix(f'.{target_format}')
-            if target_path.is_file():
-                return
+                target_path = source_path.with_suffix(f'.{target_format}')
+                if target_path.is_file():
+                    continue
 
-            self.convert_subtitles(source_path, target_path)
-            if attributes['remove_source'] and target_path.is_file():
-                self.extension_logger.info(f"removing subtitles '{source_path.name}'")
-                source_path.unlink(missing_ok=True)
+                self.convert_subtitles(source_path, target_path)
+                if attributes['remove_source'] and target_path.is_file():
+                    self.extension_logger.info(f"removing subtitles '{source_path.name}'")
+                    source_path.unlink(missing_ok=True)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         subtitle_format = subtitle_track.codec.split('/')[-1]

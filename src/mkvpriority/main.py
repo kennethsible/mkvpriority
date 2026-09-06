@@ -590,8 +590,8 @@ def process_tracks(
             disabled_mode = 'disabled' in track_modes
             enabled_mode = 'enabled' in track_modes
 
-            sorted_tracks = sorted(tracks, key=lambda track: track.scores.get(profile_name, 0))
-            best_track = sorted_tracks[-1]
+            tracks.sort(key=lambda track: track.scores.get(profile_name, 0), reverse=True)
+            best_track = tracks[0]
             best_score = best_track.scores.get(profile_name, 0)
 
             if best_score > 0:
@@ -607,9 +607,9 @@ def process_tracks(
                     track_flags[best_track.uid].append('flag-enabled=1')
                     snapshot_track(best_track)
                     best_track.enabled = True
-                unwanted_tracks = sorted_tracks[:-1]
+                unwanted_tracks = tracks[1:]
             else:
-                unwanted_tracks = sorted_tracks
+                unwanted_tracks = tracks
 
             for track in unwanted_tracks:
                 if not track.scores.get(profile_name, 0):

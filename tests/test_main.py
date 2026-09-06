@@ -523,7 +523,6 @@ def test_prune_database() -> None:
         assert not database.contains(file_path)
 
 
-@pytest.mark.skip  # TODO
 def test_extract_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -537,13 +536,18 @@ def test_extract_subtitles() -> None:
         config = mkvpriority.Config.from_file(toml_path)
 
         mkvpriority.process_file(file_path, config, extensions=[SubtitleExtractor()])
+        assert len(list(temp_path.glob('*dummy*.ass'))) == 2
+        assert len(list(temp_path.glob('*dummy*.srt'))) == 0
 
-        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
+        subtitle_path = file_path.with_suffix('.eng.default.ass')
+        assert subtitle_path.is_file()
+        assert subtitle_path.stat().st_size > 0
+
+        subtitle_path = file_path.with_suffix('.eng.forced.ass')
         assert subtitle_path.is_file()
         assert subtitle_path.stat().st_size > 0
 
 
-@pytest.mark.skip  # TODO
 def test_convert_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -565,9 +569,11 @@ def test_convert_subtitles() -> None:
 
         extensions = [SubtitleExtractor(), SubtitleConverter()]
         mkvpriority.process_file(file_path, config, extensions=extensions)
+        assert len(list(temp_path.glob('*dummy*.ass'))) == 2
+        assert len(list(temp_path.glob('*dummy*.srt'))) == 2
 
-        extracted_ass = file_path.with_suffix('.eng.default.forced.ass')
-        converted_srt = file_path.with_suffix('.eng.default.forced.srt')
+        extracted_ass = file_path.with_suffix('.eng.default.ass')
+        converted_srt = file_path.with_suffix('.eng.default.srt')
 
         assert extracted_ass.is_file() and converted_srt.is_file()
         assert '-->' in converted_srt.read_text(encoding='utf-8')
@@ -594,6 +600,8 @@ def test_convert_subtitles() -> None:
 
         extensions = [SubtitleExtractor(), SubtitleConverter()]
         mkvpriority.process_file(file_path, config, extensions=extensions)
+        assert len(list(temp_path.glob('*dummy*.ass'))) == 1
+        assert len(list(temp_path.glob('*dummy*.srt'))) == 0
 
         extracted_srt = file_path.with_suffix('.eng.default.forced.srt')
         converted_ass = file_path.with_suffix('.eng.default.forced.ass')
@@ -602,7 +610,6 @@ def test_convert_subtitles() -> None:
         assert '[Script Info]' in converted_ass.read_text(encoding='utf-8')
 
 
-@pytest.mark.skip  # TODO
 def test_restyle_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -623,12 +630,11 @@ def test_restyle_subtitles() -> None:
         extensions = [SubtitleExtractor(), SubtitleRestyler()]
         mkvpriority.process_file(file_path, config, extensions=extensions)
 
-        subtitle_path = file_path.with_suffix('.eng.default.forced.ass')
+        subtitle_path = file_path.with_suffix('.eng.default.ass')
         restyled_content = subtitle_path.read_text(encoding='utf-8-sig')
         assert 'Style: Default,Cabin,20.0,&H00FFFFFF,0.96,0.48,2,1' in restyled_content
 
 
-@pytest.mark.skip  # TODO
 def test_reorder_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -654,7 +660,6 @@ def test_reorder_tracks() -> None:
         assert second_track.name == '5.1 FLAC (Japanese)'
 
 
-@pytest.mark.skip  # TODO
 def test_strip_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)

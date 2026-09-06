@@ -36,14 +36,20 @@ class SubtitleExtractor(Extension):
             self.parameters[config.toml_path] = attributes
 
         if attributes['extract']:
-            subtitle_track = max(subtitle_tracks, key=lambda track: track.score)
-            subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
-            if subtitle_path and not subtitle_path.is_file():
-                self.extract_subtitles(file_path, subtitle_path, subtitle_track.index)
+            target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
+            subtitle_paths: list[tuple[int, Path]] = []
+            for track in target_tracks:
+                subtitle_path = self.build_subtitle_path(file_path, track)
+                if subtitle_path and not subtitle_path.is_file():
+                    subtitle_paths.append((track.index, subtitle_path))
+            if subtitle_paths:
+                self.extract_subtitles(file_path, subtitle_paths)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         subtitle_format = subtitle_track.codec.split('/')[-1]
         if not (subtitle_ext := SUBTITLE_EXTENSIONS.get(subtitle_format)):
+            return None
+        if not subtitle_track.default and not subtitle_track.forced:
             return None
         subtitle_suffix = f'.{subtitle_track.language}'
         if subtitle_track.default:
@@ -52,10 +58,12 @@ class SubtitleExtractor(Extension):
             subtitle_suffix += '.forced'
         return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
 
-    def extract_subtitles(self, file_path: Path, subtitle_path: Path, index: int) -> None:
-        self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path}'")
+    def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[int, Path]]) -> None:
+        for _, subtitle_path in subtitle_paths:
+            self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path}'")
+        mkv_args = [f'{index}:{subtitle_path}' for index, subtitle_path in subtitle_paths]
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
-            json.dump(['tracks', str(file_path), f'{index}:{subtitle_path}'], temp_file)
+            json.dump(['tracks', str(file_path), *mkv_args], temp_file)
             temp_file_path = Path(temp_file.name)
 
         try:
