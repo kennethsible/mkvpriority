@@ -26,9 +26,7 @@ processing_queue: asyncio.Queue[tuple[str, str, str | None]] = asyncio.Queue()
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
 LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
 
-CUSTOM_SCRIPT = os.getenv('CUSTOM_SCRIPT', 'false').lower() in ('true', '1', 't')
-WEBHOOK_RECEIVER = os.getenv('WEBHOOK_RECEIVER', 'false').lower() in ('true', '1', 't')
-WEBHOOK_PORT_STR = os.getenv('WEBHOOK_PORT') or ('8080' if WEBHOOK_RECEIVER else None)
+WEBHOOK_PORT_STR = os.getenv('WEBHOOK_PORT')
 WEBHOOK_PORT = int(WEBHOOK_PORT_STR) if WEBHOOK_PORT_STR else None
 
 CRON_MACROS = {
@@ -189,12 +187,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    if CUSTOM_SCRIPT or WEBHOOK_RECEIVER:
-        entrypoint_logger.warning(
-            'CUSTOM_SCRIPT and WEBHOOK_RECEIVER are deprecated; use WEBHOOK_PORT instead'
-        )
-        main()
-    elif WEBHOOK_PORT or CRON_SCHEDULE:
+    if WEBHOOK_PORT or CRON_SCHEDULE:
         main()
     else:
         mkvpriority.main.main()

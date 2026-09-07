@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import copy
 import glob
@@ -18,8 +20,6 @@ from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from pprint import pformat
-from sqlite3 import Cursor
-from string.templatelib import Template
 from tempfile import NamedTemporaryFile
 from typing import Any, TypeVar
 
@@ -286,22 +286,23 @@ class Database:
             return
 
         file_mtime = file_path.stat().st_mtime
-        self.execute_t(
-            t"""
+        self.cur.execute(
+            """
             INSERT INTO archive (
                 file_path,
                 file_mtime,
                 schema_version
             )
-            VALUES ({str(file_path)}, {int(file_mtime)}, {self.SCHEMA_VERSION})
+            VALUES (?, ?, ?)
             ON CONFLICT(file_path) DO UPDATE SET
                 file_mtime = excluded.file_mtime,
                 schema_version = excluded.schema_version
-            """
+            """,
+            (str(file_path), int(file_mtime), self.SCHEMA_VERSION),
         )
         for track in tracks:
-            self.execute_t(
-                t"""
+            self.cur.execute(
+                """
                 INSERT INTO metadata (
                     file_path,
                     track_uid,
@@ -309,9 +310,16 @@ class Database:
                     forced_flag,
                     enabled_flag
                 )
-                VALUES ({str(file_path)}, {str(track.uid)}, {int(track.default)}, {int(track.forced)}, {int(track.enabled)})
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(file_path, track_uid) DO NOTHING
-                """
+                """,
+                (
+                    str(file_path),
+                    str(track.uid),
+                    int(track.default),
+                    int(track.forced),
+                    int(track.enabled),
+                ),
             )
         self.con.commit()
 
@@ -324,21 +332,23 @@ class Database:
         else:
             mkvpriority_logger.info(dry_run + f"deleting from database '{self.db_path}'")
         if not self.dry_run:
-            self.execute_t(t'DELETE FROM archive WHERE file_path = {str(file_path)}')
+            self.cur.execute('DELETE FROM archive WHERE file_path = ?', (str(file_path),))
             self.con.commit()
 
     def contains(self, file_path: Path, file_mtime: float | None = None) -> bool:
         if file_mtime is None:
-            self.execute_t(t'SELECT 1 FROM archive WHERE file_path = {str(file_path)}')
+            self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (str(file_path),))
         else:
-            self.execute_t(
-                t'SELECT 1 FROM archive WHERE file_path = {str(file_path)} AND file_mtime = {int(file_mtime)}'
+            self.cur.execute(
+                'SELECT 1 FROM archive WHERE file_path = ? AND file_mtime = ?',
+                (str(file_path), int(file_mtime)),
             )
         return self.cur.fetchone() is not None
 
     def restore(self, file_path: Path, track: Track) -> bool:
-        self.execute_t(
-            t'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = {str(file_path)} AND track_uid = {str(track.uid)}'
+        self.cur.execute(
+            'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = ? AND track_uid = ?',
+            (str(file_path), str(track.uid)),
         )
         result = self.cur.fetchone()
         if result:
@@ -374,11 +384,6 @@ class Database:
                 self.cur.execute('ALTER TABLE archive ADD COLUMN file_mtime INTEGER')
             self.cur.execute('INSERT INTO archive (schema_version) VALUES (1)')
         self.con.commit()
-
-    def execute_t(self, template: Template) -> Cursor:
-        query = '?'.join(template.strings)
-        params = tuple(interp.value for interp in template.interpolations)
-        return self.cur.execute(query, params)
 
 
 class MissingCommandError(Exception):
