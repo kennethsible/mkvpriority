@@ -300,10 +300,10 @@ def test_score_tracks() -> None:
             (track.name, track.language): track.scores['signs_songs'] for track in subtitle_tracks
         }
         assert track_scores == {
-            ('Full Subtitles [FanSub]', 'eng'): 130,
+            ('Full Subtitles [FanSub]', 'eng'): -10000,
             ('Signs & Songs [FanSub]', 'eng'): 132,
-            ('Dialogue [Blu-ray]', 'eng'): 120,
-            ('Dialogue [Blu-ray]', 'ger'): 20,
+            ('Dialogue [Blu-ray]', 'eng'): -10000,
+            ('Dialogue [Blu-ray]', 'ger'): -10000,
         }
 
         mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
@@ -412,11 +412,12 @@ def test_penalize_unscored() -> None:
         mkvpriority.modify_tracks(mkv_args)
 
         config = mkvpriority.Config.from_file(Path('config.toml'))
-        config.subtitle_group.profiles['signs_songs'].max_size_ratio = None
         config.subtitle_group.languages = {'eng': 0}
         config.subtitle_group.codecs = {}
-        config.subtitle_group.profiles['signs_songs'].filters = {}
         config.subtitle_group.profiles['dialogue'].filters = {}
+        config.subtitle_group.profiles['signs_songs'].filters = {}
+        config.subtitle_group.profiles['signs_songs'].max_size_ratio = None
+        config.subtitle_group.profiles['signs_songs'].require_filter_match = False
         config.subtitle_group.penalize_unscored_languages = True
 
         video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
@@ -593,16 +594,15 @@ def test_convert_subtitles() -> None:
             encoding='utf-8',
         )
         config = mkvpriority.Config.from_file(toml_path)
-        config.subtitle_group.codecs['S_TEXT/ASS'] = -100
-        config.subtitle_group.codecs['S_TEXT/UTF8'] = 100
+        config.subtitle_group.codecs['S_TEXT/ASS'] = -10000
 
         extensions = [SubtitleExtractor(), SubtitleConverter()]
         mkvpriority.process_file(file_path, config, extensions=extensions)
         assert len(list(temp_path.glob('*dummy*.ass'))) == 1
         assert len(list(temp_path.glob('*dummy*.srt'))) == 0
 
-        extracted_srt = file_path.with_suffix('.eng.default.forced.srt')
-        converted_ass = file_path.with_suffix('.eng.default.forced.ass')
+        extracted_srt = file_path.with_suffix('.eng.default.srt')
+        converted_ass = file_path.with_suffix('.eng.default.ass')
 
         assert not extracted_srt.is_file() and converted_ass.is_file()
         assert '[Script Info]' in converted_ass.read_text(encoding='utf-8')

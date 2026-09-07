@@ -151,6 +151,7 @@ class Profile:
     name: str
     mode: list[str] = field(default_factory=list)
     filters: dict[str, int] = field(default_factory=dict)
+    require_filter_match: bool = False
 
 
 @dataclass
@@ -197,7 +198,10 @@ class Config:
         audio_global = audio_section.get('global', {})
         audio_profiles = {
             key: AudioProfile(
-                name=key, mode=value.get('audio_mode', []), filters=value.get('filters', {})
+                name=key,
+                mode=value.get('audio_mode', []),
+                filters=value.get('filters', {}),
+                require_filter_match=value.get('require_filter_match', False),
             )
             for key, value in audio_section.items()
             if key != 'global'
@@ -216,6 +220,7 @@ class Config:
                 name=key,
                 mode=value.get('subtitle_mode', []),
                 filters=value.get('filters', {}),
+                require_filter_match=value.get('require_filter_match', False),
                 max_size_ratio=value.get('max_size_ratio'),
             )
             for key, value in subtitle_section.items()
@@ -553,20 +558,30 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
         score += group.codecs.get(track.codec, 0)
         if isinstance(group, AudioProfileGroup):
             score += group.channels.get(str(track.channels), 0)
+
+        filter_matched = False
         if track.name:
             for key, value in profile.filters.items():
                 if key in track.name.lower():
                     score += value
+                    filter_matched = True
+
+        within_size_ratio = False
         if (
             isinstance(profile, SubtitleProfile)
             and (profile.max_size_ratio is not None)
             and max_track_size > 0
         ):
             if track.size is not None:
-                if track.size / max_track_size > profile.max_size_ratio:
+                if track.size / max_track_size <= profile.max_size_ratio:
+                    within_size_ratio = True
+                else:
                     score -= 10000
             else:
                 score -= 10000
+
+        if profile.require_filter_match and not (filter_matched or within_size_ratio):
+            return -10000
         return score
 
     for track in tracks:
@@ -695,12 +710,15 @@ def process_tracks(
                     snapshot_track(track)
                     track.enabled = True
 
-        if suppress_default:
-            for track in tracks:
-                if track.default:
-                    track_flags[track.uid]['flag-default'] = '0'
-                    snapshot_track(track)
-                    track.default = False
+        for track in tracks:
+            if track.default and suppress_default:
+                track_flags[track.uid]['flag-default'] = '0'
+                snapshot_track(track)
+                track.default = False
+            if track.default and track.forced:
+                track.forced = False
+                track_flags[track.uid]['flag-forced'] = '0'
+                snapshot_track(track)
 
         for track in tracks:
             mkvpriority_logger.debug(pformat(track))

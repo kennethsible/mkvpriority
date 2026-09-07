@@ -37,6 +37,13 @@ A_VORBIS = 20        # Vorbis
 1 = 1 # Mono
 
 [audio_profiles.default]
+# === Audio Profile Mode ===
+# Determines the track flag(s) managed by this audio profile:
+# - "default"  = Sets best track as default and clears default on other scored tracks
+# - "forced"   = Sets best track as forced and clears forced on other scored tracks
+# - "disabled" = Sets best track as enabled and disables other scored tracks
+# - "enabled"  = Ensures all tracks with a positive score are enabled
+# Profiles must specify at least one mode, which must be mutually exclusive.
 audio_mode = ["default"]
 
 [audio_profiles.default.filters]
@@ -79,6 +86,13 @@ und = 0   # Undefined (Fallback)
 S_VOBSUB = 10        # Legacy Image-Based (Used in DVDs)
 
 [subtitle_profiles.signs_songs]
+# === Subtitle Profile Mode ===
+# Determines the track flag(s) managed by this subtitle profile:
+# - "default"  = Sets best track as default and clears default on other scored tracks
+# - "forced"   = Sets best track as forced and clears forced on other scored tracks
+# - "disabled" = Sets best track as enabled and disables other scored tracks
+# - "enabled"  = Ensures all tracks with a positive score are enabled
+# Profiles must specify at least one mode, which must be mutually exclusive.
 subtitle_mode = ["forced"]
 
 # === Maximum Size Ratio ===
@@ -87,6 +101,13 @@ subtitle_mode = ["forced"]
 # - unset = Disables size-based filtering for subtitle tracks
 # Ensures only forced tracks (signs, songs, etc.) match this profile.
 max_size_ratio = 0.15
+
+# === Require Filter Match ===
+# Requires at least one filter keyword or size ratio match for this profile:
+# - true  = Heavily penalizes tracks with no matching filters (score: -10000)
+# - false = Allows tracks to score using global language and codec weights
+# Ensures tracks do not match this profile based on language or codec alone.
+require_filter_match = true
 
 [subtitle_profiles.signs_songs.filters]
 sign = 1           # On-Screen Text
