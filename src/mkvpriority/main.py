@@ -601,9 +601,10 @@ def restore_tracks(
 
     def apply_track_modes(track: Track, use_index: bool = False) -> list[str]:
         track_id = track.index if use_index else track.uid
+        track_name = f' ({track.name})' if use_index and track.name else ''
         return [
             '--edit',
-            f'track:={track_id}',
+            f'track:={track_id}{track_name}',
             '--set',
             f'flag-default={int(track.default)}',
             '--set',
@@ -723,8 +724,9 @@ def process_tracks(
         for track in tracks:
             mkvpriority_logger.debug(pformat(track))
             if track_flags[track.uid]:
+                track_name = f' ({track.name})' if track.name else ''
                 modify_args.extend(['--edit', f'track:={track.uid}'])
-                logger_args.extend(['--edit', f'track:={track.index}'])
+                logger_args.extend(['--edit', f'track:={track.index}{track_name}'])
                 for flag, value in track_flags[track.uid].items():
                     modify_args.extend(['--set', f'{flag}={value}'])
                     logger_args.extend(['--set', f'{flag}={value}'])
@@ -875,8 +877,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 restore_file(file_path, database, args.dry_run)
             else:
                 toml_path, label = active_config.toml_path, active_config.label
+                config_tag = f'::{label}' if label != 'untagged' else ''
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
-                mkvpriority_logger.info(dry_run + f"using config '{toml_path}::{label}'")
+                mkvpriority_logger.info(dry_run + f"using config '{toml_path}{config_tag}'")
                 process_file(file_path, active_config, database, extensions, args.dry_run)
 
 
