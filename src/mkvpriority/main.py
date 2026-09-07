@@ -182,6 +182,66 @@ class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
     native_languages: list[str] = field(default_factory=list)
 
 
+class ConfigError(Exception):
+    pass
+
+
+def validate_config_schema(toml_file: dict[str, Any], toml_path: Path) -> None:
+    profile_sections = ('audio_profiles', 'subtitle_profiles')
+    if missing_sections := [section for section in profile_sections if section not in toml_file]:
+        missing_sections_str = ' and '.join(f'[{section}]' for section in missing_sections)
+        raise ConfigError(f"missing {missing_sections_str} in '{toml_path}'")
+
+    for section_name in profile_sections:
+        section = toml_file[section_name]
+        if not isinstance(section, dict):
+            raise ConfigError(f"'[{section_name}]' in '{toml_path}' must be a table")
+
+        global_section = section.get('global')
+        if not isinstance(global_section, dict):
+            raise ConfigError(f"missing '[{section_name}.global]' table in '{toml_path}'")
+
+        global_keys = ['languages', 'codecs']
+        if section_name == 'audio_profiles':
+            global_keys.append('channels')
+        for key in global_keys:
+            if key in global_section and not isinstance(global_section[key], dict):
+                raise ConfigError(
+                    f"'[{section_name}.global.{key}]' in '{toml_path}' must be a table"
+                )
+
+        if (
+            section_name == 'subtitle_profiles'
+            and 'native_languages' in global_section
+            and not isinstance(global_section['native_languages'], list)
+        ):
+            raise ConfigError(f"'native_languages' in '[{section_name}.global]' must be a list")
+
+        profiles = {key: value for key, value in section.items() if key != 'global'}
+        if not profiles:
+            raise ConfigError(f"missing profiles for '[{section_name}]' in '{toml_path}'")
+
+        mode_name = 'audio_mode' if section_name == 'audio_profiles' else 'subtitle_mode'
+        for profile_name, profile in profiles.items():
+            if not isinstance(profile, dict):
+                raise ConfigError(
+                    f"'[{section_name}.{profile_name}]' in '{toml_path}' must be a table"
+                )
+
+            profile_mode = profile.get(mode_name)
+            if not isinstance(profile_mode, list):
+                raise ConfigError(
+                    f"'{mode_name}' in '[{section_name}.{profile_name}]' must be a list"
+                )
+            if not profile_mode:
+                raise ConfigError(
+                    f"empty {mode_name} for '[{section_name}.{profile_name}]' in '{toml_path}'"
+                )
+
+            if 'filters' in profile and not isinstance(profile['filters'], dict):
+                raise ConfigError(f"'filters' in '[{section_name}.{profile_name}]' must be a table")
+
+
 @dataclass
 class Config:
     toml_path: str
@@ -193,6 +253,7 @@ class Config:
     def from_file(cls, toml_path: Path, label: str = 'untagged') -> Config:
         with open(toml_path, 'rb') as f:
             toml_file = tomllib.load(f)
+        validate_config_schema(toml_file, toml_path)
 
         audio_section = toml_file.get('audio_profiles', {})
         audio_global = audio_section.get('global', {})
