@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.14-alpine AS builder
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 ENV UV_PYTHON_DOWNLOADS=0
 
@@ -9,16 +9,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project --no-dev --group docker --all-extras
 
-FROM python:3.14-slim-bookworm
+FROM python:3.14-alpine
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    mkvtoolnix \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=mwader/static-ffmpeg:latest /ffmpeg /usr/local/bin/
+RUN apk add --no-cache mkvtoolnix ffmpeg
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --chmod=755 <<-"EOF" /app/.venv/bin/mkvpriority
@@ -33,7 +29,6 @@ COPY config.toml mkvpriority.sh pyproject.toml ./
 COPY src ./src
 
 ENV MKVPRIORITY_EXT_DIR="/config/extensions"
-
 ENV PYTHONPATH="/app/src"
 ENV PATH="/app/.venv/bin:$PATH"
 ENTRYPOINT ["python", "-m", "mkvpriority.entrypoint"]
