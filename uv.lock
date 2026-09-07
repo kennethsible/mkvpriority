@@ -311,11 +311,6 @@ name = "mkvpriority"
 version = "1.6.0"
 source = { editable = "." }
 
-[package.optional-dependencies]
-subtitle-converter = [
-    { name = "pysubs2" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
@@ -335,8 +330,6 @@ docker = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pysubs2", marker = "extra == 'subtitle-converter'", specifier = ">=1.9.0" }]
-provides-extras = ["subtitle-converter"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -468,15 +461,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7c/2d/c3338d48ea6cc0feb8446d8e6937e1408088a72a39937982cc6111d17f84/pygments-2.19.1.tar.gz", hash = "sha256:61c16d2a8576dc0649d9f39e089b5f02bcd27fba10d8fb4dcc28173f7a45151f", size = 4968581, upload-time = "2025-01-06T17:26:30.443Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/0b/9fcc47d19c48b59121088dd6da2488a49d5f72dacf8262e2790a1d2c7d15/pygments-2.19.1-py3-none-any.whl", hash = "sha256:9ea1544ad55cecf4b8242fab6dd35a93bbce657034b0611ee383099054ab6d8c", size = 1225293, upload-time = "2025-01-06T17:26:25.553Z" },
-]
-
-[[package]]
-name = "pysubs2"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f2/20/9071b8b0012d9102e90292c71fe3f1181c33e772e28cbabb4779c0087603/pysubs2-1.9.0.tar.gz", hash = "sha256:4592405e5d961e23cd39c81e2875fb85c30346ae37d100f144cd7fd8ec560e42", size = 1147418, upload-time = "2026-08-16T19:54:51.267Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/43/6b89c84f5a6753b1dbc43b8d010443b8f2314a2b94f34e448975d115c962/pysubs2-1.9.0-py3-none-any.whl", hash = "sha256:83f1979cb7e064294f0c8473ef672ca2e5c0a7172bbf8ae9b4337899d5cdf01f", size = 48175, upload-time = "2026-08-16T19:54:49.927Z" },
 ]
 
 [[package]]

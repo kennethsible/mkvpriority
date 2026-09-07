@@ -121,16 +121,24 @@ Style: Default,Arial,20,&H00FFFFFF,2,1,2,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Dummy Subtitle
 """
-    ass_dialogue = 'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Dummy Subtitle\n'
 
     srt_template = """1
 00:00:00,000 --> 00:00:01,000
 Dummy Subtitle
 """
 
-    sub1_path.write_text((ass_template + ass_dialogue * 100).strip())
-    sub2_path.write_text((ass_template + ass_dialogue).strip())
+    sub1_path.write_text(
+        (
+            ass_template
+            + ''.join(
+                f'Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Dummy Subtitle {i}\n'
+                for i in range(100)
+            )
+        ).strip()
+    )
+    sub2_path.write_text(ass_template.strip())
     sub3_path.write_text(srt_template.strip())
     sub4_path.write_text(srt_template.strip())
 
@@ -277,7 +285,7 @@ def test_score_tracks() -> None:
         video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         assert len(video_tracks + audio_tracks + subtitle_tracks) == 8
 
-        mkvpriority.score_tracks(audio_tracks, config.audio_group)
+        mkvpriority.score_tracks(file_path, audio_tracks, config.audio_group)
         track_scores = {
             (track.name, track.language): track.scores['default'] for track in audio_tracks
         }
@@ -287,7 +295,7 @@ def test_score_tracks() -> None:
             ('Stereo AAC (English)', 'eng'): 122,
         }
 
-        mkvpriority.score_tracks(subtitle_tracks, config.subtitle_group)
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
         track_scores = {
             (track.name, track.language): track.scores['signs_songs'] for track in subtitle_tracks
         }
@@ -298,7 +306,7 @@ def test_score_tracks() -> None:
             ('Dialogue [Blu-ray]', 'ger'): 20,
         }
 
-        mkvpriority.score_tracks(subtitle_tracks, config.subtitle_group)
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
         track_scores = {
             (track.name, track.language): track.scores['dialogue'] for track in subtitle_tracks
         }
@@ -415,7 +423,7 @@ def test_penalize_unscored() -> None:
         assert len(video_tracks) + len(audio_tracks) + len(subtitle_tracks) == 8
         assert len(subtitle_tracks) == 4
 
-        mkvpriority.score_tracks(subtitle_tracks, config.subtitle_group)
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
         for track in subtitle_tracks:
             if track.language == 'eng':
                 assert track.scores['signs_songs'] == 0
@@ -433,29 +441,25 @@ def test_penalize_unscored() -> None:
         assert {track.name for track in subtitle_tracks if track.forced} == set()
 
 
-def test_max_size_ratio() -> None:
+def test_detect_forced() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         config = mkvpriority.Config.from_file(Path('config.toml'))
-        mkvpriority.score_tracks(subtitle_tracks, config.subtitle_group)
+        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        assert subtitle_tracks[0].name == 'Full Subtitles [FanSub]'
+        assert subtitle_tracks[1].name == 'Signs & Songs [FanSub]'
+        for subtitle_track in subtitle_tracks:
+            subtitle_track.name = ''
 
-        dialogue_track = next(
-            track for track in subtitle_tracks if track.name == 'Full Subtitles [FanSub]'
-        )
-        assert dialogue_track.scores['signs_songs'] <= -9000
-        signs_track = next(
-            track for track in subtitle_tracks if track.name == 'Signs & Songs [FanSub]'
-        )
-        assert signs_track.scores['signs_songs'] > 0
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+        assert subtitle_tracks[0].scores['signs_songs'] < 0
+        assert subtitle_tracks[1].scores['signs_songs'] > 0
 
         config.audio_group.languages['eng'] = 300
-        config.subtitle_group.profiles['dialogue'].filters = {}
-        config.subtitle_group.profiles['signs_songs'].filters = {}
         mkvpriority.process_file(file_path, config)
 
         _, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
@@ -464,12 +468,6 @@ def test_max_size_ratio() -> None:
         assert {track.name for track in subtitle_tracks if track.forced} == {
             'Signs & Songs [FanSub]'
         }
-
-        config.subtitle_group.profiles['signs_songs'].max_size_ratio = 0.0
-        mkvpriority.process_file(file_path, config)
-
-        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
-        assert {track.name for track in subtitle_tracks if track.forced} == set()
 
 
 def test_restore_tracks() -> None:

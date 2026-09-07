@@ -3,9 +3,15 @@ import tomllib
 from pathlib import Path
 
 from .main import (
+    AudioProfile,
+    AudioProfileGroup,
     Config,
     Database,
     Extension,
+    Profile,
+    ProfileGroup,
+    SubtitleProfile,
+    SubtitleProfileGroup,
     Track,
     extract_tracks,
     identify_tracks,
@@ -29,9 +35,15 @@ except importlib.metadata.PackageNotFoundError:
 
 
 __all__ = [
+    'AudioProfile',
+    'AudioProfileGroup',
     'Config',
     'Database',
     'Extension',
+    'Profile',
+    'ProfileGroup',
+    'SubtitleProfile',
+    'SubtitleProfileGroup',
     'Track',
     'extract_tracks',
     'identify_tracks',

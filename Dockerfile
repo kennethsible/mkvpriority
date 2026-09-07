@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mkvtoolnix \
     && rm -rf /var/lib/apt/lists/*
 
+COPY --from=mwader/static-ffmpeg:latest /ffmpeg /usr/local/bin/
+
 COPY --from=builder /app/.venv /app/.venv
 COPY --chmod=755 <<-"EOF" /app/.venv/bin/mkvpriority
 #!/app/.venv/bin/python

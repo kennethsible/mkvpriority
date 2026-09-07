@@ -1,9 +1,8 @@
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 from typing import Any
-
-import pysubs2
-from pysubs2.exceptions import Pysubs2Error
 
 from mkvpriority import Config, Extension, Track
 
@@ -55,8 +54,7 @@ class SubtitleConverter(Extension):
                 if target_path.is_file():
                     continue
 
-                self.convert_subtitles(source_path, target_path)
-                if attributes['remove_source'] and target_path.is_file():
+                if self.convert_subtitles(source_path, target_path) and attributes['remove_source']:
                     self.extension_logger.info(f"removing subtitles '{source_path.name}'")
                     source_path.unlink(missing_ok=True)
 
@@ -71,22 +69,22 @@ class SubtitleConverter(Extension):
             subtitle_suffix += '.forced'
         return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
 
-    def convert_subtitles(self, source_path: Path, target_path: Path) -> None:
+    def convert_subtitles(self, source_path: Path, target_path: Path) -> bool:
+        if shutil.which('ffmpeg') is None:
+            self.extension_logger.warning('cannot convert subtitles (ffmpeg not in PATH)')
+            return False
         self.extension_logger.info(f"converting extracted subtitles to '{target_path.name}'")
-
-        # result = subprocess.run(
-        #     ['ffmpeg', '-y', '-i', str(source_path), str(target_path)],
-        #     capture_output=True,
-        #     encoding='utf-8',
-        #     check=True,
-        #     text=True,
-        # )
-        # self.extension_logger.debug(result.stdout.strip())
-
         try:
-            subtitle_file = pysubs2.load(str(source_path), encoding='utf-8')
-            subtitle_file.info['PlayResX'] = '1920'
-            subtitle_file.info['PlayResY'] = '1080'
-            subtitle_file.save(str(target_path), encoding='utf-8')
-        except (OSError, UnicodeError, Pysubs2Error) as e:
-            self.extension_logger.error(str(e))
+            result = subprocess.run(
+                ['ffmpeg', '-nostdin', '-y', '-i', str(source_path), str(target_path)],
+                capture_output=True,
+                check=True,
+                text=True,
+            )
+            if result.stderr:
+                self.extension_logger.debug(result.stderr.strip())
+            return True
+        except subprocess.CalledProcessError as e:
+            self.extension_logger.error((e.stderr or str(e)).strip())
+            target_path.unlink(missing_ok=True)
+        return False

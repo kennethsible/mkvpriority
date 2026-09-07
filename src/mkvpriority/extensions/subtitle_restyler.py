@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from mkvpriority import Config, Extension, Track
+from mkvpriority.main import DRAWING_PATTERN, KARAOKE_PATTERN, POSITION_PATTERN, ROTATION_PATTERN
 
 SAFE_ATTRS = {
     'Fontname',
@@ -26,11 +27,6 @@ SAFE_ATTRS = {
 RES_DEP_X = {'Spacing', 'MarginL', 'MarginR'}
 RES_DEP_Y = {'Fontsize', 'Outline', 'Shadow', 'MarginV'}
 ASS_ATTR_MAP = {attr.lower(): attr for attr in SAFE_ATTRS | RES_DEP_X | RES_DEP_Y}
-
-POSITION_PATTERN = re.compile(r'\\(?:pos|move|org|i?clip|fade?|t)\s*\(|\\an[13-79]', re.IGNORECASE)
-ROTATION_PATTERN = re.compile(r'\\(fr[xyz]?|fa[xy])-?\d+\.?\d*', re.IGNORECASE)
-KARAOKE_PATTERN = re.compile(r'\\k[fo]?\d+\.?\d*', re.IGNORECASE)
-DRAWING_PATTERN = re.compile(r'\\p[1-9]\d*', re.IGNORECASE)
 
 
 class SubtitleRestyler(Extension):

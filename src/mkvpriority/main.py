@@ -6,6 +6,8 @@ import inspect
 import json
 import logging
 import os
+import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -15,10 +17,18 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from pprint import pformat
 from sqlite3 import Cursor
 from string.templatelib import Template
 from tempfile import NamedTemporaryFile
 from typing import Any, TypeVar
+
+POSITION_PATTERN = re.compile(r'\\(?:pos|move|org|i?clip|fade?|t)\s*\(|\\an[13-79]', re.IGNORECASE)
+ROTATION_PATTERN = re.compile(r'\\(fr[xyz]?|fa[xy])-?\d+\.?\d*', re.IGNORECASE)
+KARAOKE_PATTERN = re.compile(r'\\k[fo]?\d+\.?\d*', re.IGNORECASE)
+DRAWING_PATTERN = re.compile(r'\\p[1-9]\d*', re.IGNORECASE)
+OVERRIDE_PATTERN = re.compile(r'\{[^}]*\}')
+
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -372,7 +382,54 @@ class MissingCommandError(Exception):
 def verify_mkvtoolnix_install() -> None:
     for command in ('mkvpropedit', 'mkvmerge'):
         if shutil.which(command) is None:
-            raise MissingCommandError(f"'{command}' is not installed or missing from your PATH")
+            raise MissingCommandError(f"'{command}' not found in PATH")
+
+
+def count_unique_dialogue(
+    file_path: Path, subtitle_track: Track, threshold_limit: int | None = None
+) -> int:
+    track_index = subtitle_track.index
+    track_name = f' ({subtitle_track.name})' if subtitle_track.name else ''
+    ffmpeg_args = shlex.split(
+        f'ffmpeg -nostdin -v quiet -i "{file_path}" -map 0:{track_index} -c:s ass -f ass -'
+    )
+    mkvpriority_logger.info(f'counting subtitle dialogue for Track {track_index}' + track_name)
+
+    unique_dialogue: set[str] = set()
+    try:
+        with subprocess.Popen(
+            ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1
+        ) as process:
+            if not process.stdout:
+                return 0
+            for line in process.stdout:
+                if not line.startswith('Dialogue:'):
+                    continue
+                parts = line.split(',', 9)
+                if len(parts) <= 9:
+                    continue
+                dialogue = parts[9]
+                if '{' in dialogue:
+                    if (
+                        DRAWING_PATTERN.search(dialogue)
+                        or POSITION_PATTERN.search(dialogue)
+                        or ROTATION_PATTERN.search(dialogue)
+                        or KARAOKE_PATTERN.search(dialogue)
+                    ):
+                        continue
+                    stripped_dialogue = OVERRIDE_PATTERN.sub('', dialogue).strip()
+                else:
+                    stripped_dialogue = dialogue.strip()
+                if stripped_dialogue:
+                    unique_dialogue.add(stripped_dialogue)
+                    if threshold_limit and len(unique_dialogue) >= threshold_limit:
+                        process.terminate()
+                        break
+            process.wait()
+    except (subprocess.SubprocessError, OSError) as e:
+        mkvpriority_logger.error(str(e).strip())
+        return 0
+    return len(unique_dialogue)
 
 
 def identify_tracks(file_path: Path) -> Any:
@@ -412,7 +469,7 @@ def modify_tracks(arguments: list[str]) -> None:
 
 
 def extract_tracks(
-    file_path: Path, scorer: Database | None = None
+    file_path: Path, database: Database | None = None
 ) -> tuple[list[Track], list[Track], list[Track]]:
     video_tracks: list[Track] = []
     audio_tracks: list[Track] = []
@@ -438,15 +495,6 @@ def extract_tracks(
     for metadata in track_data.get('tracks', []):
         properties = metadata.get('properties', {})
 
-        try:
-            track_size = int(
-                properties.get('tag_number_of_bytes')
-                or properties.get('number_of_bytes')
-                or properties.get('num_index_entries')
-            )
-        except ValueError, TypeError:
-            track_size = None
-
         track = Track(
             index=metadata.get('id'),
             category=metadata.get('type'),
@@ -458,18 +506,17 @@ def extract_tracks(
             enabled=properties.get('enabled_track', False),
             forced=properties.get('forced_track', False),
             uid=properties.get('uid'),
-            size=track_size,
         )
         if track.uid is None:
             continue
 
-        if isinstance(scorer, Database):
-            if track.category == 'audio':
-                if scorer.restore(file_path, track):
+        if database is not None:
+            if database.restore(file_path, track):
+                if track.category == 'audio':
                     audio_tracks.append(track)
-            elif track.category == 'subtitles' and scorer.restore(file_path, track):
-                subtitle_tracks.append(track)
-            mkvpriority_logger.debug(track)
+                elif track.category == 'subtitles':
+                    subtitle_tracks.append(track)
+            mkvpriority_logger.debug(pformat(track))
             continue
 
         match track.category:
@@ -483,11 +530,20 @@ def extract_tracks(
     return video_tracks, audio_tracks, subtitle_tracks
 
 
-def score_tracks[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> None:
+def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: ProfileGroup[T]) -> None:
     max_track_size = 0
-    for track in tracks:
-        if track.size is not None:
-            max_track_size = max(track.size, max_track_size)
+    if (
+        isinstance(group, SubtitleProfileGroup)
+        and any(profile.max_size_ratio is not None for profile in group.profiles.values())
+        and any(not subtitle_track.name for subtitle_track in tracks)
+    ):
+        if shutil.which('ffmpeg') is None:
+            mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
+        else:
+            for subtitle_track in tracks:
+                if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
+                    subtitle_track.size = count_unique_dialogue(file_path, subtitle_track)
+                    max_track_size = max(subtitle_track.size, max_track_size)
 
     def score_track(track: Track, profile: Profile) -> int:
         score = 0
@@ -502,7 +558,11 @@ def score_tracks[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> Non
             for key, value in profile.filters.items():
                 if key in track.name.lower():
                     score += value
-        if isinstance(profile, SubtitleProfile) and (profile.max_size_ratio is not None):
+        if (
+            not track.name
+            and isinstance(profile, SubtitleProfile)
+            and (profile.max_size_ratio is not None)
+        ):
             if track.size is not None and max_track_size > 0:
                 if track.size / max_track_size > profile.max_size_ratio:
                     score -= 10000
@@ -513,7 +573,7 @@ def score_tracks[T: Profile](tracks: list[Track], group: ProfileGroup[T]) -> Non
     for track in tracks:
         for profile_name, profile in group.profiles.items():
             track.scores[profile_name] = score_track(track, profile)
-            mkvpriority_logger.debug(track)
+        mkvpriority_logger.debug(pformat(track))
 
 
 def restore_tracks(
@@ -648,7 +708,7 @@ def process_tracks(
 
         return best_track
 
-    score_tracks(audio_tracks, config.audio_group)
+    score_tracks(file_path, audio_tracks, config.audio_group)
     best_audio_track = apply_profiles(audio_tracks, config.audio_group)
 
     native_languages = config.subtitle_group.native_languages
@@ -656,7 +716,7 @@ def process_tracks(
         best_audio_track is not None and best_audio_track.language in native_languages
     )
 
-    score_tracks(subtitle_tracks, config.subtitle_group)
+    score_tracks(file_path, subtitle_tracks, config.subtitle_group)
     apply_profiles(subtitle_tracks, config.subtitle_group, suppress_default=suppress_default)
 
     if len(modify_args) > 1:
