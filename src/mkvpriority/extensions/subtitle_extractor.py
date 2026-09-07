@@ -32,7 +32,9 @@ class SubtitleExtractor(Extension):
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
-            attributes = {'extract': toml_file.get('extract_embedded_subtitles', False)}
+            subtitle_section = toml_file.get('subtitle_profiles', {})
+            subtitle_global = subtitle_section.get('global', {})
+            attributes = {'extract': subtitle_global.get('extract_embedded_subtitles', False)}
             self.parameters[config.toml_path] = attributes
 
         if attributes['extract']:

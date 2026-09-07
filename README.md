@@ -158,7 +158,7 @@ MKVPriority supports user-defined extension modules for optional post-processing
 
 ### Example: Subtitle Extractor
 
-You can use the `subtitle_extractor` extension to extract embedded subtitles flagged as default or forced. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container. To use this feature, add `extract_embedded_subtitles = true` to the top level of your config file and include this extension in your arguments.
+You can use the `subtitle_extractor` extension to extract embedded subtitles flagged as default or forced. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container. To use this feature, add `extract_embedded_subtitles = true` to the subtitle_profiles.global section of your config file and include this extension in your arguments.
 
 ```text
 Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
@@ -172,6 +172,7 @@ Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
 You can use the `subtitle_converter` extension to convert external subtitles between formats. Converting styled subtitles (`.ass`) to plain text (`.srt`) prevents server transcoding on devices with limited subtitle support. Conversely, converting plain text subtitles to stylized allows you to chain this module with the `subtitle_restyler` extension to apply advanced typography and consistent styling across your library.
 
 ```toml
+[subtitle_profiles.global]
 convert_external_subtitles = true
 convert_target_format = "ass"
 convert_remove_source = false

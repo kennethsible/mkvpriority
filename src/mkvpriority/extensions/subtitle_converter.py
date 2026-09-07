@@ -31,10 +31,12 @@ class SubtitleConverter(Extension):
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
+            subtitle_section = toml_file.get('subtitle_profiles', {})
+            subtitle_global = subtitle_section.get('global', {})
             attributes = {
-                'convert': toml_file.get('convert_external_subtitles', False),
-                'remove_source': toml_file.get('convert_remove_source', False),
-                'target_format': toml_file.get('convert_target_format', 'srt').lower(),
+                'convert': subtitle_global.get('convert_external_subtitles', False),
+                'remove_source': subtitle_global.get('convert_remove_source', False),
+                'target_format': subtitle_global.get('convert_target_format', 'srt').lower(),
             }
             self.parameters[config.toml_path] = attributes
 
