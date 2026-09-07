@@ -279,6 +279,8 @@ def test_score_tracks() -> None:
         multiplex_dummy(file_path, track_files)
 
         config = mkvpriority.Config.from_file(Path('config.toml'))
+        config.audio_group.penalize_unscored_languages = False
+        config.subtitle_group.penalize_unscored_languages = False
         config.subtitle_group.profiles['signs_songs'].max_size_ratio = None
         mkvpriority.process_file(file_path, config)
 
@@ -625,9 +627,9 @@ def test_restyle_subtitles() -> None:
         toml_text = Path('config.toml').read_text(encoding='utf-8')
         toml_text = toml_text.replace(
             '[subtitle_profiles.global]',
-            '[subtitle_styles]\nfontname = "Cabin"\nfontsize = 75\noutline = 3.6\nshadow = 1.8\n'
-            '[subtitle_profiles.global]\n'
-            'extract_embedded_subtitles = true\n',
+            '[subtitle_styles]\n'
+            'fontname = "Cabin"\nfontsize = 75\noutline = 3.6\nshadow = 1.8\n'
+            '[subtitle_profiles.global]\nextract_embedded_subtitles = true\n',
         )
         toml_path.write_text(toml_text, encoding='utf-8')
         config = mkvpriority.Config.from_file(toml_path)
@@ -640,7 +642,6 @@ def test_restyle_subtitles() -> None:
         assert 'Style: Default,Cabin,20.0,&H00FFFFFF,0.96,0.48,2,1' in restyled_content
 
 
-@pytest.mark.skip  # TODO
 def test_reorder_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -650,7 +651,13 @@ def test_reorder_tracks() -> None:
 
         toml_path = temp_path / 'config.toml'
         toml_text = Path('config.toml').read_text(encoding='utf-8')
-        toml_path.write_text(f'{toml_text}\n[multiplexer]\nreorder_tracks = true', encoding='utf-8')
+        toml_path.write_text(
+            f'{toml_text}\n'
+            '[multiplexer]\nreorder_tracks = true\n'
+            'remux_audio_profile = "default"\n'
+            'remux_subtitle_profile = "dialogue"\n',
+            encoding='utf-8',
+        )
         config = mkvpriority.Config.from_file(toml_path)
 
         video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
@@ -666,7 +673,6 @@ def test_reorder_tracks() -> None:
         assert second_track.name == '5.1 FLAC (Japanese)'
 
 
-@pytest.mark.skip  # TODO
 def test_strip_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -676,7 +682,13 @@ def test_strip_tracks() -> None:
 
         toml_path = temp_path / 'config.toml'
         toml_text = Path('config.toml').read_text(encoding='utf-8')
-        toml_path.write_text(f'{toml_text}\n[multiplexer]\nstrip_tracks = true', encoding='utf-8')
+        toml_path.write_text(
+            f'{toml_text}\n'
+            '[multiplexer]\nstrip_tracks = true\n'
+            'remux_audio_profile = "default"\n'
+            'remux_subtitle_profile = "dialogue"\n',
+            encoding='utf-8',
+        )
         config = mkvpriority.Config.from_file(toml_path)
 
         video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)

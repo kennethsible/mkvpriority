@@ -1,3 +1,13 @@
+# === Audio Profiles ===
+[audio_profiles.global]
+
+# === Penalize Unscored Languages ===
+# Determines how audio languages without scores are handled:
+# - true  = Heavily penalizes unscored languages (score: -10000)
+# - false = Assigns a neutral score (0) to unscored languages
+# Ensures audio in unscored languages are always stripped of flags.
+penalize_unscored_languages = true
+
 # === Audio Language Preferences ===
 # Example: Prioritize Japanese subs over English dubs.
 [audio_profiles.global.languages]
@@ -55,8 +65,8 @@ descript = -10000  # Visually Impaired
 # Determines how subtitle languages without scores are handled:
 # - true  = Heavily penalizes unscored languages (score: -10000)
 # - false = Assigns a neutral score (0) to unscored languages
-# Ensures subtitles in non-native languages are always stripped of flags.
-penalize_unscored_languages = false
+# Ensures subtitles in unscored languages are always stripped of flags.
+penalize_unscored_languages = true
 
 # === Native Audio Languages ===
 # Determines when default subtitle flags should be suppressed:

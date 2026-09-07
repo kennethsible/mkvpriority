@@ -198,6 +198,9 @@ You can use the `multiplexer` extension to strip tracks for unwanted languages a
 [multiplexer]
 strip_tracks = true
 reorder_tracks = true
+remux_audio_profile = "default"
+remux_subtitle_profile = "dialogue"
+mkvmerge_arguments = []
 ```
 
 ### Creating Extensions

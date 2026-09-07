@@ -169,6 +169,7 @@ class ProfileGroup[P: Profile]:
     languages: dict[str, int] = field(default_factory=dict)
     codecs: dict[str, int] = field(default_factory=dict)
     profiles: dict[str, P] = field(default_factory=dict)
+    penalize_unscored_languages: bool = False
 
 
 @dataclass
@@ -178,7 +179,6 @@ class AudioProfileGroup(ProfileGroup[AudioProfile]):
 
 @dataclass
 class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
-    penalize_unscored_languages: bool = False
     native_languages: list[str] = field(default_factory=list)
 
 
@@ -210,6 +210,7 @@ class Config:
             languages=audio_global.get('languages', {}),
             codecs=audio_global.get('codecs', {}),
             profiles=audio_profiles,
+            penalize_unscored_languages=audio_global.get('penalize_unscored_languages', False),
             channels=audio_global.get('channels', {}),
         )
 
@@ -551,10 +552,8 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
 
     def score_track(track: Track, profile: Profile) -> int:
         score = 0
-        if isinstance(group, SubtitleProfileGroup) and group.penalize_unscored_languages:
-            score += group.languages.get(track.language, -10000)
-        else:
-            score += group.languages.get(track.language, 0)
+        default_lang_score = -10000 if group.penalize_unscored_languages else 0
+        score += group.languages.get(track.language, default_lang_score)
         score += group.codecs.get(track.codec, 0)
         if isinstance(group, AudioProfileGroup):
             score += group.channels.get(str(track.channels), 0)
