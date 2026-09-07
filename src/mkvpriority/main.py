@@ -717,9 +717,12 @@ def process_tracks(
                 snapshot_track(track)
                 track.default = False
             if track.default and track.forced:
-                track.forced = False
-                track_flags[track.uid]['flag-forced'] = '0'
                 snapshot_track(track)
+                track.forced = False
+                if track.uid in orig_tracks and orig_tracks[track.uid].forced:
+                    track_flags[track.uid]['flag-forced'] = '0'
+                else:
+                    track_flags[track.uid].pop('flag-forced', None)
 
         for track in tracks:
             mkvpriority_logger.debug(pformat(track))
@@ -857,7 +860,8 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 mkvpriority_logger.info(dry_run + f"scanning '{file_path}'")
                 file_paths.extend(file_path.rglob('*.mkv'))
             elif file_path.is_file():
-                file_paths.append(file_path)
+                if file_path.suffix.lower() == '.mkv':
+                    file_paths.append(file_path)
         file_paths = list(dict.fromkeys(file_paths))
 
         for file_path in file_paths:
