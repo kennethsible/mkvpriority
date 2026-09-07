@@ -98,10 +98,9 @@ sdh = -10000       # Deaf / Hard of Hearing
 subtitle_mode = ["default"]
 
 [subtitle_profiles.dialogue.filters]
-honorific = 5      # Dialogue + Honorifics
-full = 3           # Dialogue + On-Screen Text
-dialog = 2         # Spoken Content
-official = 1       # Localized Subtitles
+honorific = 3      # Dialogue + Honorifics
+full = 2           # Dialogue + On-Screen Text
+dialog = 1         # Spoken Content
 sign = -5          # On-Screen Text
 song = -5          # Lyrics / Karaoke
 commentar = -10000 # Commentary Track

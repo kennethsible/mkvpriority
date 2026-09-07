@@ -386,19 +386,18 @@ def verify_mkvtoolnix_install() -> None:
 
 
 def count_unique_dialogue(
-    file_path: Path, subtitle_track: Track, threshold_limit: int | None = None
+    file_path: Path, track_index: int, threshold_limit: int | None = None
 ) -> int:
-    track_index = subtitle_track.index
-    track_name = f' ({subtitle_track.name})' if subtitle_track.name else ''
-    ffmpeg_args = shlex.split(
-        f'ffmpeg -nostdin -v quiet -i "{file_path}" -map 0:{track_index} -c:s ass -f ass -'
-    )
-    mkvpriority_logger.info(f'counting subtitle dialogue for Track {track_index}' + track_name)
-
     unique_dialogue: set[str] = set()
     try:
         with subprocess.Popen(
-            ffmpeg_args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1
+            shlex.split(
+                f'ffmpeg -nostdin -v quiet -i "{file_path}" -map 0:{track_index} -c:s ass -f ass -'
+            ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
         ) as process:
             if not process.stdout:
                 return 0
@@ -512,11 +511,11 @@ def extract_tracks(
 
         if database is not None:
             if database.restore(file_path, track):
-                if track.category == 'audio':
-                    audio_tracks.append(track)
-                elif track.category == 'subtitles':
-                    subtitle_tracks.append(track)
-            mkvpriority_logger.debug(pformat(track))
+                match track.category:
+                    case 'audio':
+                        audio_tracks.append(track)
+                    case 'subtitles':
+                        subtitle_tracks.append(track)
             continue
 
         match track.category:
@@ -542,7 +541,7 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
         else:
             for subtitle_track in tracks:
                 if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
-                    subtitle_track.size = count_unique_dialogue(file_path, subtitle_track)
+                    subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
                     max_track_size = max(subtitle_track.size, max_track_size)
 
     def score_track(track: Track, profile: Profile) -> int:
@@ -559,11 +558,11 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
                 if key in track.name.lower():
                     score += value
         if (
-            not track.name
-            and isinstance(profile, SubtitleProfile)
+            isinstance(profile, SubtitleProfile)
             and (profile.max_size_ratio is not None)
+            and max_track_size > 0
         ):
-            if track.size is not None and max_track_size > 0:
+            if track.size is not None:
                 if track.size / max_track_size > profile.max_size_ratio:
                     score -= 10000
             else:
@@ -573,7 +572,6 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
     for track in tracks:
         for profile_name, profile in group.profiles.items():
             track.scores[profile_name] = score_track(track, profile)
-        mkvpriority_logger.debug(pformat(track))
 
 
 def restore_tracks(
@@ -638,82 +636,89 @@ def process_tracks(
     def apply_profiles[T: Profile](
         tracks: list[Track], group: ProfileGroup[T], suppress_default: bool = False
     ) -> Track | None:
-        best_track = None
         if not tracks or not group.profiles:
             return None
 
-        track_flags: dict[int, list[str]] = {track.uid: [] for track in tracks}
+        default_track: Track | None = None
+        track_flags: dict[int, dict[str, str]] = {track.uid: {} for track in tracks}
+
         for profile_name, profile in group.profiles.items():
             track_modes = profile.mode
-            default_mode = 'default' in track_modes and not suppress_default
+            default_mode = 'default' in track_modes
             forced_mode = 'forced' in track_modes
             disabled_mode = 'disabled' in track_modes
             enabled_mode = 'enabled' in track_modes
 
-            tracks.sort(key=lambda track: track.scores.get(profile_name, 0), reverse=True)
-            best_track = tracks[0]
+            sorted_tracks = sorted(
+                tracks, key=lambda track: track.scores.get(profile_name, 0), reverse=True
+            )
+            best_track = sorted_tracks[0]
             best_score = best_track.scores.get(profile_name, 0)
 
+            if default_mode and best_score > 0:
+                default_track = best_track
+
             if best_score > 0:
-                if default_mode and not best_track.default:
-                    track_flags[best_track.uid].append('flag-default=1')
+                if default_mode and not suppress_default and not best_track.default:
+                    track_flags[best_track.uid]['flag-default'] = '1'
                     snapshot_track(best_track)
                     best_track.default = True
                 if forced_mode and not best_track.forced:
-                    track_flags[best_track.uid].append('flag-forced=1')
+                    track_flags[best_track.uid]['flag-forced'] = '1'
                     snapshot_track(best_track)
                     best_track.forced = True
                 if (disabled_mode or enabled_mode) and not best_track.enabled:
-                    track_flags[best_track.uid].append('flag-enabled=1')
+                    track_flags[best_track.uid]['flag-enabled'] = '1'
                     snapshot_track(best_track)
                     best_track.enabled = True
-                unwanted_tracks = tracks[1:]
+                unwanted_tracks = sorted_tracks[1:]
             else:
-                unwanted_tracks = tracks
+                unwanted_tracks = sorted_tracks
 
             for track in unwanted_tracks:
                 if not track.scores.get(profile_name, 0):
                     continue
-                if default_mode and track.default:
-                    track_flags[track.uid].append('flag-default=0')
+                if default_mode and not suppress_default and track.default:
+                    track_flags[track.uid]['flag-default'] = '0'
                     snapshot_track(track)
                     track.default = False
                 if forced_mode and track.forced:
-                    track_flags[track.uid].append('flag-forced=0')
+                    track_flags[track.uid]['flag-forced'] = '0'
                     snapshot_track(track)
                     track.forced = False
                 if disabled_mode and track.enabled:
-                    track_flags[track.uid].append('flag-enabled=0')
+                    track_flags[track.uid]['flag-enabled'] = '0'
                     snapshot_track(track)
                     track.enabled = False
                 if enabled_mode and not track.enabled:
-                    track_flags[track.uid].append('flag-enabled=1')
+                    track_flags[track.uid]['flag-enabled'] = '1'
                     snapshot_track(track)
                     track.enabled = True
 
         if suppress_default:
             for track in tracks:
                 if track.default:
-                    track_flags[track.uid].append('flag-default=0')
+                    track_flags[track.uid]['flag-default'] = '0'
                     snapshot_track(track)
                     track.default = False
 
         for track in tracks:
+            mkvpriority_logger.debug(pformat(track))
             if track_flags[track.uid]:
                 modify_args.extend(['--edit', f'track:={track.uid}'])
                 logger_args.extend(['--edit', f'track:={track.index}'])
-                for flag in track_flags[track.uid]:
-                    modify_args.extend(['--set', flag])
-                    logger_args.extend(['--set', flag])
+                for flag, value in track_flags[track.uid].items():
+                    modify_args.extend(['--set', f'{flag}={value}'])
+                    logger_args.extend(['--set', f'{flag}={value}'])
 
-        return best_track
+        return default_track or tracks[0]
 
     score_tracks(file_path, audio_tracks, config.audio_group)
-    best_audio_track = apply_profiles(audio_tracks, config.audio_group)
+    default_audio_track = apply_profiles(audio_tracks, config.audio_group)
 
-    native_languages = config.subtitle_group.native_languages
     suppress_default = (
-        best_audio_track is not None and best_audio_track.language in native_languages
+        default_audio_track is not None
+        and default_audio_track.language in config.subtitle_group.native_languages
     )
 
     score_tracks(file_path, subtitle_tracks, config.subtitle_group)
