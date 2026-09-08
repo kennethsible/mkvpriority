@@ -75,7 +75,7 @@ class Multiplexer(Extension):
 
         if strip_tracks:
             ordered_indices.extend(f'0:{track.index}' for track in sorted_tracks)
-            stripped_indices.extend(f'!{track.index}' for track in unwanted_tracks)
+            stripped_indices.extend(str(track.index) for track in sorted_tracks)
         elif reorder_tracks:
             ordered_indices.extend(f'0:{track.index}' for track in sorted_tracks + unwanted_tracks)
 
@@ -102,6 +102,9 @@ class Multiplexer(Extension):
         subtitle_order, subtitle_strip = self.partition_tracks(
             subtitle_tracks, remux_subtitle_profile, strip_tracks, reorder_tracks
         )
+
+        audio_strip = audio_strip if len(audio_strip) != len(audio_tracks) else []
+        subtitle_strip = subtitle_strip if len(subtitle_strip) != len(subtitle_tracks) else []
 
         track_order.extend(audio_order)
         track_order.extend(subtitle_order)

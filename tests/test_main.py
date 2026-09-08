@@ -314,7 +314,7 @@ def test_score_tracks() -> None:
         }
         assert track_scores == {
             ('Full Subtitles [FanSub]', 'eng'): 132,
-            ('Signs & Songs [FanSub]', 'eng'): 120,
+            ('Signs & Songs [FanSub]', 'eng'): -70,
             ('Dialogue [Blu-ray]', 'eng'): 121,
             ('Dialogue [Blu-ray]', 'ger'): 21,
         }

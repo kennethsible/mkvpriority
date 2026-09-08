@@ -119,6 +119,7 @@ require_filter_match = true
 [subtitle_profiles.signs_songs.filters]
 sign = 1           # On-Screen Text
 song = 1           # Lyrics / Karaoke
+forced = 1         # Foreign Dialogue
 commentar = -10000 # Commentary Track
 sdh = -10000       # Deaf / Hard of Hearing
 
@@ -126,10 +127,11 @@ sdh = -10000       # Deaf / Hard of Hearing
 subtitle_mode = ["default"]
 
 [subtitle_profiles.dialogue.filters]
-honorific = 3      # Dialogue + Honorifics
+honorific = 5      # Dialogue + Honorifics
 full = 2           # Dialogue + On-Screen Text
 dialog = 1         # Spoken Content
-sign = -5          # On-Screen Text
-song = -5          # Lyrics / Karaoke
+sign = -100        # On-Screen Text
+song = -100        # Lyrics / Karaoke
+forced = -100      # Foreign Dialogue
 commentar = -10000 # Commentary Track
 sdh = -10000       # Deaf / Hard of Hearing
