@@ -603,18 +603,26 @@ def extract_tracks(
 
 def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: ProfileGroup[T]) -> None:
     max_track_size = 0
-    if (
-        isinstance(group, SubtitleProfileGroup)
-        and any(profile.max_size_ratio is not None for profile in group.profiles.values())
-        and any(not subtitle_track.name for subtitle_track in tracks)
+    if isinstance(group, SubtitleProfileGroup) and any(
+        profile.max_size_ratio is not None for profile in group.profiles.values()
     ):
-        if shutil.which('ffmpeg') is None:
-            mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
-        else:
-            for subtitle_track in tracks:
-                if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
-                    subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
-                    max_track_size = max(subtitle_track.size, max_track_size)
+        eligible_tracks: list[Track] = []
+        for track in tracks:
+            default_lang_score = -10000 if group.penalize_unscored_languages else 0
+            if group.languages.get(track.language, default_lang_score) > 0:
+                eligible_tracks.append(track)
+
+        if eligible_tracks and (
+            any(not track.name for track in eligible_tracks)
+            or len({track.name for track in eligible_tracks}) < len(eligible_tracks)
+        ):
+            if shutil.which('ffmpeg') is None:
+                mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
+            else:
+                for subtitle_track in eligible_tracks:
+                    if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
+                        subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
+                        max_track_size = max(subtitle_track.size, max_track_size)
 
     def score_track(track: Track, profile: Profile) -> int:
         score = 0
