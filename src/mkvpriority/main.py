@@ -914,7 +914,8 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         if not (active_config := configs.get(label) or configs.get('untagged')):
             mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
-        if not (matched_paths := glob.glob(input_path.replace('[', '[[]'), recursive=True)):
+        escaped_pattern = input_path.replace('[', '[[]')
+        if not (matched_paths := sorted(glob.glob(escaped_pattern, recursive=True))):
             mkvpriority_logger.warning(dry_run + f"skipping (not found) '{input_path}'")
             continue
 
@@ -923,7 +924,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             file_path = Path(matched_path)
             if file_path.is_dir():
                 mkvpriority_logger.info(dry_run + f"scanning '{file_path}'")
-                file_paths.extend(file_path.rglob('*.mkv'))
+                file_paths.extend(sorted(file_path.rglob('*.mkv')))
             elif file_path.is_file():
                 if file_path.suffix.lower() == '.mkv':
                     file_paths.append(file_path)
