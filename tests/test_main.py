@@ -473,6 +473,37 @@ def test_detect_forced() -> None:
         }
 
 
+def test_size_ratio_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        config = mkvpriority.Config.from_file(Path('config.toml'))
+        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+
+        unique_dialogue = {4: 1000, 5: 50}
+        monkeypatch.setattr(
+            'mkvpriority.main.count_unique_dialogue',
+            lambda _, index: unique_dialogue.get(index, 0),
+        )
+        monkeypatch.setattr('shutil.which', lambda _: '/usr/bin/ffmpeg')
+
+        subtitle_tracks[2].name = ''
+        tracks = [subtitle_tracks[0], subtitle_tracks[2]]
+        mkvpriority.score_tracks(file_path, tracks, config.subtitle_group)
+        assert tracks[0].size is None
+
+        subtitle_tracks[0].name = 'English Subtitles'
+        subtitle_tracks[1].name = 'English Subtitles'
+        tracks = [subtitle_tracks[0], subtitle_tracks[1]]
+        mkvpriority.score_tracks(file_path, tracks, config.subtitle_group)
+
+        assert tracks[0].size == 1000 and tracks[0].scores['signs_songs'] < 0
+        assert tracks[1].size == 50 and tracks[1].scores['signs_songs'] > 0
+
+
 def test_restore_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)

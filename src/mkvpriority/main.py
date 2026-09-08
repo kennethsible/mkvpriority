@@ -603,28 +603,8 @@ def extract_tracks(
 
 def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: ProfileGroup[T]) -> None:
     max_track_size = 0
-    if isinstance(group, SubtitleProfileGroup) and any(
-        profile.max_size_ratio is not None for profile in group.profiles.values()
-    ):
-        eligible_tracks: list[Track] = []
-        for track in tracks:
-            default_lang_score = -10000 if group.penalize_unscored_languages else 0
-            if group.languages.get(track.language, default_lang_score) > 0:
-                eligible_tracks.append(track)
 
-        if eligible_tracks and (
-            any(not track.name for track in eligible_tracks)
-            or len({track.name for track in eligible_tracks}) < len(eligible_tracks)
-        ):
-            if shutil.which('ffmpeg') is None:
-                mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
-            else:
-                for subtitle_track in eligible_tracks:
-                    if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
-                        subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
-                        max_track_size = max(subtitle_track.size, max_track_size)
-
-    def score_track(track: Track, profile: Profile) -> int:
+    def compute_score(track: Track, profile: Profile) -> int:
         score = 0
         default_lang_score = -10000 if group.penalize_unscored_languages else 0
         score += group.languages.get(track.language, default_lang_score)
@@ -635,7 +615,7 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
         filter_matched = False
         if track.name:
             for key, value in profile.filters.items():
-                if key in track.name.lower():
+                if key.lower() in track.name.lower():
                     score += value
                     filter_matched = True
 
@@ -659,7 +639,42 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
 
     for track in tracks:
         for profile_name, profile in group.profiles.items():
-            track.scores[profile_name] = score_track(track, profile)
+            track.scores[profile_name] = compute_score(track, profile)
+
+    if isinstance(group, SubtitleProfileGroup) and any(
+        profile.max_size_ratio is not None for profile in group.profiles.values()
+    ):
+        candidate_tracks = [
+            track for track in tracks if any(score > 0 for score in track.scores.values())
+        ]
+        is_ambiguous = len(candidate_tracks) > 1 and (
+            any(not track.name for track in candidate_tracks)
+            or len({track.name for track in candidate_tracks}) < len(candidate_tracks)
+        )
+
+        if not is_ambiguous and len(candidate_tracks) > 1:
+            for profile_name, profile in group.profiles.items():
+                if profile.max_size_ratio is None:
+                    continue
+                track_scores = [track.scores[profile_name] for track in candidate_tracks]
+                highest_score = max(track_scores)
+                if highest_score > 0 and track_scores.count(highest_score) > 1:
+                    is_ambiguous = True
+                    break
+
+        if is_ambiguous:
+            if shutil.which('ffmpeg') is None:
+                mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
+            else:
+                for subtitle_track in candidate_tracks:
+                    if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
+                        subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
+                        max_track_size = max(subtitle_track.size, max_track_size)
+
+                if max_track_size > 0:
+                    for track in tracks:
+                        for profile_name, profile in group.profiles.items():
+                            track.scores[profile_name] = compute_score(track, profile)
 
 
 def restore_tracks(
