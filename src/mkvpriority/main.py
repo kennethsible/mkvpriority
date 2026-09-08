@@ -666,6 +666,11 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
             if shutil.which('ffmpeg') is None:
                 mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
             else:
+                ambiguous_tracks = [
+                    f'Track {track.index} ({track.name})' if track.name else f'Track {track.index}'
+                    for track in candidate_tracks
+                ]
+                mkvpriority_logger.info(f'analyzing subtitle sizes for {ambiguous_tracks}')
                 for subtitle_track in candidate_tracks:
                     if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
                         subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
