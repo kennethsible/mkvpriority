@@ -9,11 +9,11 @@ import json
 import logging
 import os
 import re
-import shlex
 import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import tomllib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -32,6 +32,7 @@ OVERRIDE_PATTERN = re.compile(r'\{[^}]*\}')
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
+mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
@@ -452,55 +453,83 @@ class MissingCommandError(Exception):
 
 
 def verify_mkvtoolnix_install() -> None:
-    for command in ('mkvpropedit', 'mkvmerge'):
+    for command in ('mkvpropedit', 'mkvextract', 'mkvmerge'):
         if shutil.which(command) is None:
             raise MissingCommandError(f"'{command}' not found in PATH")
 
 
 def count_unique_dialogue(
-    file_path: Path, track_index: int, threshold_limit: int | None = None
-) -> int:
-    unique_dialogue: set[str] = set()
-    try:
-        with subprocess.Popen(
-            shlex.split(
-                f'ffmpeg -nostdin -v quiet -i "{file_path}" -map 0:{track_index} -c:s ass -f ass -'
-            ),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        ) as process:
-            if not process.stdout:
-                return 0
-            for line in process.stdout:
-                if not line.startswith('Dialogue:'):
-                    continue
-                parts = line.split(',', 9)
-                if len(parts) <= 9:
-                    continue
-                dialogue = parts[9]
-                if '{' in dialogue:
-                    if (
-                        DRAWING_PATTERN.search(dialogue)
-                        or POSITION_PATTERN.search(dialogue)
-                        or ROTATION_PATTERN.search(dialogue)
-                        or KARAOKE_PATTERN.search(dialogue)
+    file_path: Path, tracks: list[Track], dry_run: bool = False
+) -> dict[int, int]:
+    ambiguous_tracks = [
+        f'Track {track.index} ({track.name})' if track.name else f'Track {track.index}'
+        for track in tracks
+    ]
+    mkvextract_logger.info(
+        ('[DRY RUN] ' if dry_run else '') + f'analyzing subtitle sizes for {ambiguous_tracks}'
+    )
+
+    dialogue_counts: dict[int, int] = {track.index: 0 for track in tracks}
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        extract_args = ['mkvextract', 'tracks', str(file_path)]
+
+        def codec_ext(codec: str) -> str:
+            return 'ass' if codec in ('S_TEXT/ASS', 'S_TEXT/SSA') else 'srt'
+
+        temp_paths = {
+            track.index: temp_dir_path / f'{track.index}.{codec_ext(track.codec)}'
+            for track in tracks
+        }
+        extract_args.extend(f'{index}:{path}' for index, path in temp_paths.items())
+
+        try:
+            result = subprocess.run(extract_args, capture_output=True, text=True, check=True)
+            if result.stdout.strip():
+                mkvextract_logger.debug(result.stdout.strip())
+        except (subprocess.SubprocessError, OSError) as e:
+            mkvextract_logger.error(str(e).strip())
+            return dialogue_counts
+
+        for index, temp_path in temp_paths.items():
+            if not temp_path.exists():
+                continue
+            unique_dialogue: set[str] = set()
+            with temp_path.open(encoding='utf-8', errors='replace') as temp_file:
+                is_srt = any(
+                    track.codec == 'S_TEXT/UTF8' for track in tracks if track.index == index
+                )
+                for line in temp_file:
+                    if not (stripped_line := line.strip()):
+                        continue
+                    if is_srt:
+                        if stripped_line.isdigit() or '-->' in stripped_line:
+                            continue
+                        dialogue = stripped_line
+                    else:
+                        if not stripped_line.startswith('Dialogue:'):
+                            continue
+                        dialogue = stripped_line.split(',', 9)[-1]
+                    if any(
+                        pattern.search(dialogue)
+                        for pattern in (
+                            DRAWING_PATTERN,
+                            POSITION_PATTERN,
+                            ROTATION_PATTERN,
+                            KARAOKE_PATTERN,
+                        )
                     ):
                         continue
-                    stripped_dialogue = OVERRIDE_PATTERN.sub('', dialogue).strip()
-                else:
-                    stripped_dialogue = dialogue.strip()
-                if stripped_dialogue:
-                    unique_dialogue.add(stripped_dialogue)
-                    if threshold_limit and len(unique_dialogue) >= threshold_limit:
-                        process.terminate()
-                        break
-            process.wait()
-    except (subprocess.SubprocessError, OSError) as e:
-        mkvpriority_logger.error(str(e).strip())
-        return 0
-    return len(unique_dialogue)
+                    stripped_dialogue = (
+                        OVERRIDE_PATTERN.sub('', dialogue).strip()
+                        if '{' in dialogue
+                        else dialogue.strip()
+                    )
+                    if stripped_dialogue:
+                        unique_dialogue.add(stripped_dialogue)
+            dialogue_counts[index] = len(unique_dialogue)
+
+    return dialogue_counts
 
 
 def identify_tracks(file_path: Path) -> Any:
@@ -601,7 +630,9 @@ def extract_tracks(
     return video_tracks, audio_tracks, subtitle_tracks
 
 
-def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: ProfileGroup[T]) -> None:
+def score_tracks[T: Profile](
+    file_path: Path, tracks: list[Track], group: ProfileGroup[T], dry_run: bool = False
+) -> None:
     max_track_size = 0
 
     def compute_score(track: Track, profile: Profile) -> int:
@@ -645,7 +676,10 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
         profile.max_size_ratio is not None for profile in group.profiles.values()
     ):
         candidate_tracks = [
-            track for track in tracks if any(score > 0 for score in track.scores.values())
+            track
+            for track in tracks
+            if any(score > 0 for score in track.scores.values())
+            and track.codec in ('S_TEXT/ASS', 'S_TEXT/SSA', 'S_TEXT/UTF8')
         ]
         is_ambiguous = len(candidate_tracks) > 1 and (
             any(not track.name for track in candidate_tracks)
@@ -653,8 +687,8 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
         )
 
         if not is_ambiguous and len(candidate_tracks) > 1:
-            for profile_name, profile in group.profiles.items():
-                if profile.max_size_ratio is None:
+            for profile_name, group_profile in group.profiles.items():
+                if group_profile.max_size_ratio is None:
                     continue
                 track_scores = [track.scores[profile_name] for track in candidate_tracks]
                 highest_score = max(track_scores)
@@ -663,23 +697,15 @@ def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: Profil
                     break
 
         if is_ambiguous:
-            if shutil.which('ffmpeg') is None:
-                mkvpriority_logger.warning('cannot apply max_size_ratio; ffmpeg not in PATH')
-            else:
-                ambiguous_tracks = [
-                    f'Track {track.index} ({track.name})' if track.name else f'Track {track.index}'
-                    for track in candidate_tracks
-                ]
-                mkvpriority_logger.info(f'analyzing subtitle sizes for {ambiguous_tracks}')
-                for subtitle_track in candidate_tracks:
-                    if subtitle_track.codec not in ('S_HDMV/PGS', 'S_VOBSUB'):
-                        subtitle_track.size = count_unique_dialogue(file_path, subtitle_track.index)
-                        max_track_size = max(subtitle_track.size, max_track_size)
+            dialogue_counts = count_unique_dialogue(file_path, candidate_tracks, dry_run)
+            for subtitle_track in candidate_tracks:
+                subtitle_track.size = dialogue_counts.get(subtitle_track.index, 0)
+                max_track_size = max(subtitle_track.size, max_track_size)
 
-                if max_track_size > 0:
-                    for track in tracks:
-                        for profile_name, profile in group.profiles.items():
-                            track.scores[profile_name] = compute_score(track, profile)
+            if max_track_size > 0:
+                for track in tracks:
+                    for profile_name, group_profile in group.profiles.items():
+                        track.scores[profile_name] = compute_score(track, group_profile)
 
 
 def restore_tracks(
@@ -829,7 +855,7 @@ def process_tracks(
 
         return default_track or tracks[0]
 
-    score_tracks(file_path, audio_tracks, config.audio_group)
+    score_tracks(file_path, audio_tracks, config.audio_group, dry_run)
     default_audio_track = apply_profiles(audio_tracks, config.audio_group)
 
     suppress_default = (
@@ -837,7 +863,7 @@ def process_tracks(
         and default_audio_track.language in config.subtitle_group.native_languages
     )
 
-    score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+    score_tracks(file_path, subtitle_tracks, config.subtitle_group, dry_run)
     apply_profiles(subtitle_tracks, config.subtitle_group, suppress_default=suppress_default)
 
     if len(modify_args) > 1:
@@ -898,7 +924,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     stream_filter.stream_level = main_level
     mkvpriority_logger.setLevel(logging.DEBUG)
-    for logger in (mkvpropedit_logger, mkvmerge_logger):
+    for logger in (mkvpropedit_logger, mkvextract_logger, mkvmerge_logger):
         logger.setLevel(tool_level)
 
     configs: dict[str, Config] = {}

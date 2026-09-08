@@ -50,6 +50,9 @@ dev = [
     "types-requests",
 ]
 
+[project.optional-dependencies]
+subtitle_converter = ["pysubs2>=1.9.0"]
+
 [project.urls]
 homepage = "https://github.com/kennethsible/mkvpriority"
 source = "https://github.com/kennethsible/mkvpriority"

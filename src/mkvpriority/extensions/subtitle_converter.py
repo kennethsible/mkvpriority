@@ -1,8 +1,9 @@
-import shutil
-import subprocess
 import tomllib
 from pathlib import Path
 from typing import Any
+
+import pysubs2
+from pysubs2.exceptions import Pysubs2Error
 
 from mkvpriority import Config, Extension, Track
 
@@ -72,21 +73,14 @@ class SubtitleConverter(Extension):
         return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
 
     def convert_subtitles(self, source_path: Path, target_path: Path) -> bool:
-        if shutil.which('ffmpeg') is None:
-            self.extension_logger.warning('cannot convert subtitles (ffmpeg not in PATH)')
-            return False
         self.extension_logger.info(f"converting extracted subtitles to '{target_path.name}'")
         try:
-            result = subprocess.run(
-                ['ffmpeg', '-nostdin', '-y', '-i', str(source_path), str(target_path)],
-                capture_output=True,
-                check=True,
-                text=True,
-            )
-            if result.stderr:
-                self.extension_logger.debug(result.stderr.strip())
+            subtitle_file = pysubs2.load(str(source_path))
+            subtitle_file.info['PlayResX'] = '1920'
+            subtitle_file.info['PlayResY'] = '1080'
+            subtitle_file.save(str(target_path))
             return True
-        except subprocess.CalledProcessError as e:
-            self.extension_logger.error((e.stderr or str(e)).strip())
+        except (OSError, UnicodeError, Pysubs2Error) as e:
+            self.extension_logger.error(str(e))
             target_path.unlink(missing_ok=True)
         return False

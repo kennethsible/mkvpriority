@@ -14,7 +14,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN apk add --no-cache mkvtoolnix ffmpeg
+RUN apk add --no-cache mkvtoolnix
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --chmod=755 <<-"EOF" /app/.venv/bin/mkvpriority
