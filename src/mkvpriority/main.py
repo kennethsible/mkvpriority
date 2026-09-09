@@ -682,17 +682,28 @@ def score_tracks[T: Profile](
             and track.codec in ('S_TEXT/ASS', 'S_TEXT/SSA', 'S_TEXT/UTF8')
         ]
         is_ambiguous = len(candidate_tracks) > 1 and (
-            any(not track.name for track in candidate_tracks)
-            or len({track.name for track in candidate_tracks}) < len(candidate_tracks)
+            all(not track.name for track in candidate_tracks)
         )
 
         if not is_ambiguous and len(candidate_tracks) > 1:
+            profile_winners: dict[str, Track] = {}
+            for profile_name, group_profile in group.profiles.items():
+                best_track = max(
+                    candidate_tracks, key=lambda track: track.scores.get(profile_name, 0)
+                )
+                if best_track.scores.get(profile_name, 0) > 0:
+                    profile_winners[profile_name] = best_track
+
             for profile_name, group_profile in group.profiles.items():
                 if group_profile.max_size_ratio is None:
                     continue
-                track_scores = [track.scores[profile_name] for track in candidate_tracks]
-                highest_score = max(track_scores)
-                if highest_score > 0 and track_scores.count(highest_score) > 1:
+                if (target_track := profile_winners.get(profile_name)) is None:
+                    continue
+                if any(
+                    target_track == other_track
+                    for other_name, other_track in profile_winners.items()
+                    if profile_name != other_name
+                ):
                     is_ambiguous = True
                     break
 
@@ -874,7 +885,7 @@ def process_tracks(
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
-    if database is not None and orig_tracks:
+    if database is not None:
         database.insert(file_path, list(orig_tracks.values()))
 
 

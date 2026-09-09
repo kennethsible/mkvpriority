@@ -482,22 +482,37 @@ def test_size_ratio_fallback() -> None:
 
         config = mkvpriority.Config.from_file(Path('config.toml'))
         config.subtitle_group.profiles['signs_songs'].max_size_ratio = 0.15
+
         *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
-
         subtitle_tracks[2].name = ''
-        tracks = [subtitle_tracks[0], subtitle_tracks[2]]
-        mkvpriority.score_tracks(file_path, tracks, config.subtitle_group)
-        assert tracks[0].size is None
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+        assert all(track.size is None for track in subtitle_tracks)
 
+        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        for track in subtitle_tracks:
+            track.name = ''
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+        assert subtitle_tracks[0].size is not None and subtitle_tracks[0].scores['signs_songs'] < 0
+        assert subtitle_tracks[1].size is not None and subtitle_tracks[1].scores['signs_songs'] > 0
+        assert subtitle_tracks[2].size is None
+        assert subtitle_tracks[3].size is not None and subtitle_tracks[3].scores['signs_songs'] > 0
+
+        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        subtitle_tracks[1].name = 'English [Forced]'
+        subtitle_tracks[3].name = 'English [Forced]'
+        subtitle_tracks[3].codec = 'S_TEXT/ASS'
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+        assert subtitle_tracks[1].size is None and subtitle_tracks[3].size is None
+
+        *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         subtitle_tracks[0].name = 'English Subtitles'
         subtitle_tracks[1].name = 'English Subtitles'
-        tracks = [subtitle_tracks[0], subtitle_tracks[1]]
-        mkvpriority.score_tracks(file_path, tracks, config.subtitle_group)
-
-        assert tracks[0].size is not None and tracks[0].scores['signs_songs'] < 0
-        assert tracks[1].size is not None and tracks[1].scores['signs_songs'] > 0
+        config.subtitle_group.profiles['signs_songs'].require_filter_match = False
+        mkvpriority.score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+        assert subtitle_tracks[0].size is not None and subtitle_tracks[0].scores['signs_songs'] < 0
+        assert subtitle_tracks[1].size is not None and subtitle_tracks[1].scores['signs_songs'] > 0
         assert (
-            tracks[1].size / tracks[0].size
+            subtitle_tracks[1].size / subtitle_tracks[0].size
             <= config.subtitle_group.profiles['signs_songs'].max_size_ratio
         )
 
