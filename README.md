@@ -246,7 +246,7 @@ You can easily write your own post-processing scripts to handle custom logic.
 [`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [--override KEY=VALUE] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
@@ -256,6 +256,8 @@ options:
   -a, --archive DB_PATH
   -i, --include MODULE_NAME
                         include extension module
+  --override, -o KEY=VALUE
+                        override config settings
   -v, --verbose         inspect track metadata
   -x, --debug           show mkvtoolnix output
   -q, --quiet           suppress logging output

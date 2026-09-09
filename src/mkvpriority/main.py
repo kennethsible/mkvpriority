@@ -19,7 +19,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from pprint import pformat
 from tempfile import NamedTemporaryFile
 from typing import Any, TypeVar
 
@@ -187,14 +186,14 @@ class ConfigError(Exception):
     pass
 
 
-def validate_config_schema(toml_file: dict[str, Any], toml_path: Path) -> None:
+def validate_config_schema(toml_dict: dict[str, Any], toml_path: Path) -> None:
     profile_sections = ('audio_profiles', 'subtitle_profiles')
-    if missing_sections := [section for section in profile_sections if section not in toml_file]:
+    if missing_sections := [section for section in profile_sections if section not in toml_dict]:
         missing_sections_str = ' and '.join(f'[{section}]' for section in missing_sections)
         raise ConfigError(f"missing {missing_sections_str} in '{toml_path}'")
 
     for section_name in profile_sections:
-        section = toml_file[section_name]
+        section = toml_dict[section_name]
         if not isinstance(section, dict):
             raise ConfigError(f"'[{section_name}]' in '{toml_path}' must be a table")
 
@@ -243,20 +242,44 @@ def validate_config_schema(toml_file: dict[str, Any], toml_path: Path) -> None:
                 raise ConfigError(f"'filters' in '[{section_name}.{profile_name}]' must be a table")
 
 
+def apply_override(toml_dict: dict[str, Any], override: str) -> None:
+    if '=' not in override:
+        raise ValueError(f"invalid override format '{override}'")
+
+    path, value_str = override.split('=', 1)
+    keys = [key.strip() for key in path.strip().split('.')]
+    try:
+        value = json.loads(value_str.strip())
+    except json.JSONDecodeError:
+        value = value_str.strip()
+
+    target = toml_dict
+    for key in keys[:-1]:
+        if key not in target or not isinstance(target[key], dict):
+            raise ConfigError(f"unknown section '{key}' in override '{override}'")
+        target = target[key]
+    target[keys[-1]] = value
+
+
 @dataclass
 class Config:
     toml_path: str
-    label: str
+    toml_label: str
     audio_group: AudioProfileGroup = field(default_factory=AudioProfileGroup)
     subtitle_group: SubtitleProfileGroup = field(default_factory=SubtitleProfileGroup)
 
     @classmethod
-    def from_file(cls, toml_path: Path, label: str = 'untagged') -> Config:
+    def from_file(
+        cls, toml_path: Path, toml_label: str = 'untagged', overrides: list[str] | None = None
+    ) -> Config:
         with open(toml_path, 'rb') as f:
-            toml_file = tomllib.load(f)
-        validate_config_schema(toml_file, toml_path)
+            toml_dict = tomllib.load(f)
+        if overrides is not None:
+            for override in overrides:
+                apply_override(toml_dict, override)
+        validate_config_schema(toml_dict, toml_path)
 
-        audio_section = toml_file.get('audio_profiles', {})
+        audio_section = toml_dict.get('audio_profiles', {})
         audio_global = audio_section.get('global', {})
         audio_profiles = {
             key: AudioProfile(
@@ -276,7 +299,7 @@ class Config:
             channels=audio_global.get('channels', {}),
         )
 
-        subtitle_section = toml_file.get('subtitle_profiles', {})
+        subtitle_section = toml_dict.get('subtitle_profiles', {})
         subtitle_global = subtitle_section.get('global', {})
         subtitle_profiles = {
             key: SubtitleProfile(
@@ -299,7 +322,7 @@ class Config:
 
         return cls(
             toml_path=str(toml_path),
-            label=label,
+            toml_label=toml_label,
             audio_group=audio_group,
             subtitle_group=subtitle_group,
         )
@@ -855,7 +878,7 @@ def process_tracks(
                     track_flags[track.uid].pop('flag-forced', None)
 
         for track in tracks:
-            mkvpriority_logger.debug(pformat(track))
+            mkvpriority_logger.debug(track)
             if track_flags[track.uid]:
                 track_name = f' ({track.name})' if track.name else ''
                 modify_args.extend(['--edit', f'track:={track.uid}'])
@@ -910,7 +933,20 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser.add_argument('-c', '--config', action='append', default=[], metavar='TOML_PATH[::TAG]')
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
     parser.add_argument(
-        '-i', '--include', action='append', metavar='MODULE_NAME', help='include extension module'
+        '-i',
+        '--include',
+        action='append',
+        default=[],
+        metavar='MODULE_NAME',
+        help='include extension module',
+    )
+    parser.add_argument(
+        '--override',
+        '-o',
+        action='append',
+        default=[],
+        metavar='KEY=VALUE',
+        help='override config settings',
     )
     parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
     parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix output')
@@ -943,7 +979,10 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         label = 'untagged'
         if '::' in toml_path:
             toml_path, label = toml_path.rsplit('::', 1)
-        config = Config.from_file(Path(toml_path), label)
+        try:
+            config = Config.from_file(Path(toml_path), label, args.override)
+        except (ConfigError, ValueError) as e:
+            parser.error(str(e))
         if orig_lang and 'org' in config.audio_group.languages:
             config.audio_group.languages[orig_lang] = config.audio_group.languages['org']
         if orig_lang and 'org' in config.subtitle_group.languages:
@@ -966,17 +1005,17 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     extensions: list[Extension] = []
     if args.include:
         setup_extension_paths()
-        for module_name in args.include:
-            if extension := load_extension(module_name):
-                extension.extension_logger.setLevel(tool_level)
-                extensions.append(extension)
+    for module_name in args.include:
+        if extension := load_extension(module_name):
+            extension.extension_logger.setLevel(tool_level)
+            extensions.append(extension)
 
     dry_run = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
-        label = 'untagged'
+        toml_label = 'untagged'
         if '::' in input_path:
-            input_path, label = input_path.rsplit('::', 1)
-        if not (active_config := configs.get(label) or configs.get('untagged')):
+            input_path, toml_label = input_path.rsplit('::', 1)
+        if not (active_config := configs.get(toml_label) or configs.get('untagged')):
             mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
             continue
         escaped_pattern = input_path.replace('[', '[[]')
@@ -1011,8 +1050,8 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 mkvpriority_logger.info(dry_run + f"restoring '{file_path}'")
                 restore_file(file_path, database, args.dry_run)
             else:
-                toml_path, label = active_config.toml_path, active_config.label
-                config_tag = f'::{label}' if label != 'untagged' else ''
+                toml_path, toml_label = active_config.toml_path, active_config.toml_label
+                config_tag = f'::{toml_label}' if toml_label != 'untagged' else ''
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
                 mkvpriority_logger.info(dry_run + f"using config '{toml_path}{config_tag}'")
                 process_file(file_path, active_config, database, extensions, args.dry_run)

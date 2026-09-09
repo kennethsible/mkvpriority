@@ -372,6 +372,33 @@ def test_extension_modules() -> None:
         assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
 
 
+def test_config_overrides() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
+        assert {track.name for track in tracks if track.default} == {
+            'Stereo AAC (English)',
+            'Signs & Songs [FanSub]',
+        }
+        assert {track.name for track in tracks if track.forced} == set()
+
+        override = 'audio_profiles.global.codecs.A_FLAC=-10000'
+        mkvpriority.main.main(['-c', 'config.toml', '-o', override, str(file_path)])
+
+        video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        assert len(tracks := video_tracks + audio_tracks + subtitle_tracks) == 8
+        assert {track.name for track in tracks if track.default} == {
+            'Stereo AAC (Japanese)',
+            'Full Subtitles [FanSub]',
+        }
+        assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
+
+
 @pytest.mark.asyncio
 async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
     with patch('mkvpriority.main.main') as mock_main:
