@@ -951,8 +951,8 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         help='include extension module',
     )
     parser.add_argument(
-        '--override',
         '-o',
+        '--override',
         action='append',
         default=[],
         metavar='KEY=VALUE',

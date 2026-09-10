@@ -61,12 +61,28 @@ docker run --rm -u ${PUID}:${PGID} \
 
 ## TOML Configuration
 
-All behavior is configured through TOML files, which assign priority scores to track properties, such as languages and codecs, and define custom filters for track names, such as "signs" and "songs." To get started, check the example TOML file that has been provided for anime ([see here](https://github.com/kennethsible/mkvpriority/blob/main/config.toml)).
+All behavior is configured through TOML files, which assign priority scores to track properties, such as languages and codecs, and define custom filters for track names, such as "signs" and "songs." To get started, check the example TOML file that has been provided ([see here](https://github.com/kennethsible/mkvpriority/blob/main/config.toml)).
+
+### Override Config Rules
+
+You can override config rules dynamically without modifying your TOML files using the `--override` argument. This is designed to address edge cases with non-standard or mislabeled metadata. CLI overrides use dot notation (`section.key=value`) and automatically parse values (numbers, booleans, strings, etc.)
+
+```bash
+docker run --rm -u ${PUID}:${PGID} \
+  -v /path/to/media:/media \
+  -v /path/to/mkvpriority/config:/config \
+  ghcr.io/kennethsible/mkvpriority /media \
+  --override 'subtitle_profiles.global.languages.mul=70' \
+  --override 'subtitle_profiles.dialogue.filters.yellow=-10000'
+```
+
+> [!NOTE]
+> You can pass `--override` multiple times to chain adjustments together, which take precedence over all settings defined in your loaded TOML file. If a filter name contains spaces, remember to wrap the entire argument in quotes.
 
 ### Example: Subtitle Codecs
 
 ```toml
-[subtitle_codecs]
+[subtitle_profiles.global.codecs]
 "S_TEXT/ASS" = 30    # Stylized (Advanced SubStationAlpha)
 "S_TEXT/SSA" = 30    # Legacy Stylized (SubStationAlpha)
 "S_TEXT/UTF8" = 20   # Plain Text (SubRip/SRT)
@@ -158,10 +174,16 @@ MKVPriority supports user-defined extension modules for optional post-processing
 
 ### Example: Subtitle Extractor
 
-You can use the `subtitle_extractor` extension to extract embedded subtitles flagged as default or forced. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container. To use this feature, add `extract_embedded_subtitles = true` to the subtitle_profiles.global section of your config file and include this extension in your arguments.
+You can use the `subtitle_extractor` extension to extract embedded subtitles flagged as default or forced. This may result in smoother playback if your media player doesn't support certain subtitle formats. For example, if the player needs to transcode or burn in embedded subtitles, it must first demux and process the entire MKV container.
+
+```toml
+[subtitle_profiles.global]
+convert_external_subtitles = true
+```
 
 ```text
-Naming Format: {basename}.{language}.{default,forced}.{srt,ass}
+Format:  {filename}.{language}.{default,forced}.{srt,ass}
+Example: Princess Mononoke (1997).eng.default.ass
 ```
 
 > [!NOTE]
@@ -173,7 +195,6 @@ You can use the `subtitle_converter` extension to convert external subtitles bet
 
 ```toml
 [subtitle_profiles.global]
-convert_external_subtitles = true
 convert_target_format = "ass"
 convert_remove_source = false
 ```
@@ -239,14 +260,14 @@ You can easily write your own post-processing scripts to handle custom logic.
     ```
 
 > [!NOTE]
-> Check the `extensions` folder in the GitHub repository for example scripts. In addition to the **subtitle extractor**, there's also a **subtitle restyler** that lets you define style overrides in your config file, and there's a **multiplexer** that lets you strip tracks for languages not included in your config file (as well as reorder tracks by priority scores).
+> Check the `src/mkvpriority/extensions` folder in the GitHub repository for example modules ([see here](https://github.com/kennethsible/mkvpriority/tree/main/src/mkvpriority/extensions)).
 
 ## CLI Usage
 
-[`mkvtoolnix`](https://mkvtoolnix.download/) must be installed on your system for `mkvpropedit` (unless you are using the Docker image).
+[MKVToolNix](https://mkvtoolnix.download/) must be installed on your system unless you are using the Docker image.
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [--override KEY=VALUE] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-o KEY=VALUE] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
 
 positional arguments:
   INPUT_PATH[::TAG]     files or directories
@@ -256,7 +277,7 @@ options:
   -a, --archive DB_PATH
   -i, --include MODULE_NAME
                         include extension module
-  --override, -o KEY=VALUE
+  -o, --override KEY=VALUE
                         override config settings
   -v, --verbose         inspect track metadata
   -x, --debug           show mkvtoolnix output
