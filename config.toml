@@ -82,6 +82,12 @@ enm = 101 # English Modified (Anime-Specific)
 eng = 100 # English
 und = 0   # Undefined (Fallback)
 
+# --- Mislabeled Language Overrides ---
+# Here are some suggested CLI overrides for non-standard or mislabeled metadata:
+# -o 'subtitle_profiles.global.languages.jpn=<score>' # Mislabeled English as Japanese
+# -o 'subtitle_profiles.global.languages.mul=<score>' # Multiple-Language Signs & Songs
+# -o 'subtitle_profiles.global.languages.zxx=<score>' # Language-Agnostic Signs & Songs
+
 # === Subtitle Codec Preferences ===
 # Example: Prioritize subtitle tracks with higher stylability.
 [subtitle_profiles.global.codecs]
@@ -107,7 +113,7 @@ subtitle_mode = ["forced"]
 # - float = Heavily penalizes tracks exceeding this ratio (score: -10000)
 # - unset = Disables size-based filtering for subtitle tracks
 # Ensures only forced tracks (signs, songs, etc.) match this profile.
-max_size_ratio = 0.15
+max_size_ratio = 0.2
 
 # === Require Filter Match ===
 # Requires at least one filter keyword or size ratio match for this profile:
