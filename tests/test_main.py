@@ -551,9 +551,9 @@ def test_restore_tracks() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        with tempfile.NamedTemporaryFile() as archive_file:
+        archive_path = Path(temp_dir) / 'archive.db'
+        with mkvpriority.Database(str(archive_path)) as database:
             config = mkvpriority.Config.from_file(Path('config.toml'))
-            database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(file_path, config, database)
 
             video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
@@ -576,23 +576,24 @@ def test_restore_tracks() -> None:
 
 
 def test_prune_database() -> None:
-    with tempfile.NamedTemporaryFile() as archive_file:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            file_path = temp_path / 'dummy.mkv'
-            track_files = create_dummy(temp_path)
-            multiplex_dummy(file_path, track_files)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
 
+        archive_path = Path(temp_dir) / 'archive.db'
+        with mkvpriority.Database(str(archive_path)) as database:
             config = mkvpriority.Config.from_file(Path('config.toml'))
-            database = mkvpriority.Database(archive_file.name)
             mkvpriority.process_file(file_path, config, database)
 
             assert database.contains(file_path)
             database.prune()
             assert database.contains(file_path)
 
-        database.prune()
-        assert not database.contains(file_path)
+            file_path.unlink()
+            database.prune()
+            assert not database.contains(file_path)
 
 
 def test_extract_subtitles() -> None:

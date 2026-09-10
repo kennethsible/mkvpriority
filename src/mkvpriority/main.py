@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, TypeVar
+from typing import Any, Self, TypeVar
 
 POSITION_PATTERN = re.compile(r'\\(?:pos|move|org|i?clip|fade?|t)\s*\(|\\an[13-79]', re.IGNORECASE)
 ROTATION_PATTERN = re.compile(r'\\(fr[xyz]?|fa[xy])-?\d+\.?\d*', re.IGNORECASE)
@@ -469,6 +469,16 @@ class Database:
                 self.cur.execute('ALTER TABLE archive ADD COLUMN file_mtime INTEGER')
             self.cur.execute('INSERT INTO archive (schema_version) VALUES (1)')
         self.con.commit()
+
+    def close(self) -> None:
+        if hasattr(self, 'con') and self.con:
+            self.con.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        self.close()
 
 
 class MissingCommandError(Exception):
@@ -1055,6 +1065,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
                 mkvpriority_logger.info(dry_run + f"using config '{toml_path}{config_tag}'")
                 process_file(file_path, active_config, database, extensions, args.dry_run)
+
+    if database is not None:
+        database.close()
 
 
 if __name__ == '__main__':
