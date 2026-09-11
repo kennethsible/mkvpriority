@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from logging.handlers import RotatingFileHandler
@@ -328,78 +329,103 @@ class Config:
         )
 
 
+@dataclass(frozen=True)
+class ArchiveRecord:
+    segment_uid: str
+    file_path: Path
+    file_mtime: int
+
+
 class Database:
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
+
+    ARCHIVE_SCHEMA = """
+        segment_uid TEXT PRIMARY KEY,
+        file_path TEXT UNIQUE,
+        file_mtime INTEGER
+    """
+
+    METADATA_SCHEMA = """
+        segment_uid TEXT,
+        track_uid TEXT,
+        default_flag INTEGER,
+        forced_flag INTEGER,
+        enabled_flag INTEGER,
+        PRIMARY KEY (segment_uid, track_uid),
+        FOREIGN KEY(segment_uid) 
+            REFERENCES {archive_table}(segment_uid) 
+            ON DELETE CASCADE 
+            ON UPDATE CASCADE
+    """
 
     def __init__(self, db_path: str, dry_run: bool = False):
         self.con = sqlite3.connect(db_path)
         self.cur = self.con.cursor()
-        self.cur.execute('PRAGMA foreign_keys = ON')
-        self.cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS archive (
-                file_path TEXT PRIMARY KEY,
-                file_mtime INTEGER,
-                schema_version INTEGER
-            )
-            """
-        )
-        self.cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS metadata (
-                file_path TEXT,
-                track_uid TEXT,
-                default_flag INTEGER,
-                forced_flag INTEGER,
-                enabled_flag INTEGER,
-                PRIMARY KEY (file_path, track_uid),
-                FOREIGN KEY(file_path) REFERENCES archive(file_path) ON DELETE CASCADE
-            )
-            """
-        )
-        self.migrate(db_path)
         self.db_path = db_path
         self.dry_run = dry_run
 
-    def insert(self, file_path: Path, tracks: list[Track]) -> None:
-        dry_run = '[DRY RUN] ' if self.dry_run else ''
-        if self.contains(file_path):
-            mkvpriority_logger.info(dry_run + f"updating database '{self.db_path}'")
+        self._migrate(db_path)
+        self._initialize()
+
+        self.cur.execute('PRAGMA foreign_keys = ON')
+
+        self.cur.execute('SELECT COUNT(*) FROM schema_info')
+        if self.cur.fetchone()[0] == 0:
+            self.cur.execute(
+                'INSERT INTO schema_info (version) VALUES (?)', (int(self.SCHEMA_VERSION),)
+            )
+            self.con.commit()
+
+    def insert(self, segment_uid: str | None, file_path: Path, tracks: list[Track]) -> None:
+        file_path = file_path.resolve()
+        if not segment_uid:
+            segment_uid = ensure_segment_uid(file_path, self.dry_run)
+        segment_uid = normalize_segment_uid(segment_uid)
+        self.cur.execute('SELECT 1 FROM archive WHERE segment_uid = ?', (str(segment_uid),))
+        is_update = self.cur.fetchone() is not None
+
+        log_prefix = '[DRY RUN] ' if self.dry_run else ''
+        if is_update:
+            mkvpriority_logger.info(log_prefix + f"updating database '{self.db_path}'")
         else:
-            mkvpriority_logger.info(dry_run + f"inserting into database '{self.db_path}'")
+            mkvpriority_logger.info(log_prefix + f"inserting into database '{self.db_path}'")
         if self.dry_run:
             return
+
+        self.cur.execute(
+            'DELETE FROM archive WHERE file_path = ? AND segment_uid != ?',
+            (str(file_path), str(segment_uid)),
+        )
 
         file_mtime = file_path.stat().st_mtime
         self.cur.execute(
             """
             INSERT INTO archive (
-                file_path,
-                file_mtime,
-                schema_version
-            )
-            VALUES (?, ?, ?)
-            ON CONFLICT(file_path) DO UPDATE SET
-                file_mtime = excluded.file_mtime,
-                schema_version = excluded.schema_version
+                segment_uid, 
+                file_path, 
+                file_mtime
+            ) VALUES (?, ?, ?) 
+            ON CONFLICT(segment_uid) DO UPDATE SET
+                file_path = excluded.file_path,
+                file_mtime = excluded.file_mtime
             """,
-            (str(file_path), int(file_mtime), self.SCHEMA_VERSION),
+            (str(segment_uid), str(file_path), int(file_mtime)),
         )
+
         for track in tracks:
             self.cur.execute(
                 """
                 INSERT INTO metadata (
-                    file_path,
-                    track_uid,
-                    default_flag,
-                    forced_flag,
+                    segment_uid, 
+                    track_uid, 
+                    default_flag, 
+                    forced_flag, 
                     enabled_flag
-                )
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(file_path, track_uid) DO NOTHING
+                ) VALUES (?, ?, ?, ?, ?) 
+                ON CONFLICT(segment_uid, track_uid) DO NOTHING
                 """,
                 (
-                    str(file_path),
+                    str(segment_uid),
                     str(track.uid),
                     int(track.default),
                     int(track.forced),
@@ -408,32 +434,67 @@ class Database:
             )
         self.con.commit()
 
-    def delete(self, file_path: Path, print_entry: bool = False) -> None:
-        dry_run = '[DRY RUN] ' if self.dry_run else ''
-        if print_entry:
+    def delete(self, segment_uid: str, file_path: Path | None = None) -> None:
+        segment_uid = normalize_segment_uid(segment_uid)
+        log_prefix = '[DRY RUN] ' if self.dry_run else ''
+        if file_path:
+            file_path = file_path.resolve()
             mkvpriority_logger.info(
-                dry_run + f"deleting from database '{self.db_path}': '{file_path}'"
+                log_prefix + f"deleting from database '{self.db_path}': '{file_path}'"
             )
         else:
-            mkvpriority_logger.info(dry_run + f"deleting from database '{self.db_path}'")
+            mkvpriority_logger.info(log_prefix + f"deleting from database '{self.db_path}'")
+
         if not self.dry_run:
-            self.cur.execute('DELETE FROM archive WHERE file_path = ?', (str(file_path),))
+            self.cur.execute('DELETE FROM archive WHERE segment_uid = ?', (str(segment_uid),))
             self.con.commit()
 
-    def contains(self, file_path: Path, file_mtime: float | None = None) -> bool:
-        if file_mtime is None:
-            self.cur.execute('SELECT 1 FROM archive WHERE file_path = ?', (str(file_path),))
-        else:
-            self.cur.execute(
-                'SELECT 1 FROM archive WHERE file_path = ? AND file_mtime = ?',
-                (str(file_path), int(file_mtime)),
-            )
-        return self.cur.fetchone() is not None
-
-    def restore(self, file_path: Path, track: Track) -> bool:
+    def select_by_path(self, file_path: Path) -> ArchiveRecord | None:
+        file_path = file_path.resolve()
         self.cur.execute(
-            'SELECT default_flag, forced_flag, enabled_flag FROM metadata WHERE file_path = ? AND track_uid = ?',
-            (str(file_path), str(track.uid)),
+            """
+            SELECT segment_uid, file_mtime 
+            FROM archive 
+            WHERE file_path = ?
+            """,
+            (str(file_path),),
+        )
+        row = self.cur.fetchone()
+        if row is not None:
+            return ArchiveRecord(
+                segment_uid=str(row[0]), file_path=file_path, file_mtime=int(row[1])
+            )
+        return None
+
+    def select_by_uid(self, segment_uid: str) -> ArchiveRecord | None:
+        segment_uid = normalize_segment_uid(segment_uid)
+        self.cur.execute(
+            """
+            SELECT file_path, file_mtime 
+            FROM archive 
+            WHERE segment_uid = ?
+            """,
+            (str(segment_uid),),
+        )
+        row = self.cur.fetchone()
+        if row is not None:
+            return ArchiveRecord(
+                segment_uid=segment_uid, file_path=Path(row[0]), file_mtime=int(row[1])
+            )
+        return None
+
+    def restore(self, segment_uid: str | None, track: Track) -> bool:
+        if not segment_uid:
+            return False
+        segment_uid = normalize_segment_uid(segment_uid)
+        self.cur.execute(
+            """
+            SELECT default_flag, forced_flag, enabled_flag 
+            FROM metadata
+            WHERE segment_uid = ? 
+              AND track_uid = ?
+            """,
+            (str(segment_uid), str(track.uid)),
         )
         result = self.cur.fetchone()
         if result:
@@ -441,33 +502,125 @@ class Database:
         return result is not None
 
     def prune(self) -> None:
-        self.cur.execute('SELECT file_path FROM archive')
+        self.cur.execute('SELECT segment_uid, file_path FROM archive')
         for row in self.cur.fetchall():
-            file_path = row[0]
-            if file_path is None or Path(file_path).is_file():
-                continue
-            self.delete(file_path, print_entry=True)
+            segment_uid, file_path = row[0], Path(row[1])
+            if not file_path.is_file():
+                self.delete(segment_uid, file_path)
 
-    def migrate(self, db_path: str) -> None:
+    def _initialize(self, prefix: str = '') -> None:
+        archive_table, metadata_table = f'{prefix}archive', f'{prefix}metadata'
+        metadata_schema = self.METADATA_SCHEMA.format(archive_table=archive_table)
+        self.cur.execute(f'CREATE TABLE IF NOT EXISTS {archive_table} ({self.ARCHIVE_SCHEMA})')
+        self.cur.execute(f'CREATE TABLE IF NOT EXISTS {metadata_table} ({metadata_schema})')
+        self.cur.execute('CREATE TABLE IF NOT EXISTS schema_info (version INTEGER)')
+
+    def _migrate(self, db_path: str) -> None:
+        def table_exists(table: str) -> bool:
+            self.cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+            )
+            return self.cur.fetchone() is not None
+
         def column_exists(table: str, column: str) -> bool:
-            self.cur.execute(f'PRAGMA table_info({table})')
-            return column in [row[1] for row in self.cur.fetchall()]
+            self.cur.execute('SELECT name FROM pragma_table_info(?)', (table,))
+            return column in [row[0] for row in self.cur.fetchall()]
 
-        if not column_exists('archive', 'schema_version'):
-            self.cur.execute('ALTER TABLE archive ADD COLUMN schema_version INTEGER')
+        if not table_exists('archive'):
+            return
 
-        self.cur.execute('SELECT schema_version FROM archive ORDER BY schema_version DESC LIMIT 1')
-        row = self.cur.fetchone()
-        schema_version = row[0] if row and row[0] is not None else 0
+        schema_version = 0
+        if table_exists('schema_info'):
+            self.cur.execute('SELECT version FROM schema_info')
+            row = self.cur.fetchone()
+            schema_version = row[0] if row else 0
+        else:
+            if not column_exists('archive', 'schema_version'):
+                self.cur.execute('ALTER TABLE archive ADD COLUMN schema_version INTEGER')
+            self.cur.execute(
+                'SELECT schema_version FROM archive ORDER BY schema_version DESC LIMIT 1'
+            )
+            row = self.cur.fetchone()
+            schema_version = row[0] if row and row[0] is not None else 0
+
         if schema_version < self.SCHEMA_VERSION:
+            if self.dry_run:
+                raise RuntimeError(
+                    f'cannot perform migration to schema version {self.SCHEMA_VERSION} during DRY RUN'
+                )
             mkvpriority_logger.info(
-                f"migrating schema for '{db_path}' to version {self.SCHEMA_VERSION}"
+                f"migrating '{db_path}' to schema version {self.SCHEMA_VERSION}"
             )
 
         if schema_version < 1:
             if not column_exists('archive', 'file_mtime'):
                 self.cur.execute('ALTER TABLE archive ADD COLUMN file_mtime INTEGER')
-            self.cur.execute('INSERT INTO archive (schema_version) VALUES (1)')
+            self.cur.execute('UPDATE archive SET schema_version = 1')
+            schema_version = 1
+
+        if schema_version < 2:
+            self.cur.execute('SELECT file_path FROM archive')
+            for row in self.cur.fetchall():
+                file_path = row[0]
+                if file_path is None or Path(file_path).is_file():
+                    continue
+                self.cur.execute('DELETE FROM archive WHERE file_path = ?', (str(file_path),))
+
+            self._initialize(prefix='_')
+
+            self.cur.execute('SELECT file_path FROM archive WHERE file_path IS NOT NULL')
+            for row in self.cur.fetchall():
+                file_path = Path(row[0])
+
+                segment_uid, *_ = extract_tracks(file_path)
+                if not segment_uid:
+                    segment_uid = ensure_segment_uid(file_path, self.dry_run)
+
+                file_mtime = file_path.stat().st_mtime
+                self.cur.execute(
+                    """
+                    INSERT INTO _archive (
+                        segment_uid, 
+                        file_path, 
+                        file_mtime
+                    ) VALUES (?, ?, ?)
+                    """,
+                    (str(segment_uid), str(file_path.resolve()), int(file_mtime)),
+                )
+                self.cur.execute(
+                    """
+                    INSERT INTO _metadata (
+                        segment_uid, 
+                        track_uid, 
+                        default_flag, 
+                        forced_flag, 
+                        enabled_flag
+                    ) 
+                    SELECT 
+                        ?, 
+                        track_uid, 
+                        default_flag, 
+                        forced_flag, 
+                        enabled_flag
+                    FROM metadata
+                    WHERE file_path = ?
+                    """,
+                    (str(segment_uid), str(file_path)),
+                )
+
+            self.cur.execute('DROP TABLE IF EXISTS metadata')
+            self.cur.execute('DROP TABLE IF EXISTS archive')
+            self.cur.execute('ALTER TABLE _archive RENAME TO archive')
+            self.cur.execute('ALTER TABLE _metadata RENAME TO metadata')
+
+            self.cur.execute('PRAGMA foreign_key_check')
+            if errors := self.cur.fetchall():
+                raise sqlite3.IntegrityError(
+                    f'orphaned metadata records detected during migration: {errors}'
+                )
+
+            self.cur.execute('INSERT INTO schema_info (version) VALUES (2)')
+
         self.con.commit()
 
     def close(self) -> None:
@@ -491,6 +644,25 @@ def verify_mkvtoolnix_install() -> None:
             raise MissingCommandError(f"'{command}' not found in PATH")
 
 
+def normalize_segment_uid(segment_uid: str | None) -> str:
+    if not segment_uid:
+        return ''
+    segment_uid = segment_uid.strip().lower().replace('-', '')
+    return segment_uid.removeprefix('0x')
+
+
+def ensure_segment_uid(file_path: Path, dry_run: bool = False) -> str:
+    segment_uid = uuid.uuid4().hex
+    mkvpriority_logger.info(f"generating segment_uid for '{file_path}'")
+    arguments = [str(file_path), '--edit', 'info', '--set', f'segment-uid={segment_uid}']
+    if not dry_run:
+        try:
+            modify_tracks(arguments)
+        except subprocess.CalledProcessError as e:
+            mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
+    return segment_uid
+
+
 def count_unique_dialogue(
     file_path: Path, tracks: list[Track], dry_run: bool = False
 ) -> dict[int, int]:
@@ -498,14 +670,13 @@ def count_unique_dialogue(
         f'Track {track.index} ({track.name})' if track.name else f'Track {track.index}'
         for track in tracks
     ]
-    mkvextract_logger.info(
-        ('[DRY RUN] ' if dry_run else '') + f'analyzing subtitle sizes for {ambiguous_tracks}'
-    )
+    log_prefix = '[DRY RUN] ' if dry_run else ''
+    mkvextract_logger.info(log_prefix + f'analyzing subtitle sizes for {ambiguous_tracks}')
 
     dialogue_counts: dict[int, int] = {track.index: 0 for track in tracks}
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
-        extract_args = ['mkvextract', 'tracks', str(file_path)]
+        arguments = ['mkvextract', 'tracks', str(file_path)]
 
         def codec_ext(codec: str) -> str:
             return 'ass' if codec in ('S_TEXT/ASS', 'S_TEXT/SSA') else 'srt'
@@ -514,10 +685,10 @@ def count_unique_dialogue(
             track.index: temp_dir_path / f'{track.index}.{codec_ext(track.codec)}'
             for track in tracks
         }
-        extract_args.extend(f'{index}:{path}' for index, path in temp_paths.items())
+        arguments.extend(f'{index}:{path}' for index, path in temp_paths.items())
 
         try:
-            result = subprocess.run(extract_args, capture_output=True, text=True, check=True)
+            result = subprocess.run(arguments, capture_output=True, text=True, check=True)
             if result.stdout.strip():
                 mkvextract_logger.debug(result.stdout.strip())
         except (subprocess.SubprocessError, OSError) as e:
@@ -603,11 +774,7 @@ def modify_tracks(arguments: list[str]) -> None:
 
 def extract_tracks(
     file_path: Path, database: Database | None = None
-) -> tuple[list[Track], list[Track], list[Track]]:
-    video_tracks: list[Track] = []
-    audio_tracks: list[Track] = []
-    subtitle_tracks: list[Track] = []
-
+) -> tuple[str | None, list[Track], list[Track], list[Track]]:
     try:
         track_data = identify_tracks(file_path)
     except subprocess.CalledProcessError as e:
@@ -615,15 +782,24 @@ def extract_tracks(
             track_data = json.loads(e.stdout)
         except json.JSONDecodeError:
             mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
-            return video_tracks, audio_tracks, subtitle_tracks
-        for warning in track_data.get('warnings', []):
-            mkvmerge_logger.warning(warning)
-        for error in track_data.get('errors', []):
-            mkvmerge_logger.error(error)
-        return video_tracks, audio_tracks, subtitle_tracks
+        else:
+            for warning in track_data.get('warnings', []):
+                mkvmerge_logger.warning(warning)
+            for error in track_data.get('errors', []):
+                mkvmerge_logger.error(error)
+        return None, [], [], []
     else:
         for warning in track_data.get('warnings', []):
             mkvmerge_logger.warning(warning)
+
+    container_metadata = track_data.get('container', {})
+    container_properties = container_metadata.get('properties', {})
+    if segment_uid := container_properties.get('segment_uid'):
+        segment_uid = normalize_segment_uid(segment_uid)
+
+    video_tracks: list[Track] = []
+    audio_tracks: list[Track] = []
+    subtitle_tracks: list[Track] = []
 
     for metadata in track_data.get('tracks', []):
         properties = metadata.get('properties', {})
@@ -636,15 +812,15 @@ def extract_tracks(
             codec=properties.get('codec_id', ''),
             channels=properties.get('audio_channels', 0),
             default=properties.get('default_track', False),
-            enabled=properties.get('enabled_track', False),
             forced=properties.get('forced_track', False),
+            enabled=properties.get('enabled_track', False),
             uid=properties.get('uid'),
         )
         if track.uid is None:
             continue
 
         if database is not None:
-            if database.restore(file_path, track):
+            if database.restore(segment_uid, track):
                 match track.category:
                     case 'audio':
                         audio_tracks.append(track)
@@ -660,7 +836,7 @@ def extract_tracks(
             case 'subtitles':
                 subtitle_tracks.append(track)
 
-    return video_tracks, audio_tracks, subtitle_tracks
+    return segment_uid, video_tracks, audio_tracks, subtitle_tracks
 
 
 def score_tracks[T: Profile](
@@ -753,14 +929,15 @@ def score_tracks[T: Profile](
 
 
 def restore_tracks(
+    segment_uid: str,
     file_path: Path,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
     database: Database,
     dry_run: bool = False,
 ) -> None:
-    modify_args = [str(file_path)]
-    logger_args: list[str] = []
+    uid_args = [str(file_path)]
+    idx_args: list[str] = []
 
     def apply_track_modes(track: Track, use_index: bool = False) -> list[str]:
         track_id = track.index if use_index else track.uid
@@ -777,26 +954,30 @@ def restore_tracks(
         ]
 
     for track in [*audio_tracks, *subtitle_tracks]:
-        modify_args += apply_track_modes(track, use_index=False)
-        logger_args += apply_track_modes(track, use_index=True)
+        uid_args += apply_track_modes(track, use_index=False)
+        idx_args += apply_track_modes(track, use_index=True)
 
-    if len(modify_args) > 1:
-        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
+    if len(uid_args) > 1:
+        log_prefix = '[DRY RUN] ' if dry_run else ''
+        mkvpropedit_logger.info(log_prefix + ' '.join(idx_args))
         if not dry_run:
             try:
-                modify_tracks(modify_args)
+                modify_tracks(uid_args)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
-    database.delete(file_path)
+    database.delete(segment_uid)
 
 
 def restore_file(file_path: Path, database: Database, dry_run: bool = False) -> None:
-    _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
-    restore_tracks(file_path, audio_tracks, subtitle_tracks, database, dry_run)
+    segment_uid, _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
+    if not segment_uid:
+        segment_uid = ensure_segment_uid(file_path, dry_run)
+    restore_tracks(segment_uid, file_path, audio_tracks, subtitle_tracks, database, dry_run)
 
 
 def process_tracks(
+    segment_uid: str,
     file_path: Path,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
@@ -805,8 +986,8 @@ def process_tracks(
     dry_run: bool = False,
 ) -> None:
     orig_tracks: dict[int, Track] = {}
-    modify_args = [str(file_path)]
-    logger_args: list[str] = []
+    uid_args = [str(file_path)]
+    idx_args: list[str] = []
 
     def snapshot_track(track: Track) -> None:
         if track.uid not in orig_tracks:
@@ -891,11 +1072,11 @@ def process_tracks(
             mkvpriority_logger.debug(track)
             if track_flags[track.uid]:
                 track_name = f' ({track.name})' if track.name else ''
-                modify_args.extend(['--edit', f'track:={track.uid}'])
-                logger_args.extend(['--edit', f'track:={track.index}{track_name}'])
+                uid_args.extend(['--edit', f'track:={track.uid}'])
+                idx_args.extend(['--edit', f'track:={track.index}{track_name}'])
                 for flag, value in track_flags[track.uid].items():
-                    modify_args.extend(['--set', f'{flag}={value}'])
-                    logger_args.extend(['--set', f'{flag}={value}'])
+                    uid_args.extend(['--set', f'{flag}={value}'])
+                    idx_args.extend(['--set', f'{flag}={value}'])
 
         return default_track or tracks[0]
 
@@ -910,16 +1091,17 @@ def process_tracks(
     score_tracks(file_path, subtitle_tracks, config.subtitle_group, dry_run)
     apply_profiles(subtitle_tracks, config.subtitle_group, suppress_default=suppress_default)
 
-    if len(modify_args) > 1:
-        mkvpropedit_logger.info(('[DRY RUN] ' if dry_run else '') + ' '.join(logger_args))
+    if len(uid_args) > 1:
+        log_prefix = '[DRY RUN] ' if dry_run else ''
+        mkvpropedit_logger.info(log_prefix + ' '.join(idx_args))
         if not dry_run:
             try:
-                modify_tracks(modify_args)
+                modify_tracks(uid_args)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
     if database is not None:
-        database.insert(file_path, list(orig_tracks.values()))
+        database.insert(segment_uid, file_path, list(orig_tracks.values()))
 
 
 def process_file(
@@ -929,8 +1111,10 @@ def process_file(
     extensions: list[Extension] | None = None,
     dry_run: bool = False,
 ) -> None:
-    video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path)
-    process_tracks(file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
+    segment_uid, video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path)
+    if not segment_uid:
+        segment_uid = ensure_segment_uid(file_path, dry_run)
+    process_tracks(segment_uid, file_path, audio_tracks, subtitle_tracks, config, database, dry_run)
     if extensions is not None:
         for extension in extensions:
             extension.process_file(
@@ -1003,7 +1187,10 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
     database = None
     if args.archive:
-        database = Database(args.archive, args.dry_run)
+        try:
+            database = Database(args.archive, args.dry_run)
+        except (sqlite3.IntegrityError, RuntimeError) as e:
+            parser.error(str(e))
     if args.prune:
         if database is None:
             parser.error('cannot use --prune without --archive')
@@ -1020,24 +1207,24 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             extension.extension_logger.setLevel(tool_level)
             extensions.append(extension)
 
-    dry_run = '[DRY RUN] ' if args.dry_run else ''
+    log_prefix = '[DRY RUN] ' if args.dry_run else ''
     for input_path in args.input_paths:
         toml_label = 'untagged'
         if '::' in input_path:
             input_path, toml_label = input_path.rsplit('::', 1)
         if not (active_config := configs.get(toml_label) or configs.get('untagged')):
-            mkvpriority_logger.warning(dry_run + f"skipping (no config) '{input_path}'")
+            mkvpriority_logger.warning(log_prefix + f"skipping (no config) '{input_path}'")
             continue
         escaped_pattern = input_path.replace('[', '[[]')
         if not (matched_paths := sorted(glob.glob(escaped_pattern, recursive=True))):
-            mkvpriority_logger.warning(dry_run + f"skipping (not found) '{input_path}'")
+            mkvpriority_logger.warning(log_prefix + f"skipping (not found) '{input_path}'")
             continue
 
         file_paths: list[Path] = []
         for matched_path in matched_paths:
             file_path = Path(matched_path)
             if file_path.is_dir():
-                mkvpriority_logger.info(dry_run + f"scanning '{file_path}'")
+                mkvpriority_logger.info(log_prefix + f"scanning '{file_path}'")
                 file_paths.extend(sorted(file_path.rglob('*.mkv')))
             elif file_path.is_file():
                 if file_path.suffix.lower() == '.mkv':
@@ -1046,24 +1233,38 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
         for file_path in file_paths:
             if database is not None:
-                file_mtime = file_path.stat().st_mtime
-                is_archived = database.contains(file_path, file_mtime)
+                is_archived = False
+                file_mtime = int(file_path.stat().st_mtime)
+                archive_record = database.select_by_path(file_path)
+                if archive_record and archive_record.file_mtime == file_mtime:
+                    is_archived = True
+                if not is_archived:
+                    segment_uid, *_ = extract_tracks(file_path)
+                    if not segment_uid:
+                        segment_uid = ensure_segment_uid(file_path, args.dry_run)
+                    if archive_record and archive_record.segment_uid != segment_uid:
+                        database.delete(archive_record.segment_uid)
+                    uid_record = database.select_by_uid(segment_uid)
+                    if uid_record and uid_record.file_mtime == file_mtime:
+                        database.insert(segment_uid, file_path, [])
+                        is_archived = True
+
                 if not args.restore and is_archived:
-                    mkvpriority_logger.info(dry_run + f"skipping (archived) '{file_path}'")
+                    mkvpriority_logger.info(log_prefix + f"skipping (archived) '{file_path}'")
                     continue
                 if args.restore and not is_archived:
-                    mkvpriority_logger.info(dry_run + f"skipping (not archived) '{file_path}'")
+                    mkvpriority_logger.info(log_prefix + f"skipping (not archived) '{file_path}'")
                     continue
 
             if args.restore:
                 assert database is not None
-                mkvpriority_logger.info(dry_run + f"restoring '{file_path}'")
+                mkvpriority_logger.info(log_prefix + f"restoring '{file_path}'")
                 restore_file(file_path, database, args.dry_run)
             else:
                 toml_path, toml_label = active_config.toml_path, active_config.toml_label
                 config_tag = f'::{toml_label}' if toml_label != 'untagged' else ''
-                mkvpriority_logger.info(dry_run + f"processing '{file_path}'")
-                mkvpriority_logger.info(dry_run + f"using config '{toml_path}{config_tag}'")
+                mkvpriority_logger.info(log_prefix + f"processing '{file_path}'")
+                mkvpriority_logger.info(log_prefix + f"using config '{toml_path}{config_tag}'")
                 process_file(file_path, active_config, database, extensions, args.dry_run)
 
     if database is not None:

@@ -63,9 +63,9 @@ class SubtitleExtractor(Extension):
     def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[int, Path]]) -> None:
         for _, subtitle_path in subtitle_paths:
             self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path}'")
-        mkv_args = [f'{index}:{subtitle_path}' for index, subtitle_path in subtitle_paths]
+        arguments = [f'{index}:{subtitle_path}' for index, subtitle_path in subtitle_paths]
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
-            json.dump(['tracks', str(file_path), *mkv_args], temp_file)
+            json.dump(['tracks', str(file_path), *arguments], temp_file)
             temp_file_path = Path(temp_file.name)
 
         try:
