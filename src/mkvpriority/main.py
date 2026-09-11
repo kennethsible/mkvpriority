@@ -567,9 +567,22 @@ class Database:
                 self.cur.execute('DELETE FROM archive WHERE file_path = ?', (str(file_path),))
 
             self._initialize(prefix='_')
+            self.cur.execute('SELECT COUNT(*) FROM archive WHERE file_path IS NOT NULL')
+            total_files = self.cur.fetchone()[0]
+
+            def display_progress(current: int) -> None:
+                if total_files <= 0:
+                    return
+                step = max(1, round(total_files * 0.1))
+                if current % step == 0 or current == total_files:
+                    percent = round((current / total_files) * 100)
+                    mkvpriority_logger.info(
+                        f'migrating database {current}/{total_files} ({percent}%)'
+                    )
 
             self.cur.execute('SELECT file_path FROM archive WHERE file_path IS NOT NULL')
-            for row in self.cur.fetchall():
+            for i, row in enumerate(self.cur.fetchall(), start=1):
+                display_progress(i)
                 file_path = Path(row[0])
 
                 segment_uid, *_ = extract_tracks(file_path)
@@ -584,6 +597,9 @@ class Database:
                         file_path, 
                         file_mtime
                     ) VALUES (?, ?, ?)
+                    ON CONFLICT(segment_uid) DO UPDATE SET
+                        file_path = excluded.file_path,
+                        file_mtime = excluded.file_mtime
                     """,
                     (str(segment_uid), str(file_path.resolve()), int(file_mtime)),
                 )
@@ -604,6 +620,7 @@ class Database:
                         enabled_flag
                     FROM metadata
                     WHERE file_path = ?
+                    ON CONFLICT(segment_uid, track_uid) DO NOTHING
                     """,
                     (str(segment_uid), str(file_path)),
                 )
