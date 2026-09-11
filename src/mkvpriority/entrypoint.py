@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import logging
 import os
@@ -57,7 +58,7 @@ async def process_item(file_path: str, item_tags: str, orig_lang: str | None) ->
         argv = [*MKVPRIORITY_ARGS, file_path]
         await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang)
     except Exception:
-        entrypoint_logger.exception(f"error occurred: '{file_path}'")
+        entrypoint_logger.exception(f"error occurred while processing '{file_path}'")
 
 
 async def queue_worker() -> None:
@@ -109,6 +110,28 @@ async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     return scheduler
 
 
+def migrate_database(config_file: Path):
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('-c', '--config')
+    parser.add_argument('-a', '--archive')
+    parser.add_argument('-x', '--debug', action='store_true')
+    parser.add_argument('-n', '--dry-run', action='store_true')
+    args, _ = parser.parse_known_args(MKVPRIORITY_ARGS)
+
+    if args.archive:
+        arguments = ['-a', args.archive]
+        if args.config:
+            arguments.extend(['-c', args.config])
+        else:
+            arguments.extend(['-c', str(config_file)])
+        if args.debug:
+            arguments.append('-x')
+        if args.dry_run:
+            arguments.append('-n')
+
+        mkvpriority.main.main(arguments)
+
+
 def main() -> None:
     config_dir = Path('/config')
     try:
@@ -138,6 +161,8 @@ def main() -> None:
 
     entrypoint_logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
+    entrypoint_logger.info(f'MKVPriority {__version__}')
+    migrate_database(config_file)
 
     async def run_all() -> None:
         stop_event = asyncio.Event()
@@ -182,7 +207,6 @@ def main() -> None:
             if runner:
                 await runner.cleanup()
 
-    entrypoint_logger.info(f'MKVPriority {__version__}')
     asyncio.run(run_all())
 
 

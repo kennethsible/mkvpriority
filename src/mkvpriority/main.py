@@ -1206,8 +1206,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     if args.archive:
         try:
             database = Database(args.archive, args.dry_run)
-        except (sqlite3.IntegrityError, RuntimeError) as e:
-            parser.error(str(e))
+        except (sqlite3.IntegrityError, RuntimeError):
+            mkvpriority_logger.error(f"error ocurred while migrating '{args.archive}'")
+            raise
     if args.prune:
         if database is None:
             parser.error('cannot use --prune without --archive')
