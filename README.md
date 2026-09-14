@@ -280,11 +280,11 @@ options:
   -o, --override KEY=VALUE
                         override config settings
   -v, --verbose         inspect track metadata
-  -x, --debug           show mkvtoolnix output
-  -q, --quiet           suppress logging output
+  -x, --debug           print mkvtoolnix output
+  -q, --quiet           suppress normal logging
   -p, --prune           prune database entries
   -n, --dry-run         simulate track changes
-  -r, --restore         restore original tracks
+  -r, --restore         restore original flags
 ```
 
 ### Python Package

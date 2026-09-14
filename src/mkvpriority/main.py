@@ -1160,11 +1160,11 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         help='override config settings',
     )
     parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
-    parser.add_argument('-x', '--debug', action='store_true', help='show mkvtoolnix output')
-    parser.add_argument('-q', '--quiet', action='store_true', help='suppress logging output')
+    parser.add_argument('-x', '--debug', action='store_true', help='print mkvtoolnix output')
+    parser.add_argument('-q', '--quiet', action='store_true', help='suppress normal logging')
     parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
     parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
-    parser.add_argument('-r', '--restore', action='store_true', help='restore original tracks')
+    parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
     parser.add_argument(
         'input_paths', nargs='*', metavar='INPUT_PATH[::TAG]', help='files or directories'
     )
@@ -1267,7 +1267,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                         database.insert(segment_uid, file_path, [])
                         is_archived = True
 
-                if not args.restore and is_archived:
+                if not args.restore and is_archived and not args.override:
                     mkvpriority_logger.info(log_prefix + f"skipping (archived) '{file_path}'")
                     continue
                 if args.restore and not is_archived:
