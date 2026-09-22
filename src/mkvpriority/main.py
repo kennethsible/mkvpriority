@@ -18,6 +18,7 @@ import tomllib
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from functools import cached_property
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -148,6 +149,10 @@ class Track:
     size: int | None = None
     file_path: Path | None = None
 
+    @cached_property
+    def normalized_language(self) -> str:
+        return resolve_language(self.language) or 'und'  # ISO 639-2/B
+
     @property
     def is_external(self) -> bool:
         return self.file_path is not None
@@ -194,6 +199,18 @@ class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
 
 class ConfigError(Exception):
     pass
+
+
+def normalize_language_dict(languages: dict[str, int]) -> dict[str, int]:
+    normalized: dict[str, int] = {}
+    for language, score in languages.items():
+        resolved = resolve_language(language) or language
+        normalized[resolved] = score
+    return normalized
+
+
+def normalize_language_list(languages: list[str]) -> list[str]:
+    return [resolve_language(language) or language for language in languages]
 
 
 def validate_config_schema(toml_dict: dict[str, Any], toml_path: Path) -> None:
@@ -302,7 +319,7 @@ class Config:
             if key != 'global'
         }
         audio_group = AudioProfileGroup(
-            languages=audio_global.get('languages', {}),
+            languages=normalize_language_dict(audio_global.get('languages', {})),
             codecs=audio_global.get('codecs', {}),
             profiles=audio_profiles,
             penalize_unscored_languages=audio_global.get('penalize_unscored_languages', False),
@@ -323,11 +340,11 @@ class Config:
             if key != 'global'
         }
         subtitle_group = SubtitleProfileGroup(
-            languages=subtitle_global.get('languages', {}),
+            languages=normalize_language_dict(subtitle_global.get('languages', {})),
             codecs=subtitle_global.get('codecs', {}),
             profiles=subtitle_profiles,
             penalize_unscored_languages=subtitle_global.get('penalize_unscored_languages', False),
-            native_languages=subtitle_global.get('native_languages', []),
+            native_languages=normalize_language_list(subtitle_global.get('native_languages', [])),
         )
 
         return cls(
@@ -742,8 +759,8 @@ def parse_external_subtitles(
             is_default = True
         elif segment.lower() == 'forced':
             is_forced = True
-        elif track_lang == 'und' and (language := resolve_language(segment)):
-            track_lang = language
+        elif track_lang == 'und' and resolve_language(segment):
+            track_lang = segment
         else:
             remaining_segments.append(segment)
 
@@ -974,7 +991,7 @@ def score_tracks[T: Profile](
     def compute_score(track: Track, profile: Profile) -> int:
         score = 0
         default_lang_score = -10000 if group.penalize_unscored_languages else 0
-        score += group.languages.get(track.language, default_lang_score)
+        score += group.languages.get(track.normalized_language, default_lang_score)
         score += group.codecs.get(track.codec, 0)
         if isinstance(group, AudioProfileGroup):
             score += group.channels.get(str(track.channels), 0)

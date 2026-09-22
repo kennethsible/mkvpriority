@@ -565,7 +565,7 @@ def test_sidecar_subtitles() -> None:
 
         ass_track = next(track for track in external_tracks if track.codec == 'S_TEXT/ASS')
         assert ass_track.index < 0 and ass_track.uid < 0
-        assert ass_track.language == 'eng'
+        assert ass_track.language == 'en'
         assert ass_track.name == 'Downloaded Subtitles'
         assert ass_track.default is True
         assert ass_track.forced is False
@@ -573,7 +573,7 @@ def test_sidecar_subtitles() -> None:
 
         srt_track = next(track for track in external_tracks if track.codec == 'S_TEXT/UTF8')
         assert srt_track.index < 0 and srt_track.uid < 0
-        assert srt_track.language == 'jpn'
+        assert srt_track.language == 'ja'
         assert srt_track.name == 'External Commentary'
         assert srt_track.default is False
         assert srt_track.forced is True

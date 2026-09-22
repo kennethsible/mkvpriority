@@ -29,22 +29,30 @@ class SubtitleRenamer(Extension):
                 toml_file = tomllib.load(f)
             subtitle_section = toml_file.get('subtitle_profiles', {})
             subtitle_global = subtitle_section.get('global', {})
-            attributes = {'rename': subtitle_global.get('rename_external_subtitles', False)}
+            attributes = {
+                'rename': subtitle_global.get('rename_external_subtitles', False),
+                'standardize': subtitle_global.get('standardize_external_languages', True),
+            }
             self.parameters[config.toml_path] = attributes
 
         if attributes['rename']:
             for track in subtitle_tracks:
                 if not track.is_external or track.file_path is None or not track.file_path.exists():
                     continue
+                if not track.file_path.stem.startswith(file_path.stem):
+                    continue
 
-                is_default = '.default.' in track.file_path.name
-                is_forced = '.forced.' in track.file_path.name
+                file_infix = track.file_path.stem[len(file_path.stem) :]
+                tokens = [segment.lower() for segment in file_infix.split('.') if segment]
+                is_default, is_forced = 'default' in tokens, 'forced' in tokens
                 if track.default == is_default and track.forced == is_forced:
                     continue
 
                 segments = [file_path.stem]
                 if track.language and track.language != 'und':
-                    segments.append(track.language)
+                    segments.append(
+                        track.normalized_language if attributes['standardize'] else track.language
+                    )
                 if track.default:
                     segments.append('default')
                 if track.forced:

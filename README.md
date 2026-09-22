@@ -219,6 +219,7 @@ You can use the `subtitle_renamer` extension to rename external sidecar subtitle
 ```toml
 [subtitle_profiles.global]
 rename_external_subtitles = true
+standardize_external_languages = true
 ```
 
 ```text
