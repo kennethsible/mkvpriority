@@ -552,12 +552,17 @@ def test_sidecar_subtitles() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
+        config = mkvpriority.Config.from_file(Path('config.toml'))
+        config.subtitle_group.include_external_subtitles = True
+
         sidecar_ass = temp_path / 'dummy.en.default.ass'
         sidecar_ass.write_text('Title: Downloaded Subtitles\n[V4+ Styles]\n')
         sidecar_srt = temp_path / 'dummy.ja.forced.External Commentary.srt'
         sidecar_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
 
-        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(
+            file_path, config
+        )
         assert len(video_tracks + audio_tracks + subtitle_tracks) == 10
 
         external_tracks = [track for track in subtitle_tracks if track.is_external]
@@ -581,7 +586,6 @@ def test_sidecar_subtitles() -> None:
 
         archive_path = temp_path / 'archive.db'
         with mkvpriority.Database(str(archive_path)) as database:
-            config = mkvpriority.Config.from_file(Path('config.toml'))
             mkvpriority.process_file(file_path, config, database)
 
             database.cur.execute('SELECT COUNT(*) FROM metadata')
@@ -779,6 +783,7 @@ def test_rename_subtitles() -> None:
         )
         toml_path.write_text(toml_text, encoding='utf-8')
         config = mkvpriority.Config.from_file(toml_path)
+        config.subtitle_group.include_external_subtitles = True
 
         initial_srt = temp_path / 'dummy.en.default.External Commentary.srt'
         initial_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')

@@ -195,6 +195,7 @@ class AudioProfileGroup(ProfileGroup[AudioProfile]):
 @dataclass
 class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
     native_languages: list[str] = field(default_factory=list)
+    include_external_subtitles: bool = False
 
 
 class ConfigError(Exception):
@@ -345,6 +346,7 @@ class Config:
             profiles=subtitle_profiles,
             penalize_unscored_languages=subtitle_global.get('penalize_unscored_languages', False),
             native_languages=normalize_language_list(subtitle_global.get('native_languages', [])),
+            include_external_subtitles=subtitle_global.get('include_external_subtitles', False),
         )
 
         return cls(
@@ -912,7 +914,7 @@ def modify_tracks(arguments: list[str]) -> None:
 
 
 def extract_tracks(
-    file_path: Path, database: Database | None = None
+    file_path: Path, config: Config | None = None, database: Database | None = None
 ) -> tuple[str | None, list[Track], list[Track], list[Track]]:
     try:
         track_data = identify_tracks(file_path)
@@ -969,16 +971,17 @@ def extract_tracks(
             case 'subtitles':
                 subtitle_tracks.append(track)
 
-    parent_dir = file_path.parent
-    if parent_dir.is_dir():
-        file_stem = file_path.stem
-        virtual_id = -1
-        for candidate in sorted(parent_dir.glob(f'{glob.escape(file_stem)}*')):
-            if not candidate.is_file():
-                continue
-            if subtitle_track := parse_external_subtitles(candidate, file_stem, virtual_id):
-                subtitle_tracks.append(subtitle_track)
-                virtual_id -= 1
+    if config and config.subtitle_group.include_external_subtitles:
+        parent_dir = file_path.parent
+        if parent_dir.is_dir():
+            file_stem = file_path.stem
+            virtual_id = -1
+            for sidecar_path in sorted(parent_dir.glob(f'{glob.escape(file_stem)}*')):
+                if not sidecar_path.is_file():
+                    continue
+                if subtitle_track := parse_external_subtitles(sidecar_path, file_stem, virtual_id):
+                    subtitle_tracks.append(subtitle_track)
+                    virtual_id -= 1
 
     return segment_uid, video_tracks, audio_tracks, subtitle_tracks
 
@@ -1116,7 +1119,7 @@ def restore_tracks(
 
 
 def restore_file(file_path: Path, database: Database, dry_run: bool = False) -> None:
-    segment_uid, _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database)
+    segment_uid, _, audio_tracks, subtitle_tracks = extract_tracks(file_path, database=database)
     if not segment_uid:
         segment_uid = ensure_segment_uid(file_path, dry_run)
     restore_tracks(segment_uid, file_path, audio_tracks, subtitle_tracks, database, dry_run)
@@ -1261,7 +1264,7 @@ def process_file(
     extensions: list[Extension] | None = None,
     dry_run: bool = False,
 ) -> None:
-    segment_uid, video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path)
+    segment_uid, video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path, config)
     if not segment_uid:
         segment_uid = ensure_segment_uid(file_path, dry_run)
     process_tracks(segment_uid, file_path, audio_tracks, subtitle_tracks, config, database, dry_run)

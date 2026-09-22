@@ -75,6 +75,13 @@ penalize_unscored_languages = true
 # Ensures full dialogue subtitles are disabled for native audio language.
 native_languages = ["eng"]
 
+# === Include External Subtitles ===
+# Determines whether external sidecar subtitle files are processed:
+# - true  = Evaluates sidecars alongside embedded tracks during scoring
+# - false = Ignores sidecars and scores only embedded container tracks
+# Ensures external subtitle files are considered during track evaluation.
+include_external_subtitles = false
+
 # === Subtitle Language Preferences ===
 # Example: Prioritize English subtitles with Japanese audio.
 [subtitle_profiles.global.languages]
