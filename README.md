@@ -20,6 +20,7 @@
 - Deprioritizes **unwanted audio and subtitle tracks** (e.g., English dubs, commentary tracks, signs/songs)
 - Identifies **forced subtitle tracks** using dialogue-density heuristics without relying solely on track names
 - Suppresses default flags during **native audio playback** to prevent unnecessary subtitles for dialogue
+- Evaluates external **sidecar subtitles** alongside embedded tracks and updates their filename flags on disk
 - Periodically scans your media library using a **cron schedule** and processes new MKV files with a database
 - Integrates with Radarr and Sonarr using a **custom script** to process new MKV files as they are imported
 - Supports extension modules for optional, user-defined **post-processors** to handle specialized workflows
@@ -182,7 +183,7 @@ convert_external_subtitles = true
 ```
 
 ```text
-Format:  {filename}.{language}.{default,forced}.{srt,ass}
+Format:  {file_stem}.{language}.{default,forced}.{ext}
 Example: Princess Mononoke (1997).eng.default.ass
 ```
 
@@ -210,6 +211,23 @@ Bold = -1
 Outline = 3.6
 Shadow = 1.5
 ```
+
+### Example: Subtitle Renamer
+
+You can use the `subtitle_renamer` extension to rename external sidecar subtitles to reflect their updated track states. When processing an MKV file, sidecar files are identified, normalized to ISO 639-2/B language codes, and scored alongside embedded tracks. If the track flags for an external subtitle change, this extension renames the file on disk to reflect its new flags, appending or stripping `.default` or `.forced` from the filename and standardizing the language code.
+
+```toml
+[subtitle_profiles.global]
+rename_external_subtitles = true
+```
+
+```text
+Format:  {file_stem}.{language}[.default][.forced][.{track_name}].{ext}
+Example: Princess Mononoke (1997).jpn.default.commentary.ass
+```
+
+> [!NOTE]
+> The naming format for external subtitles follows the guidelines for both [Jellyfin](https://jellyfin.org/docs/general/server/media/movies/?libType=shows#external-subtitles-and-audio-tracks) and [Plex](https://support.plex.tv/articles/200471133-adding-local-subtitles-to-your-media/).
 
 ### Example: Multiplexer (Strip/Reorder Tracks)
 

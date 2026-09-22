@@ -7,7 +7,7 @@ from pysubs2.exceptions import Pysubs2Error
 
 from mkvpriority import Config, Extension, Track
 
-SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt'}
+SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 
 
 class SubtitleConverter(Extension):
@@ -60,8 +60,14 @@ class SubtitleConverter(Extension):
                 if self.convert_subtitles(source_path, target_path) and attributes['remove_source']:
                     self.extension_logger.info(f"removing subtitles '{source_path.name}'")
                     source_path.unlink(missing_ok=True)
+                    if subtitle_track.is_external:
+                        subtitle_track.file_path = target_path
+                        subtitle_track.codec = f'S_TEXT/{target_format.upper()}'
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
+        if subtitle_track.is_external:
+            return subtitle_track.file_path
+
         subtitle_format = subtitle_track.codec.split('/')[-1]
         if not (subtitle_ext := SUBTITLE_EXTENSIONS.get(subtitle_format)):
             return None

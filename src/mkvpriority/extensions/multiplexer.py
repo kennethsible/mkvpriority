@@ -65,18 +65,23 @@ class Multiplexer(Extension):
         ordered_indices: list[str] = []
         stripped_indices: list[str] = []
 
+        internal_tracks = [track for track in tracks if not track.is_external]
         if not profile_name:
-            ordered_indices.extend(f'0:{track.index}' for track in tracks)
+            ordered_indices.extend(f'0:{track.index}' for track in internal_tracks)
             return ordered_indices, stripped_indices
 
-        sorted_tracks = [track for track in tracks if track.scores.get(profile_name, 0) > 0]
+        sorted_tracks = [
+            track for track in internal_tracks if track.scores.get(profile_name, 0) > 0
+        ]
         sorted_tracks.sort(key=lambda track: track.scores.get(profile_name, 0), reverse=True)
-        unwanted_tracks = [track for track in tracks if track.scores.get(profile_name, 0) <= 0]
 
         if strip_tracks:
             ordered_indices.extend(f'0:{track.index}' for track in sorted_tracks)
             stripped_indices.extend(str(track.index) for track in sorted_tracks)
         elif reorder_tracks:
+            unwanted_tracks = [
+                track for track in internal_tracks if track.scores.get(profile_name, 0) <= 0
+            ]
             ordered_indices.extend(f'0:{track.index}' for track in sorted_tracks + unwanted_tracks)
 
         return ordered_indices, stripped_indices

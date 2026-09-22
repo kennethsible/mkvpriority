@@ -7,7 +7,7 @@ from typing import Any
 
 from mkvpriority import Config, Extension, Track
 
-SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt', 'WEBVTT': 'vtt'}
+SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 
 
 class SubtitleExtractor(Extension):
@@ -38,7 +38,11 @@ class SubtitleExtractor(Extension):
             self.parameters[config.toml_path] = attributes
 
         if attributes['extract']:
-            target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
+            target_tracks = [
+                track
+                for track in subtitle_tracks
+                if not track.is_external and (track.default or track.forced)
+            ]
             subtitle_paths: list[tuple[int, Path]] = []
             for track in target_tracks:
                 subtitle_path = self.build_subtitle_path(file_path, track)

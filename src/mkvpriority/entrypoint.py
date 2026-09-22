@@ -110,7 +110,7 @@ async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     return scheduler
 
 
-def migrate_database(config_file: Path):
+def migrate_database(config_file: Path) -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('-c', '--config')
     parser.add_argument('-a', '--archive')

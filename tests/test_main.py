@@ -14,6 +14,7 @@ from mkvpriority import entrypoint
 from mkvpriority.extensions.multiplexer import Multiplexer
 from mkvpriority.extensions.subtitle_converter import SubtitleConverter
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
+from mkvpriority.extensions.subtitle_renamer import SubtitleRenamer
 from mkvpriority.extensions.subtitle_restyler import SubtitleRestyler
 
 AIOTestClient = TestClient[web.Request, web.Application]
@@ -544,6 +545,55 @@ def test_size_ratio_fallback() -> None:
         )
 
 
+def test_sidecar_subtitles() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        sidecar_ass = temp_path / 'dummy.en.default.ass'
+        sidecar_ass.write_text('Title: Downloaded Subtitles\n[V4+ Styles]\n')
+        sidecar_srt = temp_path / 'dummy.ja.forced.External Commentary.srt'
+        sidecar_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
+
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        assert len(video_tracks + audio_tracks + subtitle_tracks) == 10
+
+        external_tracks = [track for track in subtitle_tracks if track.is_external]
+        assert len(subtitle_tracks) == 6 and len(external_tracks) == 2
+
+        ass_track = next(track for track in external_tracks if track.codec == 'S_TEXT/ASS')
+        assert ass_track.index < 0 and ass_track.uid < 0
+        assert ass_track.language == 'eng'
+        assert ass_track.name == 'Downloaded Subtitles'
+        assert ass_track.default is True
+        assert ass_track.forced is False
+        assert ass_track.file_path == sidecar_ass.resolve()
+
+        srt_track = next(track for track in external_tracks if track.codec == 'S_TEXT/UTF8')
+        assert srt_track.index < 0 and srt_track.uid < 0
+        assert srt_track.language == 'jpn'
+        assert srt_track.name == 'External Commentary'
+        assert srt_track.default is False
+        assert srt_track.forced is True
+        assert srt_track.file_path == sidecar_srt.resolve()
+
+        archive_path = temp_path / 'archive.db'
+        with mkvpriority.Database(str(archive_path)) as database:
+            config = mkvpriority.Config.from_file(Path('config.toml'))
+            mkvpriority.process_file(file_path, config, database)
+
+            database.cur.execute('SELECT COUNT(*) FROM metadata')
+            assert database.cur.fetchone()[0] == 4
+
+            *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+            external_tracks = [track for track in subtitle_tracks if track.is_external]
+            for track in external_tracks:
+                assert 'default' not in track.name.lower()
+                assert 'forced' not in track.name.lower()
+
+
 def test_restore_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -551,7 +601,7 @@ def test_restore_tracks() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        archive_path = Path(temp_dir) / 'archive.db'
+        archive_path = temp_path / 'archive.db'
         with mkvpriority.Database(str(archive_path)) as database:
             config = mkvpriority.Config.from_file(Path('config.toml'))
             mkvpriority.process_file(file_path, config, database)
@@ -582,7 +632,7 @@ def test_prune_database() -> None:
         track_files = create_dummy(temp_path)
         multiplex_dummy(file_path, track_files)
 
-        archive_path = Path(temp_dir) / 'archive.db'
+        archive_path = temp_path / 'archive.db'
         with mkvpriority.Database(str(archive_path)) as database:
             config = mkvpriority.Config.from_file(Path('config.toml'))
             mkvpriority.process_file(file_path, config, database)
@@ -712,6 +762,36 @@ def test_restyle_subtitles() -> None:
         subtitle_path = file_path.with_suffix('.eng.default.ass')
         restyled_content = subtitle_path.read_text(encoding='utf-8-sig')
         assert 'Style: Default,Cabin,20.0,&H00FFFFFF,0.96,0.48,2,1' in restyled_content
+
+
+def test_rename_subtitles() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_text = toml_text.replace(
+            '[subtitle_profiles.global]',
+            '[subtitle_profiles.global]\nrename_external_subtitles = true\n',
+        )
+        toml_path.write_text(toml_text, encoding='utf-8')
+        config = mkvpriority.Config.from_file(toml_path)
+
+        initial_srt = temp_path / 'dummy.en.default.External Commentary.srt'
+        initial_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
+        mkvpriority.process_file(file_path, config, extensions=[SubtitleRenamer()])
+
+        demoted_srt = temp_path / 'dummy.eng.External Commentary.srt'
+        assert not initial_srt.exists() and demoted_srt.is_file()
+
+        config.subtitle_group.profiles['signs_songs'].filters['commentar'] = 10000
+        mkvpriority.process_file(file_path, config, extensions=[SubtitleRenamer(), Multiplexer()])
+
+        promoted_srt = temp_path / 'dummy.eng.forced.External Commentary.srt'
+        assert not demoted_srt.exists() and promoted_srt.is_file()
 
 
 def test_reorder_tracks() -> None:
