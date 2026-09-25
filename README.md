@@ -179,7 +179,7 @@ You can use the `subtitle_extractor` extension to extract embedded subtitles fla
 
 ```toml
 [subtitle_profiles.global]
-convert_external_subtitles = true
+extract_embedded_subtitles = true
 ```
 
 ```text
@@ -196,8 +196,19 @@ You can use the `subtitle_converter` extension to convert external subtitles bet
 
 ```toml
 [subtitle_profiles.global]
+convert_external_subtitles = true
 convert_target_format = "ass"
 convert_remove_source = false
+```
+
+### Example: Subtitle Renamer
+
+You can use the `subtitle_renamer` extension to rename external sidecar subtitles to reflect their updated track states. When processing an MKV file, sidecar files are identified, normalized to ISO 639-2/B language codes, and scored alongside embedded tracks. If the track flags for an external subtitle change, this extension renames the file on disk to reflect its new flags, appending or stripping `.default` or `.forced` from the filename and standardizing the language code.
+
+```toml
+[subtitle_profiles.global]
+rename_external_subtitles = true
+rename_language_format = "3-letter"
 ```
 
 ### Example: Subtitle Restyler
@@ -212,16 +223,6 @@ Outline = 3.6
 Shadow = 1.5
 ```
 
-### Example: Subtitle Renamer
-
-You can use the `subtitle_renamer` extension to rename external sidecar subtitles to reflect their updated track states. When processing an MKV file, sidecar files are identified, normalized to ISO 639-2/B language codes, and scored alongside embedded tracks. If the track flags for an external subtitle change, this extension renames the file on disk to reflect its new flags, appending or stripping `.default` or `.forced` from the filename and standardizing the language code.
-
-```toml
-[subtitle_profiles.global]
-rename_external_subtitles = true
-standardize_external_languages = true
-```
-
 ```text
 Format:  {file_stem}.{language}[.default][.forced][.{track_name}].{ext}
 Example: Princess Mononoke (1997).jpn.default.commentary.ass
@@ -230,7 +231,7 @@ Example: Princess Mononoke (1997).jpn.default.commentary.ass
 > [!NOTE]
 > The naming format for external subtitles follows the guidelines for both [Jellyfin](https://jellyfin.org/docs/general/server/media/movies/?libType=shows#external-subtitles-and-audio-tracks) and [Plex](https://support.plex.tv/articles/200471133-adding-local-subtitles-to-your-media/).
 
-### Example: Multiplexer (Strip/Reorder Tracks)
+### Example: Multiplexer
 
 You can use the `multiplexer` extension to strip tracks for unwanted languages and reorder tracks by priority scores. Since remuxing conflicts with the core "no-remux" design, these features are delegated to an extension module. To enable them, add the `[multiplexer]` section to your config file and include this extension in your arguments.
 

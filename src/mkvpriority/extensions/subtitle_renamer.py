@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from mkvpriority import Config, Extension, Track
+from mkvpriority.main import resolve_language
 
 
 class SubtitleRenamer(Extension):
@@ -31,44 +32,56 @@ class SubtitleRenamer(Extension):
             subtitle_global = subtitle_section.get('global', {})
             attributes = {
                 'rename': subtitle_global.get('rename_external_subtitles', False),
-                'standardize': subtitle_global.get('standardize_external_languages', True),
+                'language_format': subtitle_global.get('rename_language_format'),
             }
             self.parameters[config.toml_path] = attributes
 
         if attributes['rename']:
-            for track in subtitle_tracks:
-                if not track.is_external or track.file_path is None or not track.file_path.exists():
-                    continue
-                if not track.file_path.stem.startswith(file_path.stem):
-                    continue
+            self.rename_subtitles(file_path, subtitle_tracks, attributes['language_format'])
 
-                file_infix = track.file_path.stem[len(file_path.stem) :]
-                tokens = [segment.lower() for segment in file_infix.split('.') if segment]
-                is_default, is_forced = 'default' in tokens, 'forced' in tokens
-                if track.default == is_default and track.forced == is_forced:
-                    continue
+    def rename_subtitles(
+        self, file_path: Path, subtitle_tracks: list[Track], language_format: str | None = None
+    ) -> None:
+        for track in subtitle_tracks:
+            if not track.is_external or track.file_path is None or not track.file_path.exists():
+                continue
+            if not track.file_path.stem.startswith(file_path.stem):
+                continue
 
-                segments = [file_path.stem]
-                if track.language and track.language != 'und':
-                    segments.append(
-                        track.normalized_language if attributes['standardize'] else track.language
+            file_infix = track.file_path.stem[len(file_path.stem) :]
+            tokens = [segment.lower() for segment in file_infix.split('.') if segment]
+            is_default, is_forced = 'default' in tokens, 'forced' in tokens
+            if track.default == is_default and track.forced == is_forced:
+                continue
+
+            segments = [file_path.stem]
+            if track.language and track.language != 'und':
+                normalized_language = (
+                    resolve_language(track.language, language_format)
+                    if language_format
+                    else track.language
+                )
+                if normalized_language is None and language_format:
+                    self.extension_logger.warning(
+                        f"unrecognized language format '{language_format}'"
                     )
-                if track.default:
-                    segments.append('default')
-                if track.forced:
-                    segments.append('forced')
-                if track.name:
-                    segments.append(track.name)
+                segments.append(normalized_language or track.language)
+            if track.default:
+                segments.append('default')
+            if track.forced:
+                segments.append('forced')
+            if track.name:
+                segments.append(track.name)
 
-                file_suffix = track.file_path.suffix.lower()
-                new_file_name = '.'.join(segments) + file_suffix
-                new_file_path = file_path.parent / new_file_name
-                if new_file_path != track.file_path:
-                    if new_file_path.exists():
-                        continue
+            file_suffix = track.file_path.suffix.lower()
+            new_file_name = '.'.join(segments) + file_suffix
+            new_file_path = file_path.parent / new_file_name
+            if new_file_path != track.file_path:
+                if new_file_path.exists():
+                    continue
 
-                    self.extension_logger.info(
-                        f"renaming '{track.file_path.name}' -> '{new_file_name}'"
-                    )
-                    track.file_path.rename(new_file_path)
-                    track.file_path = new_file_path
+                self.extension_logger.info(
+                    f"renaming '{track.file_path.name}' -> '{new_file_name}'"
+                )
+                track.file_path.rename(new_file_path)
+                track.file_path = new_file_path

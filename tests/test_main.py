@@ -553,7 +553,7 @@ def test_sidecar_subtitles() -> None:
         multiplex_dummy(file_path, track_files)
 
         config = mkvpriority.Config.from_file(Path('config.toml'))
-        config.subtitle_group.include_external_subtitles = True
+        config.subtitle_group.process_external_subtitles = True
 
         sidecar_ass = temp_path / 'dummy.en.default.ass'
         sidecar_ass.write_text('Title: Downloaded Subtitles\n[V4+ Styles]\n')
@@ -779,11 +779,11 @@ def test_rename_subtitles() -> None:
         toml_text = Path('config.toml').read_text(encoding='utf-8')
         toml_text = toml_text.replace(
             '[subtitle_profiles.global]',
-            '[subtitle_profiles.global]\nrename_external_subtitles = true\n',
+            '[subtitle_profiles.global]\nrename_external_subtitles = true\nrename_language_format = "3-letter"\n',
         )
         toml_path.write_text(toml_text, encoding='utf-8')
         config = mkvpriority.Config.from_file(toml_path)
-        config.subtitle_group.include_external_subtitles = True
+        config.subtitle_group.process_external_subtitles = True
 
         initial_srt = temp_path / 'dummy.en.default.External Commentary.srt'
         initial_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')

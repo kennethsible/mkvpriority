@@ -7,7 +7,7 @@ from typing import Any
 from mkvpriority import Config, Extension, Track
 from mkvpriority.main import DRAWING_PATTERN, KARAOKE_PATTERN, POSITION_PATTERN, ROTATION_PATTERN
 
-SAFE_ATTRS = {
+SAFE_FIELDS = {
     'Fontname',
     'PrimaryColour',
     'SecondaryColour',
@@ -26,7 +26,7 @@ SAFE_ATTRS = {
 }
 RES_DEP_X = {'Spacing', 'MarginL', 'MarginR'}
 RES_DEP_Y = {'Fontsize', 'Outline', 'Shadow', 'MarginV'}
-ASS_ATTR_MAP = {attr.lower(): attr for attr in SAFE_ATTRS | RES_DEP_X | RES_DEP_Y}
+ASS_FIELD_MAP = {field.lower(): field for field in SAFE_FIELDS | RES_DEP_X | RES_DEP_Y}
 
 
 class SubtitleRestyler(Extension):
@@ -61,7 +61,7 @@ class SubtitleRestyler(Extension):
             for subtitle_track in target_tracks:
                 subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
                 if subtitle_path and subtitle_path.is_file():
-                    self.modify_subtitle_styles(subtitle_path, attributes)
+                    self.restyle_subtitles(subtitle_path, attributes)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         if subtitle_track.is_external:
@@ -74,7 +74,7 @@ class SubtitleRestyler(Extension):
             subtitle_suffix += '.forced'
         return Path(file_path).with_suffix(f'{subtitle_suffix}.ass')
 
-    def scale_style_attributes(
+    def scale_style_fields(
         self, input_lines: list[str], attributes: dict[str, Any]
     ) -> dict[str, str]:
         playres_x, playres_y = 384.0, 288.0
@@ -88,25 +88,25 @@ class SubtitleRestyler(Extension):
 
         scale_x = playres_x / 1920.0
         scale_y = playres_y / 1080.0
-        scaled_attributes: dict[str, str] = {}
-        for attr, val in attributes.items():
-            attr = ASS_ATTR_MAP.get(attr.lower(), attr)
-            if attr in SAFE_ATTRS:
-                scaled_attributes[attr] = str(val)
-            elif attr in RES_DEP_X:
-                scaled_val = float(val) * scale_x
-                scaled_attributes[attr] = str(
-                    round(scaled_val) if 'Margin' in attr else round(scaled_val, 2)
+        scaled_fields: dict[str, str] = {}
+        for field, value in attributes.items():
+            field = ASS_FIELD_MAP.get(field.lower(), field)
+            if field in SAFE_FIELDS:
+                scaled_fields[field] = str(value)
+            elif field in RES_DEP_X:
+                scaled_val = float(value) * scale_x
+                scaled_fields[field] = str(
+                    round(scaled_val) if 'Margin' in field else round(scaled_val, 2)
                 )
-            elif attr in RES_DEP_Y:
-                scaled_val = float(val) * scale_y
-                scaled_attributes[attr] = str(
-                    round(scaled_val) if 'Margin' in attr else round(scaled_val, 2)
+            elif field in RES_DEP_Y:
+                scaled_val = float(value) * scale_y
+                scaled_fields[field] = str(
+                    round(scaled_val) if 'Margin' in field else round(scaled_val, 2)
                 )
             else:
-                self.extension_logger.warning(f"style '{attr}' is not in [V4+ Styles]")
+                self.extension_logger.warning(f"field '{field}' not in [V4+ Styles]")
 
-        return scaled_attributes
+        return scaled_fields
 
     def detect_dialogue_styles(self, input_lines: list[str]) -> set[str]:
         style_stats: dict[str, dict[str, int]] = defaultdict(
@@ -157,17 +157,17 @@ class SubtitleRestyler(Extension):
 
         return subtitle_styles
 
-    def modify_subtitle_styles(self, file_path: Path, attributes: dict[str, Any]) -> None:
+    def restyle_subtitles(self, file_path: Path, attributes: dict[str, Any]) -> None:
         with open(file_path, encoding='utf-8-sig') as f:
             input_lines = f.readlines()
-        scaled_attributes = self.scale_style_attributes(input_lines, attributes)
-        if not scaled_attributes:
+        scaled_fields = self.scale_style_fields(input_lines, attributes)
+        if not scaled_fields:
             return
         subtitle_styles = self.detect_dialogue_styles(input_lines)
         if not subtitle_styles:
             return
 
-        attr_indices: dict[str, int] = {}
+        field_indices: dict[str, int] = {}
         output_lines: list[str] = []
         in_styles_section = False
         for line in input_lines:
@@ -182,17 +182,17 @@ class SubtitleRestyler(Extension):
                 if line.startswith('Format:'):
                     format_string = line.split(':', 1)[1].strip()
                     format_parts = [p.strip() for p in format_string.split(',')]
-                    for attr in scaled_attributes:
-                        if attr in format_parts:
-                            attr_indices[attr] = format_parts.index(attr)
-                elif line.startswith('Style:') and attr_indices:
+                    for field in scaled_fields:
+                        if field in format_parts:
+                            field_indices[field] = format_parts.index(field)
+                elif line.startswith('Style:') and field_indices:
                     style_parts = line.split(':', 1)[1].strip().split(',')
                     style_name = style_parts[0].strip()
                     if style_name in subtitle_styles:
-                        for attr, val in scaled_attributes.items():
-                            if attr in attr_indices:
-                                index = attr_indices[attr]
-                                style_parts[index] = val
+                        for field, value in scaled_fields.items():
+                            if field in field_indices:
+                                index = field_indices[field]
+                                style_parts[index] = value
                         line = 'Style: ' + ','.join(style_parts) + '\n'
             output_lines.append(line)
 
