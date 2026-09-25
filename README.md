@@ -244,13 +244,17 @@ subtitle_mode = ["enabled"]
 
 [multiplexer]
 multiplex_container = true
+remove_original_container = true
+remove_external_subtitles = true
+mkvmerge_arguments = []
+
 strip_unscored_tracks = true
 strip_audio_profile = "strip"
 strip_subtitle_profile = "strip"
+
 order_tracks_by_score = true
 order_audio_profile = "default"
 order_subtitle_profile = "dialogue"
-mkvmerge_arguments = []
 ```
 
 > [!NOTE]

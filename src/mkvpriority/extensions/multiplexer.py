@@ -4,7 +4,7 @@ import itertools
 import json
 import subprocess
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -16,25 +16,29 @@ from mkvpriority.main import mkvmerge_logger
 @dataclass
 class Parameters:
     multiplex_container: bool = False
+    remove_original_container: bool = True
+    remove_external_subtitles: bool = False
+    mkvmerge_arguments: list[str] = field(default_factory=list)
     strip_tracks: bool = False
     strip_audio_profile: str | None = None
     strip_subtitle_profile: str | None = None
     order_tracks: bool = False
     order_audio_profile: str | None = None
     order_subtitle_profile: str | None = None
-    mkvmerge_arguments: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, section: dict[str, Any]) -> Parameters:
+        field_mapping = {
+            'strip_unscored_tracks': 'strip_tracks',
+            'order_tracks_by_score': 'order_tracks',
+        }
+        valid_parameters = {field.name for field in fields(cls)}
         return cls(
-            multiplex_container=section.get('multiplex_container', False),
-            strip_tracks=section.get('strip_unscored_tracks', False),
-            strip_audio_profile=section.get('strip_audio_profile'),
-            strip_subtitle_profile=section.get('strip_subtitle_profile'),
-            order_tracks=section.get('order_tracks_by_score', False),
-            order_audio_profile=section.get('order_audio_profile'),
-            order_subtitle_profile=section.get('order_subtitle_profile'),
-            mkvmerge_arguments=section.get('mkvmerge_arguments', []),
+            **{
+                parameter: value
+                for key, value in section.items()
+                if (parameter := field_mapping.get(key, key)) in valid_parameters
+            }
         )
 
 
@@ -132,18 +136,18 @@ class Multiplexer(Extension):
             else []
         )
 
-        source_map: dict[Path, int] = {file_path.resolve(): 0}
+        source_mapping: dict[Path, int] = {file_path.resolve(): 0}
         for external_track in external_tracks:
             if external_track.file_path is None:
                 continue
             resolved_path = external_track.file_path.resolve()
-            if resolved_path not in source_map:
-                source_map[resolved_path] = len(source_map)
+            if resolved_path not in source_mapping:
+                source_mapping[resolved_path] = len(source_mapping)
 
         track_order: list[str] = []
         for track in remaining_tracks:
             if track.is_external and track.file_path:
-                source_id = source_map[track.file_path.resolve()]
+                source_id = source_mapping[track.file_path.resolve()]
                 track_order.append(f'{source_id}:0')
             else:
                 track_order.append(f'0:{track.index}')
@@ -186,11 +190,22 @@ class Multiplexer(Extension):
         if not dry_run:
             try:
                 self.multiplex_tracks(arguments)
+                if not parameters.remove_original_container:
+                    backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
+                    file_path.replace(backup_path)
                 temp_output_path.replace(file_path)
             except subprocess.CalledProcessError as e:
                 mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
                 temp_output_path.unlink(missing_ok=True)
                 raise
+
+        if parameters.remove_external_subtitles:
+            for track in external_tracks:
+                if track.file_path is None:
+                    continue
+                self.extension_logger.info(log_prefix + f"removing subtitles '{track.file_path}'")
+                if not dry_run:
+                    track.file_path.unlink(missing_ok=True)
 
     def multiplex_tracks(self, arguments: list[str]) -> None:
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
