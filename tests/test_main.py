@@ -753,7 +753,7 @@ def test_restyle_subtitles() -> None:
         toml_text = Path('config.toml').read_text(encoding='utf-8')
         toml_text = toml_text.replace(
             '[subtitle_profiles.global]',
-            '[subtitle_styles]\n'
+            '[subtitle_restyler]\n'
             'fontname = "Cabin"\nfontsize = 75\noutline = 3.6\nshadow = 1.8\n'
             '[subtitle_profiles.global]\nextract_embedded_subtitles = true\n',
         )

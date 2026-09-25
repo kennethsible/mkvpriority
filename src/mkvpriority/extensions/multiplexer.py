@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 import subprocess
 import tomllib
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -18,28 +19,18 @@ class Parameters:
     multiplex_container: bool = False
     remove_original_container: bool = True
     remove_external_subtitles: bool = False
-    mkvmerge_arguments: list[str] = field(default_factory=list)
-    strip_tracks: bool = False
+    mkvmerge_arguments: list[str] = dataclasses.field(default_factory=list)
+    strip_unscored_tracks: bool = False
     strip_audio_profile: str | None = None
     strip_subtitle_profile: str | None = None
-    order_tracks: bool = False
+    order_tracks_by_score: bool = False
     order_audio_profile: str | None = None
     order_subtitle_profile: str | None = None
 
     @classmethod
     def from_dict(cls, section: dict[str, Any]) -> Parameters:
-        field_mapping = {
-            'strip_unscored_tracks': 'strip_tracks',
-            'order_tracks_by_score': 'order_tracks',
-        }
-        valid_parameters = {field.name for field in fields(cls)}
-        return cls(
-            **{
-                parameter: value
-                for key, value in section.items()
-                if (parameter := field_mapping.get(key, key)) in valid_parameters
-            }
-        )
+        valid_parameters = {field.name for field in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in section.items() if k in valid_parameters})
 
 
 class Multiplexer(Extension):
@@ -110,16 +101,16 @@ class Multiplexer(Extension):
 
         audio_tracks, stripped_audio_indices = self.partition_tracks(
             audio_tracks,
-            parameters.strip_tracks,
+            parameters.strip_unscored_tracks,
             parameters.strip_audio_profile,
-            parameters.order_tracks,
+            parameters.order_tracks_by_score,
             parameters.order_audio_profile,
         )
         subtitle_tracks, stripped_subtitles_indices = self.partition_tracks(
             subtitle_tracks,
-            parameters.strip_tracks,
+            parameters.strip_unscored_tracks,
             parameters.strip_subtitle_profile,
-            parameters.order_tracks,
+            parameters.order_tracks_by_score,
             parameters.order_subtitle_profile,
         )
         external_tracks = [track for track in subtitle_tracks if track.is_external]
@@ -152,7 +143,7 @@ class Multiplexer(Extension):
             else:
                 track_order.append(f'0:{track.index}')
 
-        if order_tracks := parameters.order_tracks:
+        if order_tracks := parameters.order_tracks_by_score:
             internal_indices = [
                 int(spec.split(':')[1]) for spec in track_order if spec.startswith('0:')
             ]

@@ -1,9 +1,24 @@
+from __future__ import annotations
+
+import dataclasses
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from mkvpriority import Config, Extension, Track
 from mkvpriority.main import resolve_language
+
+
+@dataclass
+class Parameters:
+    rename_external_subtitles: bool = False
+    rename_language_format: str | None = None
+
+    @classmethod
+    def from_dict(cls, section: dict[str, Any]) -> Parameters:
+        valid_parameters = {field.name for field in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in section.items() if k in valid_parameters})
 
 
 class SubtitleRenamer(Extension):
@@ -24,20 +39,17 @@ class SubtitleRenamer(Extension):
             return
 
         if config.toml_path in self.parameters:
-            attributes = self.parameters[config.toml_path]
+            parameters = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
             subtitle_section = toml_file.get('subtitle_profiles', {})
             subtitle_global = subtitle_section.get('global', {})
-            attributes = {
-                'rename': subtitle_global.get('rename_external_subtitles', False),
-                'language_format': subtitle_global.get('rename_language_format'),
-            }
-            self.parameters[config.toml_path] = attributes
+            parameters = Parameters.from_dict(subtitle_global)
+            self.parameters[config.toml_path] = parameters
 
-        if attributes['rename']:
-            self.rename_subtitles(file_path, subtitle_tracks, attributes['language_format'])
+        if parameters.rename_external_subtitles:
+            self.rename_subtitles(file_path, subtitle_tracks, parameters.rename_language_format)
 
     def rename_subtitles(
         self, file_path: Path, subtitle_tracks: list[Track], language_format: str | None = None

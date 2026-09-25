@@ -1,6 +1,10 @@
+from __future__ import annotations
+
+import dataclasses
 import json
 import subprocess
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -8,6 +12,16 @@ from typing import Any
 from mkvpriority import Config, Extension, Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
+
+
+@dataclass
+class Parameters:
+    extract_embedded_subtitles: bool = False
+
+    @classmethod
+    def from_dict(cls, section: dict[str, Any]) -> Parameters:
+        valid_parameters = {field.name for field in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in section.items() if k in valid_parameters})
 
 
 class SubtitleExtractor(Extension):
@@ -28,16 +42,16 @@ class SubtitleExtractor(Extension):
             return
 
         if config.toml_path in self.parameters:
-            attributes = self.parameters[config.toml_path]
+            parameters = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
             subtitle_section = toml_file.get('subtitle_profiles', {})
             subtitle_global = subtitle_section.get('global', {})
-            attributes = {'extract': subtitle_global.get('extract_embedded_subtitles', False)}
-            self.parameters[config.toml_path] = attributes
+            parameters = Parameters.from_dict(subtitle_global)
+            self.parameters[config.toml_path] = parameters
 
-        if attributes['extract']:
+        if parameters.extract_embedded_subtitles:
             target_tracks = [
                 track
                 for track in subtitle_tracks

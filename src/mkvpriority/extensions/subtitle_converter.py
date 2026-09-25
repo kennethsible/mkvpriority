@@ -1,4 +1,8 @@
+from __future__ import annotations
+
+import dataclasses
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +12,22 @@ from pysubs2.exceptions import Pysubs2Error
 from mkvpriority import Config, Extension, Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
+
+
+@dataclass
+class Parameters:
+    convert_external_subtitles: bool = False
+    convert_target_format: str = 'srt'
+    convert_remove_source: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.convert_target_format, str):
+            self.convert_target_format = self.convert_target_format.lower()
+
+    @classmethod
+    def from_dict(cls, section: dict[str, Any]) -> Parameters:
+        valid_parameters = {field.name for field in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in section.items() if k in valid_parameters})
 
 
 class SubtitleConverter(Extension):
@@ -28,20 +48,16 @@ class SubtitleConverter(Extension):
             return
 
         if config.toml_path in self.parameters:
-            attributes = self.parameters[config.toml_path]
+            parameters = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
             subtitle_section = toml_file.get('subtitle_profiles', {})
             subtitle_global = subtitle_section.get('global', {})
-            attributes = {
-                'convert': subtitle_global.get('convert_external_subtitles', False),
-                'remove_source': subtitle_global.get('convert_remove_source', False),
-                'target_format': subtitle_global.get('convert_target_format', 'srt').lower(),
-            }
-            self.parameters[config.toml_path] = attributes
+            parameters = Parameters.from_dict(subtitle_global)
+            self.parameters[config.toml_path] = parameters
 
-        if attributes['convert']:
+        if parameters.convert_external_subtitles:
             target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
             for subtitle_track in target_tracks:
                 source_path = self.build_subtitle_path(file_path, subtitle_track)
@@ -49,7 +65,7 @@ class SubtitleConverter(Extension):
                     continue
 
                 subtitle_ext = source_path.suffix.lstrip('.').lower()
-                target_format = attributes['target_format']
+                target_format = parameters.convert_target_format
                 if subtitle_ext == target_format:
                     continue
 
@@ -57,7 +73,8 @@ class SubtitleConverter(Extension):
                 if target_path.is_file():
                     continue
 
-                if self.convert_subtitles(source_path, target_path) and attributes['remove_source']:
+                remove_source = parameters.convert_remove_source
+                if self.convert_subtitles(source_path, target_path) and remove_source:
                     self.extension_logger.info(f"removing subtitles '{source_path.name}'")
                     source_path.unlink(missing_ok=True)
                     if subtitle_track.is_external:

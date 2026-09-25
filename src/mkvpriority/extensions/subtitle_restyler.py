@@ -1,6 +1,10 @@
+from __future__ import annotations
+
+import dataclasses
 import re
 import tomllib
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +33,16 @@ RES_DEP_Y = {'Fontsize', 'Outline', 'Shadow', 'MarginV'}
 ASS_FIELD_MAP = {field.lower(): field for field in SAFE_FIELDS | RES_DEP_X | RES_DEP_Y}
 
 
+@dataclass
+class Parameters:
+    subtitle_restyler: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, section: dict[str, Any]) -> Parameters:
+        valid_parameters = {field.name for field in dataclasses.fields(cls)}
+        return cls(**{k: v for k, v in section.items() if k in valid_parameters})
+
+
 class SubtitleRestyler(Extension):
     def __init__(self, max_ratio: float = 0.15, max_allowance: int = 2):
         super().__init__('subtitle_restyler')
@@ -45,23 +59,21 @@ class SubtitleRestyler(Extension):
         config: Config,
         dry_run: bool = False,
     ) -> None:
-        if not subtitle_tracks:
-            return
-
         if config.toml_path in self.parameters:
-            attributes = self.parameters[config.toml_path]
+            parameters = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
-            attributes = toml_file.get('subtitle_styles', {})
-            self.parameters[config.toml_path] = attributes
+            parameters = Parameters.from_dict(toml_file)
+            self.parameters[config.toml_path] = parameters
 
-        if attributes:
+        style_fields = parameters.subtitle_restyler
+        if subtitle_tracks and style_fields:
             target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
             for subtitle_track in target_tracks:
                 subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
                 if subtitle_path and subtitle_path.is_file():
-                    self.restyle_subtitles(subtitle_path, attributes)
+                    self.restyle_subtitles(subtitle_path, style_fields)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         if subtitle_track.is_external:
@@ -75,7 +87,7 @@ class SubtitleRestyler(Extension):
         return Path(file_path).with_suffix(f'{subtitle_suffix}.ass')
 
     def scale_style_fields(
-        self, input_lines: list[str], attributes: dict[str, Any]
+        self, input_lines: list[str], style_fields: dict[str, Any]
     ) -> dict[str, str]:
         playres_x, playres_y = 384.0, 288.0
         for line in input_lines:
@@ -89,19 +101,19 @@ class SubtitleRestyler(Extension):
         scale_x = playres_x / 1920.0
         scale_y = playres_y / 1080.0
         scaled_fields: dict[str, str] = {}
-        for field, value in attributes.items():
+        for field, value in style_fields.items():
             field = ASS_FIELD_MAP.get(field.lower(), field)
             if field in SAFE_FIELDS:
                 scaled_fields[field] = str(value)
             elif field in RES_DEP_X:
-                scaled_val = float(value) * scale_x
+                scaled_value = float(value) * scale_x
                 scaled_fields[field] = str(
-                    round(scaled_val) if 'Margin' in field else round(scaled_val, 2)
+                    round(scaled_value) if 'Margin' in field else round(scaled_value, 2)
                 )
             elif field in RES_DEP_Y:
-                scaled_val = float(value) * scale_y
+                scaled_value = float(value) * scale_y
                 scaled_fields[field] = str(
-                    round(scaled_val) if 'Margin' in field else round(scaled_val, 2)
+                    round(scaled_value) if 'Margin' in field else round(scaled_value, 2)
                 )
             else:
                 self.extension_logger.warning(f"field '{field}' not in [V4+ Styles]")
@@ -157,10 +169,10 @@ class SubtitleRestyler(Extension):
 
         return subtitle_styles
 
-    def restyle_subtitles(self, file_path: Path, attributes: dict[str, Any]) -> None:
+    def restyle_subtitles(self, file_path: Path, style_fields: dict[str, Any]) -> None:
         with open(file_path, encoding='utf-8-sig') as f:
             input_lines = f.readlines()
-        scaled_fields = self.scale_style_fields(input_lines, attributes)
+        scaled_fields = self.scale_style_fields(input_lines, style_fields)
         if not scaled_fields:
             return
         subtitle_styles = self.detect_dialogue_styles(input_lines)

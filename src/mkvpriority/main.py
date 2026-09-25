@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import dataclasses
 import glob
 import importlib
 import inspect
@@ -17,7 +18,7 @@ import tempfile
 import tomllib
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -139,7 +140,7 @@ class Track:
     category: str
     name: str
     language: str
-    scores: dict[str, int] = field(default_factory=dict)
+    scores: dict[str, int] = dataclasses.field(default_factory=dict)
     default: bool = False
     forced: bool = False
     enabled: bool = True
@@ -164,8 +165,8 @@ P = TypeVar('P', bound='Profile')
 @dataclass
 class Profile:
     name: str
-    mode: list[str] = field(default_factory=list)
-    filters: dict[str, int] = field(default_factory=dict)
+    mode: list[str] = dataclasses.field(default_factory=list)
+    filters: dict[str, int] = dataclasses.field(default_factory=dict)
     require_filter_match: bool = False
 
 
@@ -181,20 +182,20 @@ class SubtitleProfile(Profile):
 
 @dataclass
 class ProfileGroup[P: Profile]:
-    languages: dict[str, int] = field(default_factory=dict)
-    codecs: dict[str, int] = field(default_factory=dict)
-    profiles: dict[str, P] = field(default_factory=dict)
+    languages: dict[str, int] = dataclasses.field(default_factory=dict)
+    codecs: dict[str, int] = dataclasses.field(default_factory=dict)
+    profiles: dict[str, P] = dataclasses.field(default_factory=dict)
     penalize_unscored_languages: bool = False
 
 
 @dataclass
 class AudioProfileGroup(ProfileGroup[AudioProfile]):
-    channels: dict[str, int] = field(default_factory=dict)
+    channels: dict[str, int] = dataclasses.field(default_factory=dict)
 
 
 @dataclass
 class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
-    native_languages: list[str] = field(default_factory=list)
+    native_languages: list[str] = dataclasses.field(default_factory=list)
     process_external_subtitles: bool = False
 
 
@@ -321,8 +322,8 @@ def apply_override(toml_dict: dict[str, Any], override: str) -> None:
 class Config:
     toml_path: str
     toml_label: str
-    audio_group: AudioProfileGroup = field(default_factory=AudioProfileGroup)
-    subtitle_group: SubtitleProfileGroup = field(default_factory=SubtitleProfileGroup)
+    audio_group: AudioProfileGroup = dataclasses.field(default_factory=AudioProfileGroup)
+    subtitle_group: SubtitleProfileGroup = dataclasses.field(default_factory=SubtitleProfileGroup)
 
     @classmethod
     def from_file(
