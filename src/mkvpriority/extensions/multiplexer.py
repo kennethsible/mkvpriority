@@ -10,7 +10,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from mkvpriority import Config, Extension, Track
+from mkvpriority import Config, Database, Extension, Track, extract_tracks
 from mkvpriority.main import mkvmerge_logger
 
 
@@ -45,6 +45,7 @@ class Multiplexer(Extension):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:
@@ -58,7 +59,13 @@ class Multiplexer(Extension):
 
         if parameters.multiplex_container:
             self.multiplex_file(
-                file_path, video_tracks, audio_tracks, subtitle_tracks, parameters, dry_run
+                file_path,
+                video_tracks,
+                audio_tracks,
+                subtitle_tracks,
+                parameters,
+                database,
+                dry_run,
             )
 
     @staticmethod
@@ -94,6 +101,7 @@ class Multiplexer(Extension):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         parameters: Parameters,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         internal_audio_tracks = [track for track in audio_tracks if not track.is_external]
@@ -178,6 +186,7 @@ class Multiplexer(Extension):
 
         log_prefix = '[DRY RUN] ' if dry_run else ''
         self.extension_logger.info(log_prefix + ' '.join(arguments))
+        old_segment_uid, *_ = extract_tracks(file_path)
         if not dry_run:
             try:
                 self.multiplex_tracks(arguments)
@@ -194,9 +203,18 @@ class Multiplexer(Extension):
             for track in external_tracks:
                 if track.file_path is None:
                     continue
-                self.extension_logger.info(log_prefix + f"removing subtitles '{track.file_path}'")
+                subtitle_suffix = track.file_path.name[len(file_path.stem) :]
+                self.extension_logger.info(
+                    log_prefix + f"removing external subtitles '{subtitle_suffix}'"
+                )
                 if not dry_run:
                     track.file_path.unlink(missing_ok=True)
+
+        if not dry_run and database and old_segment_uid:
+            database.delete(old_segment_uid)
+            new_segment_uid, *_ = extract_tracks(file_path)
+            if new_segment_uid:
+                database.insert(new_segment_uid, file_path, [])
 
     def multiplex_tracks(self, arguments: list[str]) -> None:
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:

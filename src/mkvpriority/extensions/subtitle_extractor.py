@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from mkvpriority import Config, Extension, Track
+from mkvpriority import Config, Database, Extension, Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 
@@ -36,6 +36,7 @@ class SubtitleExtractor(Extension):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:
@@ -80,7 +81,8 @@ class SubtitleExtractor(Extension):
 
     def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[int, Path]]) -> None:
         for _, subtitle_path in subtitle_paths:
-            self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_path}'")
+            subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
+            self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_suffix}'")
         arguments = [f'{index}:{subtitle_path}' for index, subtitle_path in subtitle_paths]
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(['tracks', str(file_path), *arguments], temp_file)

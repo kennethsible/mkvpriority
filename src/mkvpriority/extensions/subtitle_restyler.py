@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mkvpriority import Config, Extension, Track
+from mkvpriority import Config, Database, Extension, Track
 from mkvpriority.main import DRAWING_PATTERN, KARAOKE_PATTERN, POSITION_PATTERN, ROTATION_PATTERN
 
 SAFE_FIELDS = {
@@ -57,6 +57,7 @@ class SubtitleRestyler(Extension):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:
@@ -73,7 +74,7 @@ class SubtitleRestyler(Extension):
             for subtitle_track in target_tracks:
                 subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
                 if subtitle_path and subtitle_path.is_file():
-                    self.restyle_subtitles(subtitle_path, style_fields)
+                    self.restyle_subtitles(file_path, subtitle_path, style_fields)
 
     def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
         if subtitle_track.is_external:
@@ -169,8 +170,10 @@ class SubtitleRestyler(Extension):
 
         return subtitle_styles
 
-    def restyle_subtitles(self, file_path: Path, style_fields: dict[str, Any]) -> None:
-        with open(file_path, encoding='utf-8-sig') as f:
+    def restyle_subtitles(
+        self, file_path: Path, subtitle_path: Path, style_fields: dict[str, Any]
+    ) -> None:
+        with open(subtitle_path, encoding='utf-8-sig') as f:
             input_lines = f.readlines()
         scaled_fields = self.scale_style_fields(input_lines, style_fields)
         if not scaled_fields:
@@ -208,6 +211,10 @@ class SubtitleRestyler(Extension):
                         line = 'Style: ' + ','.join(style_parts) + '\n'
             output_lines.append(line)
 
-        self.extension_logger.info(f'restyling external subtitles for {sorted(subtitle_styles)}')
-        with open(file_path, 'w', encoding='utf-8-sig') as f:
+        subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
+        formatted_styles = ', '.join(f"'{style}'" for style in sorted(subtitle_styles))
+        self.extension_logger.info(
+            f"restyling external subtitles '{subtitle_suffix}' ({formatted_styles})"
+        )
+        with open(subtitle_path, 'w', encoding='utf-8-sig') as f:
             f.writelines(output_lines)

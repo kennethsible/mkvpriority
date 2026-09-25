@@ -89,6 +89,7 @@ class Extension(ABC):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         raise NotImplementedError
@@ -1278,7 +1279,7 @@ def process_file(
     if extensions is not None:
         for extension in extensions:
             extension.process_file(
-                file_path, video_tracks, audio_tracks, subtitle_tracks, config, dry_run
+                file_path, video_tracks, audio_tracks, subtitle_tracks, config, database, dry_run
             )
 
 

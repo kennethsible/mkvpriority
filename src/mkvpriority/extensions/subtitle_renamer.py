@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mkvpriority import Config, Extension, Track
+from mkvpriority import Config, Database, Extension, Track
 from mkvpriority.main import resolve_language
 
 
@@ -33,6 +33,7 @@ class SubtitleRenamer(Extension):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:
@@ -85,6 +86,7 @@ class SubtitleRenamer(Extension):
             if track.name:
                 segments.append(track.name)
 
+            old_file_name = track.file_path.name
             file_suffix = track.file_path.suffix.lower()
             new_file_name = '.'.join(segments) + file_suffix
             new_file_path = file_path.parent / new_file_name
@@ -92,8 +94,10 @@ class SubtitleRenamer(Extension):
                 if new_file_path.exists():
                     continue
 
+                old_suffix = old_file_name[len(file_path.stem) :]
+                new_suffix = new_file_name[len(file_path.stem) :]
                 self.extension_logger.info(
-                    f"renaming '{track.file_path.name}' -> '{new_file_name}'"
+                    f"renaming external subtitles '{old_suffix}' -> '{new_suffix}'"
                 )
                 track.file_path.rename(new_file_path)
                 track.file_path = new_file_path

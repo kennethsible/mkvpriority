@@ -203,7 +203,7 @@ convert_remove_source = false
 
 ### Example: Subtitle Renamer
 
-You can use the `subtitle_renamer` extension to rename external sidecar subtitles to reflect their updated track states. When processing an MKV file, sidecar files are identified, normalized to ISO 639-2/B language codes, and scored alongside embedded tracks. If the track flags for an external subtitle change, this extension renames the file on disk to reflect its new flags, appending or stripping `.default` or `.forced` from the filename and standardizing the language code.
+You can use the `subtitle_renamer` extension to rename external sidecar subtitles to reflect their updated track states. When processing an MKV file, sidecar files are identified, normalized to ISO 639-2/T language codes, and scored alongside embedded tracks. If the track flags for an external subtitle change, this extension renames the file on disk to reflect its new flags, appending or stripping `.default` or `.forced` from the filename and standardizing the language code.
 
 ```toml
 [subtitle_profiles.global]
@@ -284,6 +284,7 @@ You can easily write your own post-processing scripts to handle custom logic.
            audio_tracks: list[Track],
            subtitle_tracks: list[Track],
            config: Config,
+           database: Database | None = None,
            dry_run: bool = False,
        ) -> None:
            raise NotImplementedError

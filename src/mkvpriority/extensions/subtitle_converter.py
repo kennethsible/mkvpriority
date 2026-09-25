@@ -9,7 +9,7 @@ from typing import Any
 import pysubs2
 from pysubs2.exceptions import Pysubs2Error
 
-from mkvpriority import Config, Extension, Track
+from mkvpriority import Config, Database, Extension, Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 
@@ -42,6 +42,7 @@ class SubtitleConverter(Extension):
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
         config: Config,
+        database: Database | None = None,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:
@@ -74,8 +75,9 @@ class SubtitleConverter(Extension):
                     continue
 
                 remove_source = parameters.convert_remove_source
-                if self.convert_subtitles(source_path, target_path) and remove_source:
-                    self.extension_logger.info(f"removing subtitles '{source_path.name}'")
+                if self.convert_subtitles(file_path, source_path, target_path) and remove_source:
+                    source_suffix = source_path.name[len(file_path.stem) :]
+                    self.extension_logger.info(f"removing external subtitles '{source_suffix}'")
                     source_path.unlink(missing_ok=True)
                     if subtitle_track.is_external:
                         subtitle_track.file_path = target_path
@@ -95,8 +97,9 @@ class SubtitleConverter(Extension):
             subtitle_suffix += '.forced'
         return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
 
-    def convert_subtitles(self, source_path: Path, target_path: Path) -> bool:
-        self.extension_logger.info(f"converting extracted subtitles to '{target_path.name}'")
+    def convert_subtitles(self, file_path: Path, source_path: Path, target_path: Path) -> bool:
+        subtitle_suffix = target_path.name[len(file_path.stem) :]
+        self.extension_logger.info(f"converting external subtitles to '{subtitle_suffix}'")
         try:
             subtitle_file = pysubs2.load(str(source_path))
             subtitle_file.info['PlayResX'] = '1920'
