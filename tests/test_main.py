@@ -799,7 +799,7 @@ def test_rename_subtitles() -> None:
         assert not demoted_srt.exists() and promoted_srt.is_file()
 
 
-def test_reorder_tracks() -> None:
+def test_order_tracks() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -810,9 +810,11 @@ def test_reorder_tracks() -> None:
         toml_text = Path('config.toml').read_text(encoding='utf-8')
         toml_path.write_text(
             f'{toml_text}\n'
-            '[multiplexer]\nreorder_tracks = true\n'
-            'remux_audio_profile = "default"\n'
-            'remux_subtitle_profile = "dialogue"\n',
+            '[multiplexer]\n'
+            'multiplex_container = true\n'
+            'order_tracks_by_score = true\n'
+            'order_audio_profile = "default"\n'
+            'order_subtitle_profile = "dialogue"\n',
             encoding='utf-8',
         )
         config = mkvpriority.Config.from_file(toml_path)
@@ -841,9 +843,15 @@ def test_strip_tracks() -> None:
         toml_text = Path('config.toml').read_text(encoding='utf-8')
         toml_path.write_text(
             f'{toml_text}\n'
-            '[multiplexer]\nstrip_tracks = true\n'
-            'remux_audio_profile = "default"\n'
-            'remux_subtitle_profile = "dialogue"\n',
+            '[audio_profiles.strip]\n'
+            'audio_mode = ["enabled"]\n'
+            '[subtitle_profiles.strip]\n'
+            'subtitle_mode = ["enabled"]\n'
+            '[multiplexer]\n'
+            'multiplex_container = true\n'
+            'strip_unscored_tracks = true\n'
+            'strip_audio_profile = "strip"\n'
+            'strip_subtitle_profile = "strip"\n',
             encoding='utf-8',
         )
         config = mkvpriority.Config.from_file(toml_path)

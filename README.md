@@ -233,16 +233,28 @@ Example: Princess Mononoke (1997).jpn.default.commentary.ass
 
 ### Example: Multiplexer
 
-You can use the `multiplexer` extension to strip tracks for unwanted languages and reorder tracks by priority scores. Since remuxing conflicts with the core "no-remux" design, these features are delegated to an extension module. To enable them, add the `[multiplexer]` section to your config file and include this extension in your arguments.
+You can use the `multiplexer` extension to strip tracks with unwanted languages and reorder tracks by priority scores. Since remuxing involves unpacking and rewriting the container, these features are delegated to an extension module. To enable them, add the `[multiplexer]` section to your config file and include this extension in your arguments.
 
 ```toml
+[audio_profiles.strip]
+audio_mode = ["enabled"]
+
+[subtitle_profiles.strip]
+subtitle_mode = ["enabled"]
+
 [multiplexer]
-strip_tracks = true
-reorder_tracks = true
-remux_audio_profile = "default"
-remux_subtitle_profile = "dialogue"
+multiplex_container = true
+strip_unscored_tracks = true
+strip_audio_profile = "strip"
+strip_subtitle_profile = "strip"
+order_tracks_by_score = true
+order_audio_profile = "default"
+order_subtitle_profile = "dialogue"
 mkvmerge_arguments = []
 ```
+
+> [!NOTE]
+> To avoid stripping tracks with your preferred languages, create profiles specifically for stripping tracks without any filters.
 
 ### Creating Extensions
 

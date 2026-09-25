@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import itertools
 import json
 import subprocess
 import tomllib
+from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -10,10 +13,35 @@ from mkvpriority import Config, Extension, Track
 from mkvpriority.main import mkvmerge_logger
 
 
+@dataclass
+class Parameters:
+    multiplex_container: bool = False
+    strip_tracks: bool = False
+    strip_audio_profile: str | None = None
+    strip_subtitle_profile: str | None = None
+    order_tracks: bool = False
+    order_audio_profile: str | None = None
+    order_subtitle_profile: str | None = None
+    mkvmerge_arguments: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, section: dict[str, Any]) -> Parameters:
+        return cls(
+            multiplex_container=section.get('multiplex_container', False),
+            strip_tracks=section.get('strip_unscored_tracks', False),
+            strip_audio_profile=section.get('strip_audio_profile'),
+            strip_subtitle_profile=section.get('strip_subtitle_profile'),
+            order_tracks=section.get('order_tracks_by_score', False),
+            order_audio_profile=section.get('order_audio_profile'),
+            order_subtitle_profile=section.get('order_subtitle_profile'),
+            mkvmerge_arguments=section.get('mkvmerge_arguments', []),
+        )
+
+
 class Multiplexer(Extension):
     def __init__(self) -> None:
         super().__init__('multiplexer')
-        self.parameters: dict[str, Any] = {}
+        self.parameters: dict[str, Parameters] = {}
 
     def process_file(
         self,
@@ -25,66 +53,44 @@ class Multiplexer(Extension):
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:
-            attributes = self.parameters[config.toml_path]
+            parameters = self.parameters[config.toml_path]
         else:
             with open(config.toml_path, 'rb') as f:
                 toml_file = tomllib.load(f)
-            attributes = toml_file.get('multiplexer', {})
-            self.parameters[config.toml_path] = attributes
+            multiplexer_section = toml_file.get('multiplexer', {})
+            parameters = Parameters.from_dict(multiplexer_section)
+            self.parameters[config.toml_path] = parameters
 
-        strip_tracks = attributes.get('strip_tracks', False)
-        reorder_tracks = attributes.get('reorder_tracks', False)
-        remux_audio_profile = attributes.get('remux_audio_profile')
-        remux_subtitle_profile = attributes.get('remux_subtitle_profile')
-        mkvmerge_arguments = attributes.get('mkvmerge_arguments', [])
-
-        has_track_action = any((strip_tracks, reorder_tracks))
-        has_remux_profile = any((remux_audio_profile, remux_subtitle_profile))
-
-        if (has_track_action and has_remux_profile) or mkvmerge_arguments:
+        if parameters.multiplex_container:
             self.multiplex_file(
-                file_path,
-                video_tracks,
-                audio_tracks,
-                subtitle_tracks,
-                strip_tracks,
-                reorder_tracks,
-                remux_audio_profile,
-                remux_subtitle_profile,
-                mkvmerge_arguments,
-                dry_run,
+                file_path, video_tracks, audio_tracks, subtitle_tracks, parameters, dry_run
             )
 
     @staticmethod
     def partition_tracks(
         tracks: list[Track],
-        profile_name: str | None = None,
         strip_tracks: bool = False,
-        reorder_tracks: bool = False,
-    ) -> tuple[list[str], list[str]]:
-        ordered_indices: list[str] = []
+        strip_profile: str | None = None,
+        order_tracks: bool = False,
+        order_profile: str | None = None,
+    ) -> tuple[list[Track], list[str]]:
+        container_tracks = list(tracks)
         stripped_indices: list[str] = []
 
-        internal_tracks = [track for track in tracks if not track.is_external]
-        if not profile_name:
-            ordered_indices.extend(f'0:{track.index}' for track in internal_tracks)
-            return ordered_indices, stripped_indices
-
-        sorted_tracks = [
-            track for track in internal_tracks if track.scores.get(profile_name, 0) > 0
-        ]
-        sorted_tracks.sort(key=lambda track: track.scores.get(profile_name, 0), reverse=True)
-
-        if strip_tracks:
-            ordered_indices.extend(f'0:{track.index}' for track in sorted_tracks)
-            stripped_indices.extend(str(track.index) for track in sorted_tracks)
-        elif reorder_tracks:
-            unwanted_tracks = [
-                track for track in internal_tracks if track.scores.get(profile_name, 0) <= 0
+        if strip_tracks and strip_profile:
+            container_tracks = [
+                track for track in container_tracks if track.scores.get(strip_profile, 0) > 0
             ]
-            ordered_indices.extend(f'0:{track.index}' for track in sorted_tracks + unwanted_tracks)
+            stripped_indices = [
+                str(track.index) for track in container_tracks if not track.is_external
+            ]
 
-        return ordered_indices, stripped_indices
+        if order_tracks and order_profile:
+            container_tracks.sort(
+                key=lambda track: track.scores.get(order_profile, 0), reverse=True
+            )
+
+        return container_tracks, stripped_indices
 
     def multiplex_file(
         self,
@@ -92,48 +98,91 @@ class Multiplexer(Extension):
         video_tracks: list[Track],
         audio_tracks: list[Track],
         subtitle_tracks: list[Track],
-        strip_tracks: bool = False,
-        reorder_tracks: bool = False,
-        remux_audio_profile: str | None = None,
-        remux_subtitle_profile: str | None = None,
-        mkvmerge_arguments: list[str] | None = None,
+        parameters: Parameters,
         dry_run: bool = False,
     ) -> None:
-        track_order: list[str] = [f'0:{track.index}' for track in video_tracks]
+        internal_audio_tracks = [track for track in audio_tracks if not track.is_external]
+        internal_subtitle_tracks = [track for track in subtitle_tracks if not track.is_external]
 
-        audio_order, audio_strip = self.partition_tracks(
-            audio_tracks, remux_audio_profile, strip_tracks, reorder_tracks
+        audio_tracks, stripped_audio_indices = self.partition_tracks(
+            audio_tracks,
+            parameters.strip_tracks,
+            parameters.strip_audio_profile,
+            parameters.order_tracks,
+            parameters.order_audio_profile,
         )
-        subtitle_order, subtitle_strip = self.partition_tracks(
-            subtitle_tracks, remux_subtitle_profile, strip_tracks, reorder_tracks
+        subtitle_tracks, stripped_subtitles_indices = self.partition_tracks(
+            subtitle_tracks,
+            parameters.strip_tracks,
+            parameters.strip_subtitle_profile,
+            parameters.order_tracks,
+            parameters.order_subtitle_profile,
+        )
+        external_tracks = [track for track in subtitle_tracks if track.is_external]
+        remaining_tracks = [*video_tracks, *audio_tracks, *subtitle_tracks]
+
+        stripped_audio_indices = (
+            stripped_audio_indices
+            if len(stripped_audio_indices) != len(internal_audio_tracks)
+            else []
+        )
+        stripped_subtitles_indices = (
+            stripped_subtitles_indices
+            if len(stripped_subtitles_indices) != len(internal_subtitle_tracks)
+            else []
         )
 
-        audio_strip = audio_strip if len(audio_strip) != len(audio_tracks) else []
-        subtitle_strip = subtitle_strip if len(subtitle_strip) != len(subtitle_tracks) else []
+        source_map: dict[Path, int] = {file_path.resolve(): 0}
+        for external_track in external_tracks:
+            if external_track.file_path is None:
+                continue
+            resolved_path = external_track.file_path.resolve()
+            if resolved_path not in source_map:
+                source_map[resolved_path] = len(source_map)
 
-        track_order.extend(audio_order)
-        track_order.extend(subtitle_order)
+        track_order: list[str] = []
+        for track in remaining_tracks:
+            if track.is_external and track.file_path:
+                source_id = source_map[track.file_path.resolve()]
+                track_order.append(f'{source_id}:0')
+            else:
+                track_order.append(f'0:{track.index}')
 
-        requires_reorder = reorder_tracks and any(
-            int(id_a.split(':')[1]) > int(id_b.split(':')[1])
-            for id_a, id_b in itertools.pairwise(track_order)
-        )
-        if not (audio_strip or subtitle_strip or requires_reorder or mkvmerge_arguments):
-            return
+        if order_tracks := parameters.order_tracks:
+            internal_indices = [
+                int(spec.split(':')[1]) for spec in track_order if spec.startswith('0:')
+            ]
+            order_tracks = any(
+                idx_a > idx_b for idx_a, idx_b in itertools.pairwise(internal_indices)
+            ) or bool(external_tracks)
 
         temp_output_path = file_path.with_name(f'{file_path.stem}_temp.mkv')
         arguments = ['-o', str(temp_output_path)]
-        if audio_strip:
-            arguments.extend(['--audio-tracks', ','.join(audio_strip)])
-        if subtitle_strip:
-            arguments.extend(['--subtitle-tracks', ','.join(subtitle_strip)])
-        if requires_reorder:
+
+        if stripped_audio_indices:
+            arguments.extend(['--audio-tracks', ','.join(stripped_audio_indices)])
+        if stripped_subtitles_indices:
+            arguments.extend(['--subtitle-tracks', ','.join(stripped_subtitles_indices)])
+        if order_tracks or external_tracks:
             arguments.extend(['--track-order', ','.join(track_order)])
-        if mkvmerge_arguments:
-            arguments.extend(mkvmerge_arguments)
+        if parameters.mkvmerge_arguments:
+            arguments.extend(parameters.mkvmerge_arguments)
         arguments.append(str(file_path))
 
-        self.extension_logger.info(' '.join(arguments))
+        for subtitle_track in external_tracks:
+            track_lang = subtitle_track.normalized_language
+            if track_lang != 'und':
+                arguments.extend(['--language', f'0:{track_lang}'])
+            if subtitle_track.name:
+                arguments.extend(['--track-name', f'0:{subtitle_track.name}'])
+            arguments.extend(['--default-track-flag', f'0:{int(subtitle_track.default)}'])
+            arguments.extend(['--forced-display-flag', f'0:{int(subtitle_track.forced)}'])
+            if subtitle_track.codec == 'S_TEXT/UTF8':
+                arguments.extend(['--sub-charset', '0:UTF-8'])
+            arguments.append(str(subtitle_track.file_path))
+
+        log_prefix = '[DRY RUN] ' if dry_run else ''
+        self.extension_logger.info(log_prefix + ' '.join(arguments))
         if not dry_run:
             try:
                 self.multiplex_tracks(arguments)
