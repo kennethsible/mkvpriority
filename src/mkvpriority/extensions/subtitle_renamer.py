@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mkvpriority import Config, Database, Extension, Track
-from mkvpriority.main import resolve_language
+from ..config import Config
+from ..database import Database
+from ..extension import Extension
+from ..types import Track, resolve_language
 
 
 @dataclass

@@ -9,7 +9,10 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from mkvpriority import Config, Database, Extension, Track
+from ..config import Config
+from ..database import Database
+from ..extension import Extension
+from ..types import Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import itertools
 import json
+import logging
 import subprocess
 import tomllib
 from dataclasses import dataclass
@@ -10,8 +11,13 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from mkvpriority import Config, Database, Extension, Track, extract_tracks
-from mkvpriority.main import mkvmerge_logger
+from ..config import Config
+from ..database import Database
+from ..extension import Extension
+from ..mkvtoolnix import extract_tracks
+from ..types import Track
+
+mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
 @dataclass

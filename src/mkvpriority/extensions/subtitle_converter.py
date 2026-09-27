@@ -9,7 +9,10 @@ from typing import Any
 import pysubs2
 from pysubs2.exceptions import Pysubs2Error
 
-from mkvpriority import Config, Database, Extension, Track
+from ..config import Config
+from ..database import Database
+from ..extension import Extension
+from ..types import Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 

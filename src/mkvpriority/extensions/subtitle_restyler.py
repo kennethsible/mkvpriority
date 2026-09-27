@@ -8,8 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from mkvpriority import Config, Database, Extension, Track
-from mkvpriority.main import DRAWING_PATTERN, KARAOKE_PATTERN, POSITION_PATTERN, ROTATION_PATTERN
+from ..config import Config
+from ..database import Database
+from ..extension import Extension
+from ..subtitles import DRAWING_PATTERN, KARAOKE_PATTERN, POSITION_PATTERN, ROTATION_PATTERN
+from ..types import Track
 
 SAFE_FIELDS = {
     'Fontname',

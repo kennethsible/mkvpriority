@@ -16,9 +16,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from cron_descriptor import FormatError
 
-import mkvpriority
+import mkvpriority.main
 from mkvpriority import __version__
-from mkvpriority.main import setup_logging
 
 entrypoint_logger = logging.getLogger('entrypoint')
 processing_queue: asyncio.Queue[tuple[str, str, str | None]] = asyncio.Queue()
@@ -157,7 +156,7 @@ def main() -> None:
 
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
-    setup_logging('/config/mkvpriority.log', max_bytes, max_files)
+    mkvpriority.main.setup_logging('/config/mkvpriority.log', max_bytes, max_files)
 
     entrypoint_logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)

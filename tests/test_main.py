@@ -9,7 +9,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient
 
-import mkvpriority
+import mkvpriority.main
 from mkvpriority import entrypoint
 from mkvpriority.extensions.multiplexer import Multiplexer
 from mkvpriority.extensions.subtitle_converter import SubtitleConverter

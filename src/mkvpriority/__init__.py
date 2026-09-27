@@ -2,25 +2,19 @@ import importlib.metadata
 import tomllib
 from pathlib import Path
 
-from .main import (
+from .config import Config
+from .database import Database
+from .extension import Extension
+from .mkvtoolnix import extract_tracks, identify_tracks, modify_tracks
+from .processor import process_file, process_tracks, restore_file, restore_tracks, score_tracks
+from .types import (
     AudioProfile,
     AudioProfileGroup,
-    Config,
-    Database,
-    Extension,
     Profile,
     ProfileGroup,
     SubtitleProfile,
     SubtitleProfileGroup,
     Track,
-    extract_tracks,
-    identify_tracks,
-    modify_tracks,
-    process_file,
-    process_tracks,
-    restore_file,
-    restore_tracks,
-    score_tracks,
 )
 
 try:
