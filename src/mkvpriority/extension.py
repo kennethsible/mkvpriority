@@ -1,8 +1,6 @@
 import importlib
 import inspect
 import logging
-import os
-import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -28,19 +26,7 @@ class Extension(ABC):
         config: Config,
         database: Database | None = None,
         dry_run: bool = False,
-    ) -> None:
-        raise NotImplementedError
-
-
-def setup_extension_paths() -> None:
-    ext_dirs: list[Path] = []
-    if env_dir := os.environ.get('MKVPRIORITY_EXT_DIR'):
-        ext_dirs.append(Path(env_dir))
-    ext_dirs.append(Path.home() / '.config' / 'mkvpriority' / 'extensions')
-    ext_dirs.append(Path.cwd())
-    for ext_dir in ext_dirs:
-        if ext_dir.is_dir() and str(ext_dir) not in sys.path:
-            sys.path.insert(0, str(ext_dir))
+    ) -> None: ...
 
 
 def load_extension(module_name: str) -> Extension | None:
@@ -53,19 +39,16 @@ def load_extension(module_name: str) -> Extension | None:
             mkvpriority_logger.error(f"could not locate extension '{module_name}'")
             return None
 
-    for name, obj in inspect.getmembers(module, inspect.isclass):
+    for class_name, member in inspect.getmembers(module, inspect.isclass):
         if (
-            issubclass(obj, Extension)
-            and obj is not Extension
-            and obj.__module__ == module.__name__
+            issubclass(member, Extension)
+            and member is not Extension
+            and member.__module__ == module.__name__
         ):
-            if not callable(obj):
-                mkvpriority_logger.error(f"'{name}' in '{module_name}' is not callable")
-                return None
             try:
-                return obj()
-            except TypeError:
-                mkvpriority_logger.error(f"could not instantiate '{name}'")
+                return member()
+            except Exception:
+                mkvpriority_logger.exception(f"could not instantiate extension '{class_name}'")
                 return None
 
     mkvpriority_logger.error(f"no valid extension subclass found in '{module_name}'")

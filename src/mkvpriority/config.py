@@ -21,6 +21,25 @@ class ConfigError(Exception):
     pass
 
 
+def apply_override(toml_dict: dict[str, Any], override: str) -> None:
+    if '=' not in override:
+        raise ValueError(f"invalid override format '{override}'")
+
+    path, value_str = override.split('=', 1)
+    keys = [key.strip() for key in path.strip().split('.')]
+    try:
+        value = json.loads(value_str.strip())
+    except json.JSONDecodeError:
+        value = value_str.strip()
+
+    target = toml_dict
+    for key in keys[:-1]:
+        if key not in target or not isinstance(target[key], dict):
+            raise ConfigError(f"unknown section '{key}' in override '{override}'")
+        target = target[key]
+    target[keys[-1]] = value
+
+
 def validate_config_schema(toml_dict: dict[str, Any], toml_path: Path) -> None:
     profile_sections = ('audio_profiles', 'subtitle_profiles')
     if missing_sections := [section for section in profile_sections if section not in toml_dict]:
@@ -75,25 +94,6 @@ def validate_config_schema(toml_dict: dict[str, Any], toml_path: Path) -> None:
 
             if 'filters' in profile and not isinstance(profile['filters'], dict):
                 raise ConfigError(f"'filters' in '[{section_name}.{profile_name}]' must be a table")
-
-
-def apply_override(toml_dict: dict[str, Any], override: str) -> None:
-    if '=' not in override:
-        raise ValueError(f"invalid override format '{override}'")
-
-    path, value_str = override.split('=', 1)
-    keys = [key.strip() for key in path.strip().split('.')]
-    try:
-        value = json.loads(value_str.strip())
-    except json.JSONDecodeError:
-        value = value_str.strip()
-
-    target = toml_dict
-    for key in keys[:-1]:
-        if key not in target or not isinstance(target[key], dict):
-            raise ConfigError(f"unknown section '{key}' in override '{override}'")
-        target = target[key]
-    target[keys[-1]] = value
 
 
 @dataclass

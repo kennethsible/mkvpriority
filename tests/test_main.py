@@ -1,4 +1,4 @@
-import os
+import asyncio
 import subprocess
 import tempfile
 from collections.abc import Awaitable, Callable
@@ -404,6 +404,8 @@ def test_config_overrides() -> None:
 async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
     with patch('mkvpriority.main.main') as mock_main:
         app = web.Application()
+        queue: entrypoint.ProcessingQueue = asyncio.Queue()
+        app['processing_queue'] = queue
         app.router.add_post('/process', entrypoint.process_handler)
         client = await aiohttp_client(app)
 
@@ -414,13 +416,12 @@ async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
         response_data = await response.json()
         assert response_data == {'message': "received '/movies/dummy.mkv'"}
 
-        assert not entrypoint.processing_queue.empty()
-        queued_item = await entrypoint.processing_queue.get()
+        assert not queue.empty()
+        queued_item = await queue.get()
         assert queued_item == ('/movies/dummy.mkv', 'anime|1080p', 'jpn')
 
-        os.environ['MKVPRIORITY_ARGS'] = '-c config.toml'
         await entrypoint.process_item(*queued_item)
-        entrypoint.processing_queue.task_done()
+        queue.task_done()
 
         expected_argv = [*entrypoint.MKVPRIORITY_ARGS, '/movies/dummy.mkv::anime']
         mock_main.assert_called_once_with(expected_argv, 'jpn')

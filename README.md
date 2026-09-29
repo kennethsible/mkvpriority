@@ -286,8 +286,7 @@ You can easily write your own post-processing scripts to handle custom logic.
            config: Config,
            database: Database | None = None,
            dry_run: bool = False,
-       ) -> None:
-           raise NotImplementedError
+       ) -> None: ...
    ```
 
 3. Use `-i/--include` with the script name (without the `.py` extension):
