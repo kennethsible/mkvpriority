@@ -40,7 +40,7 @@ def apply_override(toml_dict: dict[str, Any], override: str) -> None:
     target[keys[-1]] = value
 
 
-def validate_config_schema(toml_dict: dict[str, Any], toml_path: Path) -> None:
+def validate_config_schema(toml_dict: dict[str, Any], toml_path: str | Path) -> None:
     profile_sections = ('audio_profiles', 'subtitle_profiles')
     if missing_sections := [section for section in profile_sections if section not in toml_dict]:
         missing_sections_str = ' and '.join(f'[{section}]' for section in missing_sections)
@@ -105,7 +105,7 @@ class Config:
 
     @classmethod
     def from_file(
-        cls, toml_path: Path, toml_label: str = 'untagged', overrides: list[str] | None = None
+        cls, toml_path: str | Path, toml_label: str = 'untagged', overrides: list[str] | None = None
     ) -> Config:
         with open(toml_path, 'rb') as f:
             toml_dict = tomllib.load(f)

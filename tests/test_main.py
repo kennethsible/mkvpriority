@@ -589,8 +589,8 @@ def test_sidecar_subtitles() -> None:
         with mkvpriority.Database(str(archive_path)) as database:
             mkvpriority.process_file(file_path, config, database)
 
-            database.cur.execute('SELECT COUNT(*) FROM metadata')
-            assert database.cur.fetchone()[0] == 4
+            cur = database.con.execute('SELECT COUNT(*) FROM metadata')
+            assert cur.fetchone()[0] == 4
 
             *_, subtitle_tracks = mkvpriority.extract_tracks(file_path)
             external_tracks = [track for track in subtitle_tracks if track.is_external]
