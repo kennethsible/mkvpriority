@@ -1,3 +1,4 @@
+import glob
 import logging
 import re
 import subprocess
@@ -28,9 +29,7 @@ def extract_header_title(subtitle_path: Path) -> str | None:
     return None
 
 
-def parse_external_subtitles(
-    subtitle_path: Path, file_stem: str, virtual_index: int
-) -> Track | None:
+def parse_sidecar_track(subtitle_path: Path, file_stem: str, virtual_index: int) -> Track | None:
     file_suffix = subtitle_path.suffix.lower()
     if file_suffix not in SUBTITLE_EXTENSIONS:
         return None
@@ -71,6 +70,25 @@ def parse_external_subtitles(
         uid=virtual_index,
         file_path=subtitle_path.resolve(),
     )
+
+
+def find_sidecar_tracks(file_path: Path) -> list[Track]:
+    parent_dir = file_path.parent
+    if not parent_dir.is_dir():
+        return []
+
+    subtitle_tracks: list[Track] = []
+    file_stem = file_path.stem
+
+    virtual_id = -1
+    for sidecar_path in sorted(parent_dir.glob(f'{glob.escape(file_stem)}*')):
+        if not sidecar_path.is_file():
+            continue
+        if subtitle_track := parse_sidecar_track(sidecar_path, file_stem, virtual_id):
+            subtitle_tracks.append(subtitle_track)
+            virtual_id -= 1
+
+    return subtitle_tracks
 
 
 def count_unique_dialogue(temp_path: Path, is_srt: bool) -> int:
@@ -138,11 +156,11 @@ def compute_subtitle_sizes(
         def codec_ext(codec: str) -> str:
             return 'ass' if codec in ('S_TEXT/ASS', 'S_TEXT/SSA') else 'srt'
 
-        temp_paths = {
-            track.index: temp_dir_path / f'{track.index}.{codec_ext(track.codec)}'
+        temp_paths = [
+            (track, temp_dir_path / f'{track.index}.{codec_ext(track.codec)}')
             for track in internal_tracks
-        }
-        arguments.extend(f'{index}:{path}' for index, path in temp_paths.items())
+        ]
+        arguments.extend(f'{track.index}:{path}' for track, path in temp_paths)
 
         try:
             result = subprocess.run(arguments, capture_output=True, text=True, check=True)
@@ -152,12 +170,11 @@ def compute_subtitle_sizes(
             mkvextract_logger.error(str(e).strip())
             return dialogue_counts
 
-        track_by_index = {track.index: track for track in internal_tracks}
-        for index, temp_path in temp_paths.items():
+        for track, temp_path in temp_paths:
             if not temp_path.exists():
                 continue
-            dialogue_counts[index] = count_unique_dialogue(
-                temp_path, is_srt=track_by_index[index].codec == 'S_TEXT/UTF8'
+            dialogue_counts[track.index] = count_unique_dialogue(
+                temp_path, is_srt=track.codec == 'S_TEXT/UTF8'
             )
 
     return dialogue_counts

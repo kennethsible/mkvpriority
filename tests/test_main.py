@@ -16,6 +16,7 @@ from mkvpriority.extensions.subtitle_converter import SubtitleConverter
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
 from mkvpriority.extensions.subtitle_renamer import SubtitleRenamer
 from mkvpriority.extensions.subtitle_restyler import SubtitleRestyler
+from mkvpriority.subtitles import find_sidecar_tracks
 
 AIOTestClient = TestClient[web.Request, web.Application]
 AIOClientFixture = Callable[[web.Application], Awaitable[AIOTestClient]]
@@ -561,9 +562,8 @@ def test_sidecar_subtitles() -> None:
         sidecar_srt = temp_path / 'dummy.ja.forced.External Commentary.srt'
         sidecar_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
 
-        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(
-            file_path, config
-        )
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        subtitle_tracks.extend(find_sidecar_tracks(file_path))
         assert len(video_tracks + audio_tracks + subtitle_tracks) == 10
 
         external_tracks = [track for track in subtitle_tracks if track.is_external]

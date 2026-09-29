@@ -1,6 +1,3 @@
-from __future__ import annotations
-
-import glob
 import json
 import logging
 import shutil
@@ -8,15 +5,9 @@ import subprocess
 import uuid
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from .config import Config
-from .subtitles import parse_external_subtitles
 from .types import Track
-
-if TYPE_CHECKING:
-    from .database import Database
-
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -89,9 +80,7 @@ def modify_tracks(arguments: list[str]) -> None:
         temp_file_path.unlink(missing_ok=True)
 
 
-def extract_tracks(
-    file_path: Path, config: Config | None = None, database: Database | None = None
-) -> tuple[str | None, list[Track], list[Track], list[Track]]:
+def extract_tracks(file_path: Path) -> tuple[str | None, list[Track], list[Track], list[Track]]:
     try:
         track_data = identify_tracks(file_path)
     except subprocess.CalledProcessError as e:
@@ -136,9 +125,6 @@ def extract_tracks(
         if track.uid is None:
             continue
 
-        if database is not None:
-            database.restore(segment_uid, track)
-
         match track.category:
             case 'video':
                 video_tracks.append(track)
@@ -146,17 +132,5 @@ def extract_tracks(
                 audio_tracks.append(track)
             case 'subtitles':
                 subtitle_tracks.append(track)
-
-    if config and config.subtitle_group.process_external_subtitles:
-        parent_dir = file_path.parent
-        if parent_dir.is_dir():
-            file_stem = file_path.stem
-            virtual_id = -1
-            for sidecar_path in sorted(parent_dir.glob(f'{glob.escape(file_stem)}*')):
-                if not sidecar_path.is_file():
-                    continue
-                if subtitle_track := parse_external_subtitles(sidecar_path, file_stem, virtual_id):
-                    subtitle_tracks.append(subtitle_track)
-                    virtual_id -= 1
 
     return segment_uid, video_tracks, audio_tracks, subtitle_tracks

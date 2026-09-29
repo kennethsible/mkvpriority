@@ -1,12 +1,28 @@
 import logging
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
 from .mkvtoolnix import ensure_segment_uid, extract_tracks, normalize_segment_uid
-from .types import ArchiveRecord, Track
+from .types import Track
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
+
+
+@dataclass(frozen=True)
+class ArchiveRecord:
+    segment_uid: str
+    file_path: Path
+    file_mtime: int
+
+
+@dataclass(frozen=True)
+class MetadataRecord:
+    track_uid: str
+    default: bool
+    forced: bool
+    enabled: bool
 
 
 class Database:
@@ -124,6 +140,13 @@ class Database:
             self.cur.execute('DELETE FROM archive WHERE segment_uid = ?', (str(segment_uid),))
             self.con.commit()
 
+    def prune(self) -> None:
+        self.cur.execute('SELECT segment_uid, file_path FROM archive')
+        for row in self.cur.fetchall():
+            segment_uid, file_path = row[0], Path(row[1])
+            if not file_path.is_file():
+                self.delete(segment_uid, file_path)
+
     def select_by_path(self, file_path: Path) -> ArchiveRecord | None:
         file_path = file_path.resolve()
         self.cur.execute(
@@ -158,30 +181,25 @@ class Database:
             )
         return None
 
-    def restore(self, segment_uid: str | None, track: Track) -> bool:
-        if not segment_uid or track.is_external:
-            return False
+    def select_metadata(self, segment_uid: str) -> dict[str, MetadataRecord]:
         segment_uid = normalize_segment_uid(segment_uid)
         self.cur.execute(
             """
-            SELECT default_flag, forced_flag, enabled_flag 
+            SELECT track_uid, default_flag, forced_flag, enabled_flag 
             FROM metadata
-            WHERE segment_uid = ? 
-              AND track_uid = ?
+            WHERE segment_uid = ?
             """,
-            (str(segment_uid), str(track.uid)),
+            (str(segment_uid),),
         )
-        result = self.cur.fetchone()
-        if result:
-            track.default, track.forced, track.enabled = map(bool, result)
-        return result is not None
-
-    def prune(self) -> None:
-        self.cur.execute('SELECT segment_uid, file_path FROM archive')
-        for row in self.cur.fetchall():
-            segment_uid, file_path = row[0], Path(row[1])
-            if not file_path.is_file():
-                self.delete(segment_uid, file_path)
+        return {
+            str(row[0]): MetadataRecord(
+                track_uid=str(row[0]),
+                default=bool(row[1]),
+                forced=bool(row[2]),
+                enabled=bool(row[3]),
+            )
+            for row in self.cur.fetchall()
+        }
 
     def _initialize(self, prefix: str = '') -> None:
         archive_table, metadata_table = f'{prefix}archive', f'{prefix}metadata'

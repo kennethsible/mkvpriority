@@ -107,10 +107,3 @@ class AudioProfileGroup(ProfileGroup[AudioProfile]):
 class SubtitleProfileGroup(ProfileGroup[SubtitleProfile]):
     native_languages: list[str] = dataclasses.field(default_factory=list)
     process_external_subtitles: bool = False
-
-
-@dataclass(frozen=True)
-class ArchiveRecord:
-    segment_uid: str
-    file_path: Path
-    file_mtime: int
