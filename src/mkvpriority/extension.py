@@ -1,6 +1,8 @@
 import importlib
 import inspect
 import logging
+import os
+import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -29,7 +31,27 @@ class Extension(ABC):
     ) -> None: ...
 
 
+def _ensure_import_paths() -> None:
+    ext_dirs: list[Path] = []
+    if env_dir := os.getenv('MKVPRIORITY_EXT_DIR'):
+        ext_dirs.append(Path(env_dir).resolve())
+
+    ext_dirs.append(Path.home() / '.config' / 'mkvpriority' / 'extensions')
+    ext_dirs.append(Path.cwd())
+
+    modified = False
+    for ext_dir in ext_dirs:
+        dir_str = str(ext_dir)
+        if ext_dir.is_dir() and dir_str not in sys.path:
+            sys.path.insert(0, dir_str)
+            modified = True
+
+    if not modified:
+        importlib.invalidate_caches()
+
+
 def load_extension(module_name: str) -> Extension | None:
+    _ensure_import_paths()
     try:
         module = importlib.import_module(module_name)
     except ImportError:

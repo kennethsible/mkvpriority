@@ -303,10 +303,10 @@ You can easily write your own post-processing scripts to handle custom logic.
 [MKVToolNix](https://mkvtoolnix.download/) must be installed on your system unless you are using the Docker image.
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-o KEY=VALUE] [-v] [-x] [-q] [-p] [-n] [-r] [INPUT_PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-o KEY=VALUE] [-v] [-x] [-q] [-p] [-n] [-r] [PATH[::TAG] ...]
 
 positional arguments:
-  INPUT_PATH[::TAG]     files or directories
+  PATH[::TAG]           files, directories, or patterns
 
 options:
   -c, --config TOML_PATH[::TAG]
