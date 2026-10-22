@@ -64,22 +64,22 @@ mkvpriority = "mkvpriority.main:main"
 
 [tool.ruff]
 line-length = 100
+src = ["src"]
 
 [tool.ruff.lint]
-extend-select = ["I"]
+extend-select = ["I", "S"]
+ignore = ["S404", "S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
 
 [tool.ruff.format]
 quote-style = "single"
 
 [tool.mypy]
+files = ["src"]
 strict = true
 ignore_missing_imports = true
-files = ["src"]
-
-[tool.bandit]
-skips = ["B404", "B603", "B607"]
-exclude_dirs = [".venv", "tests"]
-targets = ["src"]
 
 [build-system]
 requires = ["hatchling>=1.32.4"]

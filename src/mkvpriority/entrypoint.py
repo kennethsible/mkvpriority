@@ -159,7 +159,7 @@ async def run_daemon() -> None:
     scheduler: AsyncIOScheduler | None = None
     try:
         if WEBHOOK_PORT:
-            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)  # nosec B104
+            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)  # noqa: S104
             entrypoint_logger.info(f'webhook listener started on 0.0.0.0:{WEBHOOK_PORT}')
 
         if cron_expr := CRON_SCHEDULE:
