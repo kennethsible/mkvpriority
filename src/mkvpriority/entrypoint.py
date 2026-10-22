@@ -115,9 +115,11 @@ async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     trigger = CronTrigger.from_crontab(expr, timezone)
     cron_argv = MKVPRIORITY_ARGS + CRON_TARGET_PATHS
-    scheduler.add_job(
-        lambda: asyncio.create_task(asyncio.to_thread(mkvpriority.main.main, cron_argv)), trigger
-    )
+
+    async def run_cron_job() -> None:
+        await asyncio.to_thread(mkvpriority.main.main, cron_argv)
+
+    scheduler.add_job(run_cron_job, trigger)
     scheduler.start()
     return scheduler
 
