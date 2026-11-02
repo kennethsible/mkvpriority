@@ -6,6 +6,8 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from mkvpriority import __version__
+
 from .config import Config, ConfigError
 from .database import Database
 from .extension import Extension, load_extension
@@ -126,12 +128,19 @@ def build_argument_parser() -> argparse.ArgumentParser:
         metavar='KEY=VALUE',
         help='override config settings',
     )
+    parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
+    parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
+    parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
     parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
     parser.add_argument('-x', '--debug', action='store_true', help='print mkvtoolnix output')
     parser.add_argument('-q', '--quiet', action='store_true', help='suppress normal logging')
-    parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
-    parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
-    parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
+    parser.add_argument(
+        '-V',
+        '--version',
+        action='version',
+        version=f'%(prog)s {__version__}',
+        help='show program version and exit',
+    )
     parser.add_argument(
         'paths', nargs='*', metavar='PATH[::TAG]', help='files, directories, or patterns'
     )

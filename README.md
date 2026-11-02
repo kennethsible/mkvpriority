@@ -303,24 +303,26 @@ You can easily write your own post-processing scripts to handle custom logic.
 [MKVToolNix](https://mkvtoolnix.download/) must be installed on your system unless you are using the Docker image.
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-o KEY=VALUE] [-v] [-x] [-q] [-p] [-n] [-r] [PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-o KEY=VALUE] [-p] [-r] [-n] [-v] [-x] [-q] [-V] [PATH[::TAG] ...]
 
 positional arguments:
   PATH[::TAG]           files, directories, or patterns
 
 options:
+  -h, --help            show this help message and exit
   -c, --config TOML_PATH[::TAG]
   -a, --archive DB_PATH
   -i, --include MODULE_NAME
                         include extension module
   -o, --override KEY=VALUE
                         override config settings
+  -p, --prune           prune database entries
+  -r, --restore         restore original flags
+  -n, --dry-run         simulate track changes
   -v, --verbose         inspect track metadata
   -x, --debug           print mkvtoolnix output
   -q, --quiet           suppress normal logging
-  -p, --prune           prune database entries
-  -n, --dry-run         simulate track changes
-  -r, --restore         restore original flags
+  -V, --version         show program version and exit
 ```
 
 ### Python Package
