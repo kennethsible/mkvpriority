@@ -36,6 +36,7 @@ class SubtitleRenamer(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:
@@ -52,10 +53,16 @@ class SubtitleRenamer(Extension):
             self.parameters[config.toml_path] = parameters
 
         if parameters.rename_external_subtitles:
-            self.rename_subtitles(file_path, subtitle_tracks, parameters.rename_language_format)
+            self.rename_subtitles(
+                file_path, subtitle_tracks, parameters.rename_language_format, dry_run
+            )
 
     def rename_subtitles(
-        self, file_path: Path, subtitle_tracks: list[Track], language_format: str | None = None
+        self,
+        file_path: Path,
+        subtitle_tracks: list[Track],
+        language_format: str | None = None,
+        dry_run: bool = False,
     ) -> None:
         for track in subtitle_tracks:
             if not track.is_external or track.file_path is None or not track.file_path.exists():
@@ -98,5 +105,6 @@ class SubtitleRenamer(Extension):
                 self.extension_logger.info(
                     f"renaming subtitles '{track.file_path.name}' -> '{new_file_name}'"
                 )
-                track.file_path.rename(new_file_path)
+                if not dry_run:
+                    track.file_path.rename(new_file_path)
                 track.file_path = new_file_path

@@ -46,6 +46,7 @@ class SubtitleConverter(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:
@@ -83,9 +84,10 @@ class SubtitleConverter(Extension):
                 f"converting subtitles '{source_path.name}' to '{target_path.name}'"
             )
             remove_source = parameters.convert_remove_source
-            if self.convert_subtitles(source_path, target_path) and remove_source:
+            if self.convert_subtitles(source_path, target_path, dry_run) and remove_source:
                 self.extension_logger.info(f"removing subtitles '{source_path.name}'")
-                source_path.unlink(missing_ok=True)
+                if not dry_run:
+                    source_path.unlink(missing_ok=True)
                 if subtitle_track.is_external:
                     subtitle_track.file_path = target_path
                     subtitle_track.codec = f'S_TEXT/{target_format.upper()}'
@@ -105,7 +107,11 @@ class SubtitleConverter(Extension):
             suffix += '.forced'
         return Path(file_path).with_suffix(f'{suffix}.{extension}')
 
-    def convert_subtitles(self, source_path: Path, target_path: Path) -> bool:
+    def convert_subtitles(
+        self, source_path: Path, target_path: Path, dry_run: bool = False
+    ) -> bool:
+        if dry_run:
+            return True
         try:
             subtitle_file = pysubs2.load(str(source_path))
             subtitle_file.info['PlayResX'] = '1920'

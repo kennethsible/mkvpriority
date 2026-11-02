@@ -25,28 +25,26 @@ mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
-class PrefixFilter(logging.Filter):
-    def __init__(self, dry_run: bool = False):
+class StreamFilter(logging.Filter):
+    def __init__(
+        self, stream_level: int = logging.INFO, simulate: bool = False, dry_run: bool = False
+    ):
         super().__init__()
+        self.stream_level = stream_level
+        self.simulate = simulate
         self.dry_run = dry_run
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.prefix = '[DRY RUN] ' if self.dry_run else ''
+        if record.name == 'mkvpriority' and record.levelno < self.stream_level:
+            return False
+        if record.name in ('mkvpriority.mkvpropedit', 'mkvpriority.mkvmerge'):
+            use_prefix = self.simulate
+        else:
+            use_prefix = self.dry_run
+        record.prefix = '[DRY RUN] ' if use_prefix else ''
         return True
 
 
-class StreamFilter(logging.Filter):
-    def __init__(self, stream_level: int = logging.INFO):
-        super().__init__()
-        self.stream_level = stream_level
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if record.name == 'mkvpriority':
-            return record.levelno >= self.stream_level
-        return True
-
-
-prefix_filter = PrefixFilter()
 stream_filter = StreamFilter()
 
 
@@ -59,14 +57,12 @@ def configure_logging(
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.DEBUG)
-    stream_handler.addFilter(prefix_filter)
     stream_handler.addFilter(stream_filter)
 
     handlers: list[logging.Handler] = [stream_handler]
     if log_path_str:
         file_handler = RotatingFileHandler(log_path_str, maxBytes=max_bytes, backupCount=max_files)
         file_handler.setLevel(logging.DEBUG)
-        file_handler.addFilter(prefix_filter)
         handlers.append(file_handler)
 
     logging.basicConfig(
@@ -89,7 +85,7 @@ def collect_file_paths(path_str: str) -> list[Path]:
     return list(dict.fromkeys(file_paths))
 
 
-def get_archive_status(file_path: Path, database: Database, dry_run: bool = False) -> bool:
+def get_archive_status(file_path: Path, database: Database, simulate: bool = False) -> bool:
     archive_record = database.select_by_path(file_path)
     file_mtime = int(file_path.stat().st_mtime)
     if archive_record and archive_record.file_mtime == file_mtime:
@@ -97,7 +93,7 @@ def get_archive_status(file_path: Path, database: Database, dry_run: bool = Fals
 
     segment_uid, *_ = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, dry_run)
+        segment_uid = ensure_segment_uid(file_path, simulate)
     if archive_record and archive_record.segment_uid != segment_uid:
         database.delete(archive_record.segment_uid)
 
@@ -112,37 +108,37 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', action='append', default=[], metavar='TOML_PATH[::TAG]')
     parser.add_argument('-a', '--archive', metavar='DB_PATH')
+    parser.add_argument('-i', '--include', action='append', default=[], metavar='EXTENSION')
+    parser.add_argument('-o', '--override', action='append', default=[], metavar='KEY=VALUE')
     parser.add_argument(
-        '-i',
-        '--include',
-        action='append',
-        default=[],
-        metavar='MODULE_NAME',
-        help='include extension module',
+        '-p', '--prune', action='store_true', help='prune database entries for missing files'
     )
     parser.add_argument(
-        '-o',
-        '--override',
-        action='append',
-        default=[],
-        metavar='KEY=VALUE',
-        help='override config settings',
+        '-r', '--restore', action='store_true', help='restore original track flags from database'
     )
-    parser.add_argument('-p', '--prune', action='store_true', help='prune database entries')
-    parser.add_argument('-r', '--restore', action='store_true', help='restore original flags')
-    parser.add_argument('-n', '--dry-run', action='store_true', help='simulate track changes')
-    parser.add_argument('-v', '--verbose', action='store_true', help='inspect track metadata')
-    parser.add_argument('-x', '--debug', action='store_true', help='print mkvtoolnix output')
-    parser.add_argument('-q', '--quiet', action='store_true', help='suppress normal logging')
     parser.add_argument(
-        '-V',
+        '-s', '--simulate', action='store_true', help='process files without modifying containers'
+    )
+    parser.add_argument(
+        '-n', '--dry-run', action='store_true', help='simulate execution without writing to disk'
+    )
+    parser.add_argument(
+        '-v', '--verbose', action='store_true', help='display track metadata and computed scores'
+    )
+    parser.add_argument(
+        '-d', '--debug', action='store_true', help='print mkvtoolnix output and debug messages'
+    )
+    parser.add_argument(
+        '-q', '--quiet', action='store_true', help='suppress all log messages to the console'
+    )
+    parser.add_argument(
         '--version',
         action='version',
         version=f'%(prog)s {__version__}',
         help='show program version and exit',
     )
     parser.add_argument(
-        'paths', nargs='*', metavar='PATH[::TAG]', help='files, directories, or patterns'
+        'paths', nargs='*', metavar='PATH[::TAG]', help='files, directories, or glob patterns'
     )
     return parser
 
@@ -164,8 +160,12 @@ def main(
         main_level = tool_level = logging.ERROR
     configure_logging()
 
-    prefix_filter.dry_run = args.dry_run
+    dry_run = args.dry_run
+    simulate = args.simulate or dry_run
+    stream_filter.dry_run = dry_run
+    stream_filter.simulate = simulate
     stream_filter.stream_level = main_level
+
     mkvpriority_logger.setLevel(logging.DEBUG)
     for logger in (mkvpropedit_logger, mkvextract_logger, mkvmerge_logger):
         logger.setLevel(tool_level)
@@ -190,7 +190,7 @@ def main(
     database: Database | None = None
     if args.archive:
         try:
-            database = Database(args.archive, args.dry_run)
+            database = Database(args.archive, simulate)
         except (sqlite3.IntegrityError, RuntimeError):
             mkvpriority_logger.error(f"error occurred while migrating '{args.archive}'")
             raise
@@ -232,7 +232,7 @@ def main(
 
             for file_path in collect_file_paths(path_str):
                 if database is not None:
-                    is_archived = get_archive_status(file_path, database, args.dry_run)
+                    is_archived = get_archive_status(file_path, database, simulate)
                     if not args.restore and is_archived and not args.override:
                         mkvpriority_logger.info(f"skipping '{file_path}' (already archived)")
                         continue
@@ -241,12 +241,12 @@ def main(
 
                 if args.restore and database is not None:
                     mkvpriority_logger.info(f"restoring '{file_path}'")
-                    restore_file(file_path, database, args.dry_run)
+                    restore_file(file_path, database, simulate)
                 elif matched_config is not None:
                     toml_path, toml_label = matched_config.toml_path, matched_config.toml_label
                     config_tag = f' (tag: {toml_label})' if toml_label != 'untagged' else ''
                     mkvpriority_logger.info(f"processing '{file_path}{config_tag}'")
-                    process_file(file_path, matched_config, database, extensions, args.dry_run)
+                    process_file(file_path, matched_config, database, extensions, simulate, dry_run)
 
     finally:
         if database is not None:

@@ -27,6 +27,7 @@ class Extension(ABC):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        simulate: bool = False,
         dry_run: bool = False,
     ) -> None: ...
 

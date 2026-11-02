@@ -40,6 +40,7 @@ class SubtitleExtractor(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:
@@ -71,7 +72,7 @@ class SubtitleExtractor(Extension):
                 subtitle_paths.append((track, subtitle_path))
 
         if subtitle_paths:
-            self.extract_subtitles(file_path, subtitle_paths)
+            self.extract_subtitles(file_path, subtitle_paths, dry_run)
 
     def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
         subtitle_format = track.codec.split('/')[-1]
@@ -87,7 +88,9 @@ class SubtitleExtractor(Extension):
             suffix += '.forced'
         return Path(file_path).with_suffix(f'{suffix}.{extension}')
 
-    def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[Track, Path]]) -> None:
+    def extract_subtitles(
+        self, file_path: Path, subtitle_paths: list[tuple[Track, Path]], dry_run: bool = False
+    ) -> None:
         for track, subtitle_path in subtitle_paths:
             track_str = f"{track.index} ('{track.name}')" if track.name else str(track.index)
             self.extension_logger.info(f"extracting track {track_str} to '{subtitle_path.name}'")
@@ -97,16 +100,17 @@ class SubtitleExtractor(Extension):
             json.dump(['tracks', str(file_path), *arguments], temp_file)
             temp_file_path = Path(temp_file.name)
 
-        try:
-            result = subprocess.run(
-                ['mkvextract', f'@{temp_file_path}'],
-                capture_output=True,
-                encoding='utf-8',
-                check=True,
-                text=True,
-            )
-            self.extension_logger.debug(result.stdout.strip())
-        except subprocess.CalledProcessError as e:
-            self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
-        finally:
-            temp_file_path.unlink(missing_ok=True)
+        if not dry_run:
+            try:
+                result = subprocess.run(
+                    ['mkvextract', f'@{temp_file_path}'],
+                    capture_output=True,
+                    encoding='utf-8',
+                    check=True,
+                    text=True,
+                )
+                self.extension_logger.debug(result.stdout.strip())
+            except subprocess.CalledProcessError as e:
+                self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
+            finally:
+                temp_file_path.unlink(missing_ok=True)

@@ -48,12 +48,12 @@ class MetadataRecord:
 
 
 class Database:
-    def __init__(self, db_path: str | Path, dry_run: bool = False):
+    def __init__(self, db_path: str | Path, simulate: bool = False):
         self.db_path = db_path
-        self.dry_run = dry_run
+        self.simulate = simulate
         self.con = sqlite3.connect(db_path)
 
-        _perform_migrations(self.con, db_path, dry_run)
+        _perform_migrations(self.con, db_path, simulate)
 
         self.con.execute('PRAGMA foreign_keys = ON')
         self._create_tables()
@@ -73,7 +73,7 @@ class Database:
     def insert(self, segment_uid: str | None, file_path: Path, tracks: list[Track]) -> None:
         file_path = file_path.resolve()
         if not segment_uid:
-            segment_uid = ensure_segment_uid(file_path, self.dry_run)
+            segment_uid = ensure_segment_uid(file_path, self.simulate)
         segment_uid = normalize_segment_uid(segment_uid)
 
         cur = self.con.execute('SELECT 1 FROM archive WHERE segment_uid = ?', (str(segment_uid),))
@@ -82,7 +82,7 @@ class Database:
         log_action = 'updating' if is_update else 'inserting into'
         mkvpriority_logger.info(f"{log_action} database '{self.db_path}'")
 
-        if self.dry_run:
+        if self.simulate:
             return
 
         file_mtime = file_path.stat().st_mtime
@@ -141,7 +141,7 @@ class Database:
         else:
             mkvpriority_logger.info(f"deleting from database '{self.db_path}'")
 
-        if not self.dry_run:
+        if not self.simulate:
             with self.con:
                 self.con.execute('DELETE FROM archive WHERE segment_uid = ?', (str(segment_uid),))
 
@@ -159,7 +159,7 @@ class Database:
         for _, file_path in stale_records:
             mkvpriority_logger.info(f"deleting from database '{self.db_path}': '{file_path}'")
 
-        if not self.dry_run:
+        if not self.simulate:
             with self.con:
                 self.con.executemany(
                     'DELETE FROM archive WHERE segment_uid = ?',
@@ -242,7 +242,7 @@ def _column_exists(con: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def _perform_migrations(
-    con: sqlite3.Connection, db_path: str | Path, dry_run: bool = False
+    con: sqlite3.Connection, db_path: str | Path, simulate: bool = False
 ) -> None:
     if not _table_exists(con, 'archive'):
         return
@@ -261,7 +261,7 @@ def _perform_migrations(
 
     if schema_version >= SCHEMA_VERSION:
         return
-    if dry_run:
+    if simulate:
         raise RuntimeError(
             f'cannot perform migration to schema version {SCHEMA_VERSION} during DRY RUN'
         )

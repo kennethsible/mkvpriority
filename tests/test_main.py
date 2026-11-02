@@ -649,6 +649,43 @@ def test_prune_database() -> None:
             assert database.select_by_path(file_path) is None
 
 
+def test_simulate_dry_run() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        file_mtime = file_path.stat().st_mtime_ns
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_text = toml_text.replace(
+            '[subtitle_profiles.global]',
+            '[subtitle_profiles.global]\nextract_embedded_subtitles = true\n',
+        )
+        toml_path.write_text(toml_text, encoding='utf-8')
+
+        mkvpriority.main.main(
+            ['-c', str(toml_path), '-n', '-i', 'subtitle_extractor', str(file_path)]
+        )
+
+        assert file_path.stat().st_mtime_ns == file_mtime
+        assert len(list(temp_path.glob('*dummy*.ass'))) == 0
+
+        mkvpriority.main.main(
+            ['-c', str(toml_path), '-s', '-i', 'subtitle_extractor', str(file_path)]
+        )
+
+        assert file_path.stat().st_mtime_ns == file_mtime
+        assert len(list(temp_path.glob('*dummy*.ass'))) == 2
+
+        mkvpriority.main.main(['-c', str(toml_path), '-i', 'subtitle_extractor', str(file_path)])
+
+        assert file_path.stat().st_mtime_ns != file_mtime
+        assert len(list(temp_path.glob('*dummy*.ass'))) == 2
+
+
 def test_extract_subtitles() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -796,6 +833,42 @@ def test_rename_subtitles() -> None:
 
         promoted_srt = temp_path / 'dummy.eng.forced.External Commentary.srt'
         assert not demoted_srt.exists() and promoted_srt.is_file()
+
+
+def test_remux_subtitles() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        file_path = temp_path / 'dummy.mkv'
+        track_files = create_dummy(temp_path)
+        multiplex_dummy(file_path, track_files)
+
+        sidecar_srt = temp_path / 'dummy.en.default.External Commentary.srt'
+        sidecar_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nCommentary\n', encoding='utf-8')
+
+        toml_path = temp_path / 'config.toml'
+        toml_text = Path('config.toml').read_text(encoding='utf-8')
+        toml_path.write_text(
+            f'{toml_text}\n'
+            '[multiplexer]\n'
+            'multiplex_container = true\n'
+            'remove_external_subtitles = true\n',
+            encoding='utf-8',
+        )
+        config = mkvpriority.Config.from_file(toml_path)
+        config.subtitle_group.process_external_subtitles = True
+
+        mkvpriority.process_file(file_path, config, extensions=[Multiplexer()])
+
+        _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
+        tracks = video_tracks + audio_tracks + subtitle_tracks
+        assert len(tracks) == 9
+
+        merged_track = next(
+            track for track in subtitle_tracks if track.name == 'External Commentary'
+        )
+        assert not merged_track.is_external
+        assert merged_track.language == 'eng'
+        assert not sidecar_srt.exists()
 
 
 def test_order_tracks() -> None:

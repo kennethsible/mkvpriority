@@ -52,6 +52,7 @@ class Multiplexer(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:
@@ -71,7 +72,7 @@ class Multiplexer(Extension):
                 subtitle_tracks,
                 parameters,
                 database,
-                dry_run,
+                simulate,
             )
 
     @staticmethod
@@ -108,7 +109,7 @@ class Multiplexer(Extension):
         subtitle_tracks: list[Track],
         parameters: Parameters,
         database: Database | None = None,
-        dry_run: bool = False,
+        simulate: bool = False,
     ) -> None:
         internal_audio_tracks = [track for track in audio_tracks if not track.is_external]
         internal_subtitle_tracks = [track for track in subtitle_tracks if not track.is_external]
@@ -216,7 +217,7 @@ class Multiplexer(Extension):
             f"multiplexing container '{file_path.name}'{order_str}{diff_str}"
         )
         old_segment_uid, *_ = extract_tracks(file_path)
-        if not dry_run:
+        if not simulate:
             try:
                 self.multiplex_tracks(arguments)
                 if not parameters.remove_original_container:
@@ -236,16 +237,17 @@ class Multiplexer(Extension):
                 if track.file_path is None:
                     continue
                 self.extension_logger.info(f"removing subtitles '{track.file_path.name}'")
-                if not dry_run:
+                if not simulate:
                     track.file_path.unlink(missing_ok=True)
 
-        if not dry_run and database and old_segment_uid:
+        if not simulate and database and old_segment_uid:
             database.delete(old_segment_uid)
             new_segment_uid, *_ = extract_tracks(file_path)
             if new_segment_uid:
                 database.insert(new_segment_uid, file_path, [])
 
     def multiplex_tracks(self, arguments: list[str]) -> None:
+        mkvmerge_logger.debug({' '.join(arguments)})
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(arguments, temp_file)
             temp_file_path = Path(temp_file.name)

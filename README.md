@@ -285,6 +285,7 @@ You can easily write your own post-processing scripts to handle custom logic.
            subtitle_tracks: list[Track],
            config: Config,
            database: Database | None = None,
+           simulate: bool = False,
            dry_run: bool = False,
        ) -> None: ...
    ```
@@ -303,26 +304,25 @@ You can easily write your own post-processing scripts to handle custom logic.
 [MKVToolNix](https://mkvtoolnix.download/) must be installed on your system unless you are using the Docker image.
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i MODULE_NAME] [-o KEY=VALUE] [-p] [-r] [-n] [-v] [-x] [-q] [-V] [PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i EXTENSION] [-o KEY=VALUE] [-p] [-r] [-s] [-n] [-v] [-d] [-q] [--version] [PATH[::TAG] ...]
 
 positional arguments:
-  PATH[::TAG]           files, directories, or patterns
+  PATH[::TAG]           files, directories, or glob patterns
 
 options:
   -h, --help            show this help message and exit
   -c, --config TOML_PATH[::TAG]
   -a, --archive DB_PATH
-  -i, --include MODULE_NAME
-                        include extension module
+  -i, --include EXTENSION
   -o, --override KEY=VALUE
-                        override config settings
-  -p, --prune           prune database entries
-  -r, --restore         restore original flags
-  -n, --dry-run         simulate track changes
-  -v, --verbose         inspect track metadata
-  -x, --debug           print mkvtoolnix output
-  -q, --quiet           suppress normal logging
-  -V, --version         show program version and exit
+  -p, --prune           prune database entries for missing files
+  -r, --restore         restore original track flags from database
+  -s, --simulate        process files without modifying containers
+  -n, --dry-run         simulate execution without writing to disk
+  -v, --verbose         display track metadata and computed scores
+  -d, --debug           print mkvtoolnix output and debug messages
+  -q, --quiet           suppress all log messages to the console
+  --version             show program version and exit
 ```
 
 ### Python Package

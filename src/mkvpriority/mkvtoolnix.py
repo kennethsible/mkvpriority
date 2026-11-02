@@ -31,11 +31,11 @@ def normalize_segment_uid(segment_uid: str | None) -> str:
     return segment_uid.removeprefix('0x')
 
 
-def ensure_segment_uid(file_path: Path, dry_run: bool = False) -> str:
+def ensure_segment_uid(file_path: Path, simulate: bool = False) -> str:
     segment_uid = uuid.uuid4().hex
     mkvpriority_logger.info(f"generating segment_uid for '{file_path}'")
     arguments = [str(file_path), '--edit', 'info', '--set', f'segment-uid={segment_uid}']
-    if not dry_run:
+    if not simulate:
         try:
             modify_tracks(arguments)
         except subprocess.CalledProcessError as e:
@@ -63,6 +63,7 @@ def identify_tracks(file_path: Path) -> Any:
 
 
 def modify_tracks(arguments: list[str]) -> None:
+    mkvpropedit_logger.debug({' '.join(arguments)})
     with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
         json.dump(arguments, temp_file)
         temp_file_path = Path(temp_file.name)
