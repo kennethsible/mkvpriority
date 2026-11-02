@@ -50,7 +50,7 @@ async def process_item(file_path: str, item_tags: str, orig_lang: str | None) ->
         file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
     try:
         argv = [*MKVPRIORITY_ARGS, file_path]
-        await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang)
+        await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang, suppress_header=True)
     except Exception:
         entrypoint_logger.exception(f"error occurred while processing '{file_path}'")
 
@@ -219,6 +219,7 @@ def main() -> None:
     entrypoint_logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
     entrypoint_logger.info(f'MKVPriority {__version__}')
+    mkvpriority.main.main(MKVPRIORITY_ARGS)
     migrate_database(config_file)
 
     asyncio.run(run_daemon())

@@ -79,16 +79,16 @@ class SubtitleRestyler(Extension):
                 if subtitle_path and subtitle_path.is_file():
                     self.restyle_subtitles(file_path, subtitle_path, style_fields)
 
-    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
-        if subtitle_track.is_external:
-            return subtitle_track.file_path
+    def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
+        if track.is_external:
+            return track.file_path
 
-        subtitle_suffix = f'.{subtitle_track.language}'
-        if subtitle_track.default:
-            subtitle_suffix += '.default'
-        if subtitle_track.forced:
-            subtitle_suffix += '.forced'
-        return Path(file_path).with_suffix(f'{subtitle_suffix}.ass')
+        suffix = f'.{track.language}'
+        if track.default:
+            suffix += '.default'
+        if track.forced:
+            suffix += '.forced'
+        return Path(file_path).with_suffix(f'{suffix}.ass')
 
     def scale_style_fields(
         self, input_lines: list[str], style_fields: dict[str, Any]
@@ -120,7 +120,7 @@ class SubtitleRestyler(Extension):
                     round(scaled_value) if 'Margin' in field else round(scaled_value, 2)
                 )
             else:
-                self.extension_logger.warning(f"field '{field}' not in [V4+ Styles]")
+                self.extension_logger.warning(f"style field '{field}' not in [V4+ Styles]")
 
         return scaled_fields
 
@@ -214,10 +214,9 @@ class SubtitleRestyler(Extension):
                         line = 'Style: ' + ','.join(style_parts) + '\n'
             output_lines.append(line)
 
-        subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
         formatted_styles = ', '.join(f"'{style}'" for style in sorted(subtitle_styles))
         self.extension_logger.info(
-            f"restyling external subtitles '{subtitle_suffix}' ({formatted_styles})"
+            f"restyling subtitles '{subtitle_path.name}' ({formatted_styles})"
         )
         with open(subtitle_path, 'w', encoding='utf-8-sig') as f:
             f.writelines(output_lines)

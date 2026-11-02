@@ -61,48 +61,51 @@ class SubtitleConverter(Extension):
             parameters = Parameters.from_dict(subtitle_global)
             self.parameters[config.toml_path] = parameters
 
-        if parameters.convert_external_subtitles:
-            target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
-            for subtitle_track in target_tracks:
-                source_path = self.build_subtitle_path(file_path, subtitle_track)
-                if not source_path or not source_path.is_file():
-                    continue
+        if not parameters.convert_external_subtitles:
+            return
 
-                subtitle_ext = source_path.suffix.lstrip('.').lower()
-                target_format = parameters.convert_target_format
-                if subtitle_ext == target_format:
-                    continue
+        target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
+        for subtitle_track in target_tracks:
+            source_path = self.build_subtitle_path(file_path, subtitle_track)
+            if not source_path or not source_path.is_file():
+                continue
 
-                target_path = source_path.with_suffix(f'.{target_format}')
-                if target_path.is_file():
-                    continue
+            source_format = source_path.suffix.lstrip('.').lower()
+            target_format = parameters.convert_target_format
+            if source_format == target_format:
+                continue
 
-                remove_source = parameters.convert_remove_source
-                if self.convert_subtitles(file_path, source_path, target_path) and remove_source:
-                    source_suffix = source_path.name[len(file_path.stem) :]
-                    self.extension_logger.info(f"removing external subtitles '{source_suffix}'")
-                    source_path.unlink(missing_ok=True)
-                    if subtitle_track.is_external:
-                        subtitle_track.file_path = target_path
-                        subtitle_track.codec = f'S_TEXT/{target_format.upper()}'
+            target_path = source_path.with_suffix(f'.{target_format}')
+            if target_path.is_file():
+                continue
 
-    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
-        if subtitle_track.is_external:
-            return subtitle_track.file_path
+            self.extension_logger.info(
+                f"converting subtitles '{source_path.name}' to '{target_path.name}'"
+            )
+            remove_source = parameters.convert_remove_source
+            if self.convert_subtitles(file_path, source_path, target_path) and remove_source:
+                self.extension_logger.info(f"removing original subtitles '{source_path.name}'")
+                source_path.unlink(missing_ok=True)
+                if subtitle_track.is_external:
+                    subtitle_track.file_path = target_path
+                    subtitle_track.codec = f'S_TEXT/{target_format.upper()}'
 
-        subtitle_format = subtitle_track.codec.split('/')[-1]
-        if not (subtitle_ext := SUBTITLE_EXTENSIONS.get(subtitle_format)):
+    def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
+        if track.is_external:
+            return track.file_path
+
+        subtitle_format = track.codec.split('/')[-1]
+        if not (extension := SUBTITLE_EXTENSIONS.get(subtitle_format)):
             return None
-        subtitle_suffix = f'.{subtitle_track.language}'
-        if subtitle_track.default:
-            subtitle_suffix += '.default'
-        if subtitle_track.forced:
-            subtitle_suffix += '.forced'
-        return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
+
+        suffix = f'.{track.language}'
+        if track.default:
+            suffix += '.default'
+        if track.forced:
+            suffix += '.forced'
+        return Path(file_path).with_suffix(f'{suffix}.{extension}')
 
     def convert_subtitles(self, file_path: Path, source_path: Path, target_path: Path) -> bool:
-        subtitle_suffix = target_path.name[len(file_path.stem) :]
-        self.extension_logger.info(f"converting external subtitles to '{subtitle_suffix}'")
         try:
             subtitle_file = pysubs2.load(str(source_path))
             subtitle_file.info['PlayResX'] = '1920'

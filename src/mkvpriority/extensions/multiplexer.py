@@ -190,13 +190,22 @@ class Multiplexer(Extension):
                 arguments.extend(['--sub-charset', '0:UTF-8'])
             arguments.append(str(subtitle_track.file_path))
 
-        log_prefix = '[DRY RUN] ' if dry_run else ''
-        self.extension_logger.info(log_prefix + ' '.join(arguments))
+        formatted_order = []
+        for track in remaining_tracks:
+            prefix = f'+{track.category[:3]}' if track.is_external else track.category[:3]
+            formatted_order.append(f'{prefix}:{track.index}')
+
+        self.extension_logger.info(
+            f"multiplexing container '{file_path.name}' ({', '.join(formatted_order)})"
+        )
         old_segment_uid, *_ = extract_tracks(file_path)
         if not dry_run:
             try:
                 self.multiplex_tracks(arguments)
                 if not parameters.remove_original_container:
+                    self.extension_logger.info(
+                        f"renaming original container to '{file_path.stem}.orig.mkv'"
+                    )
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
                     file_path.replace(backup_path)
                 temp_output_path.replace(file_path)
@@ -209,10 +218,7 @@ class Multiplexer(Extension):
             for track in external_tracks:
                 if track.file_path is None:
                     continue
-                subtitle_suffix = track.file_path.name[len(file_path.stem) :]
-                self.extension_logger.info(
-                    log_prefix + f"removing external subtitles '{subtitle_suffix}'"
-                )
+                self.extension_logger.info(f"removing external subtitles '{track.file_path.name}'")
                 if not dry_run:
                     track.file_path.unlink(missing_ok=True)
 
@@ -236,5 +242,7 @@ class Multiplexer(Extension):
                 text=True,
             )
             mkvmerge_logger.debug(result.stdout.strip())
+        except subprocess.CalledProcessError as e:
+            self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
         finally:
             temp_file_path.unlink(missing_ok=True)

@@ -57,9 +57,7 @@ def compute_track_score[T: Profile](
     return score
 
 
-def score_tracks[T: Profile](
-    file_path: Path, tracks: list[Track], group: ProfileGroup[T], dry_run: bool = False
-) -> None:
+def score_tracks[T: Profile](file_path: Path, tracks: list[Track], group: ProfileGroup[T]) -> None:
     max_track_size = 0
     for track in tracks:
         for profile_name, profile in group.profiles.items():
@@ -101,7 +99,7 @@ def score_tracks[T: Profile](
                     break
 
         if is_ambiguous:
-            subtitle_sizes = compute_subtitle_sizes(file_path, candidate_tracks, dry_run)
+            subtitle_sizes = compute_subtitle_sizes(file_path, candidate_tracks)
             for subtitle_track in candidate_tracks:
                 subtitle_track.size = subtitle_sizes.get(subtitle_track.index, 0)
                 max_track_size = max(subtitle_track.size, max_track_size)
@@ -125,8 +123,8 @@ def restore_tracks(
     if not (metadata_by_uid := database.select_metadata(segment_uid)):
         return
 
-    uid_args = [str(file_path)]
-    idx_args: list[str] = []
+    arguments = [str(file_path)]
+    log_arguments: list[str] = []
 
     for track in (*audio_tracks, *subtitle_tracks):
         if track.is_external or str(track.uid) not in metadata_by_uid:
@@ -144,19 +142,18 @@ def restore_tracks(
             continue
 
         track_name = f' ({track.name})' if track.name else ''
-        uid_args.extend(['--edit', f'track:={track.uid}'])
-        idx_args.extend(['--edit', f'track:={track.index}{track_name}'])
+        arguments.extend(['--edit', f'track:={track.uid}'])
+        log_arguments.extend(['--edit', f'track:={track.index}{track_name}'])
 
         for flag, value in flag_diffs.items():
-            uid_args.extend(['--set', f'{flag}={value}'])
-            idx_args.extend(['--set', f'{flag}={value}'])
+            arguments.extend(['--set', f'{flag}={value}'])
+            log_arguments.extend(['--set', f'{flag}={value}'])
 
-    if len(uid_args) > 1:
-        log_prefix = '[DRY RUN] ' if dry_run else ''
-        mkvpropedit_logger.info(log_prefix + ' '.join(idx_args))
+    if len(arguments) > 1:
+        mkvpropedit_logger.info(' '.join(log_arguments))
         if not dry_run:
             try:
-                modify_tracks(uid_args)
+                modify_tracks(arguments)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return
@@ -270,20 +267,20 @@ def process_tracks(
 ) -> None:
     orig_tracks: dict[int, Track] = {}
 
-    score_tracks(file_path, audio_tracks, config.audio_group, dry_run)
+    score_tracks(file_path, audio_tracks, config.audio_group)
     default_audio_track, audio_flags = apply_profiles(audio_tracks, config.audio_group, orig_tracks)
 
     suppress_default = (
         default_audio_track is not None
         and default_audio_track.language in config.subtitle_group.native_languages
     )
-    score_tracks(file_path, subtitle_tracks, config.subtitle_group, dry_run)
+    score_tracks(file_path, subtitle_tracks, config.subtitle_group)
     _, subtitle_flags = apply_profiles(
         subtitle_tracks, config.subtitle_group, orig_tracks, suppress_default=suppress_default
     )
 
-    uid_args = [str(file_path)]
-    idx_args: list[str] = []
+    arguments = [str(file_path)]
+    log_arguments: list[str] = []
 
     track_flags = {**audio_flags, **subtitle_flags}
     for track in (*audio_tracks, *subtitle_tracks):
@@ -293,20 +290,19 @@ def process_tracks(
 
         track_name = f' ({track.name})' if track.name else ''
         if not track.is_external:
-            uid_args.extend(['--edit', f'track:={track.uid}'])
-        idx_args.extend(['--edit', f'track:={track.index}{track_name}'])
+            arguments.extend(['--edit', f'track:={track.uid}'])
+        log_arguments.extend(['--edit', f'track:={track.index}{track_name}'])
 
         for flag, value in flags.items():
             if not track.is_external:
-                uid_args.extend(['--set', f'{flag}={value}'])
-            idx_args.extend(['--set', f'{flag}={value}'])
+                arguments.extend(['--set', f'{flag}={value}'])
+            log_arguments.extend(['--set', f'{flag}={value}'])
 
-    if len(uid_args) > 1:
-        log_prefix = '[DRY RUN] ' if dry_run else ''
-        mkvpropedit_logger.info(log_prefix + ' '.join(idx_args))
+    if len(arguments) > 1:
+        mkvpropedit_logger.info(' '.join(log_arguments))
         if not dry_run:
             try:
-                modify_tracks(uid_args)
+                modify_tracks(arguments)
             except subprocess.CalledProcessError as e:
                 mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
                 return

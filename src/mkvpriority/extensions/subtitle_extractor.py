@@ -55,38 +55,44 @@ class SubtitleExtractor(Extension):
             parameters = Parameters.from_dict(subtitle_global)
             self.parameters[config.toml_path] = parameters
 
-        if parameters.extract_embedded_subtitles:
-            target_tracks = [
-                track
-                for track in subtitle_tracks
-                if not track.is_external and (track.default or track.forced)
-            ]
-            subtitle_paths: list[tuple[int, Path]] = []
-            for track in target_tracks:
-                subtitle_path = self.build_subtitle_path(file_path, track)
-                if subtitle_path and not subtitle_path.is_file():
-                    subtitle_paths.append((track.index, subtitle_path))
-            if subtitle_paths:
-                self.extract_subtitles(file_path, subtitle_paths)
+        if not parameters.extract_embedded_subtitles:
+            return
 
-    def build_subtitle_path(self, file_path: Path, subtitle_track: Track) -> Path | None:
-        subtitle_format = subtitle_track.codec.split('/')[-1]
-        if not (subtitle_ext := SUBTITLE_EXTENSIONS.get(subtitle_format)):
-            return None
-        if not subtitle_track.default and not subtitle_track.forced:
-            return None
-        subtitle_suffix = f'.{subtitle_track.language}'
-        if subtitle_track.default:
-            subtitle_suffix += '.default'
-        if subtitle_track.forced:
-            subtitle_suffix += '.forced'
-        return Path(file_path).with_suffix(f'{subtitle_suffix}.{subtitle_ext}')
+        target_tracks = [
+            track
+            for track in subtitle_tracks
+            if not track.is_external and (track.default or track.forced)
+        ]
 
-    def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[int, Path]]) -> None:
-        for _, subtitle_path in subtitle_paths:
-            subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
-            self.extension_logger.info(f"extracting embedded subtitles to '{subtitle_suffix}'")
-        arguments = [f'{index}:{subtitle_path}' for index, subtitle_path in subtitle_paths]
+        subtitle_paths: list[tuple[Track, Path]] = []
+        for track in target_tracks:
+            subtitle_path = self.build_subtitle_path(file_path, track)
+            if subtitle_path and not subtitle_path.is_file():
+                subtitle_paths.append((track, subtitle_path))
+
+        if subtitle_paths:
+            self.extract_subtitles(file_path, subtitle_paths)
+
+    def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
+        subtitle_format = track.codec.split('/')[-1]
+        if not (extension := SUBTITLE_EXTENSIONS.get(subtitle_format)):
+            return None
+        if not track.default and not track.forced:
+            return None
+
+        suffix = f'.{track.language}'
+        if track.default:
+            suffix += '.default'
+        if track.forced:
+            suffix += '.forced'
+        return Path(file_path).with_suffix(f'{suffix}.{extension}')
+
+    def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[Track, Path]]) -> None:
+        for track, subtitle_path in subtitle_paths:
+            track_str = f"{track.index} ('{track.name}')" if track.name else str(track.index)
+            self.extension_logger.info(f"extracting track {track_str} to '{subtitle_path.name}'")
+
+        arguments = [f'{track.index}:{subtitle_path}' for track, subtitle_path in subtitle_paths]
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(['tracks', str(file_path), *arguments], temp_file)
             temp_file_path = Path(temp_file.name)
@@ -100,5 +106,7 @@ class SubtitleExtractor(Extension):
                 text=True,
             )
             self.extension_logger.debug(result.stdout.strip())
+        except subprocess.CalledProcessError as e:
+            self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
         finally:
             temp_file_path.unlink(missing_ok=True)

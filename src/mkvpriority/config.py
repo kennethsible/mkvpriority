@@ -162,3 +162,11 @@ class Config:
             audio_group=audio_group,
             subtitle_group=subtitle_group,
         )
+
+    @property
+    def labeled_path(self) -> str:
+        return (
+            f'{self.toml_path}::{self.toml_label}'
+            if self.toml_label != 'untagged'
+            else str(self.toml_path)
+        )

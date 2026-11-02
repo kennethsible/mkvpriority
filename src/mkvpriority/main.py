@@ -23,6 +23,16 @@ mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
+class PrefixFilter(logging.Filter):
+    def __init__(self, dry_run: bool = False):
+        super().__init__()
+        self.dry_run = dry_run
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.prefix = '[DRY RUN] ' if self.dry_run else ''
+        return True
+
+
 class StreamFilter(logging.Filter):
     def __init__(self, stream_level: int = logging.INFO):
         super().__init__()
@@ -34,6 +44,7 @@ class StreamFilter(logging.Filter):
         return True
 
 
+prefix_filter = PrefixFilter()
 stream_filter = StreamFilter()
 
 
@@ -46,30 +57,30 @@ def configure_logging(
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.DEBUG)
+    stream_handler.addFilter(prefix_filter)
     stream_handler.addFilter(stream_filter)
 
     handlers: list[logging.Handler] = [stream_handler]
     if log_path_str:
         file_handler = RotatingFileHandler(log_path_str, maxBytes=max_bytes, backupCount=max_files)
         file_handler.setLevel(logging.DEBUG)
+        file_handler.addFilter(prefix_filter)
         handlers.append(file_handler)
 
     logging.basicConfig(
-        format='[%(asctime)s %(levelname)s] [%(name)s] %(message)s', handlers=handlers
+        format='[%(asctime)s %(levelname)s] [%(name)s] %(prefix)s%(message)s', handlers=handlers
     )
 
 
-def collect_file_paths(path_str: str, dry_run: bool = False) -> list[Path]:
-    log_prefix = '[DRY RUN] ' if dry_run else ''
+def collect_file_paths(path_str: str) -> list[Path]:
     escaped_pattern = path_str.replace('[', '[[]')
     if not (matched_paths := sorted(glob.glob(escaped_pattern, recursive=True))):
-        mkvpriority_logger.warning(log_prefix + f"skipping (not found) '{path_str}'")
         return []
 
     file_paths: list[Path] = []
     for matched_path in matched_paths:
         if (path := Path(matched_path)).is_dir():
-            mkvpriority_logger.info(log_prefix + f"scanning '{path}'")
+            mkvpriority_logger.info(f"scanning '{path}'")
             file_paths.extend(sorted(path.rglob('*.mkv')))
         elif path.is_file() and path.suffix.lower() == '.mkv':
             file_paths.append(path)
@@ -127,7 +138,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
+def main(
+    argv: list[str] | None = None, orig_lang: str | None = None, suppress_header: bool = False
+) -> None:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
 
@@ -140,9 +153,9 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     tool_level = logging.DEBUG if args.debug else logging.INFO
     if args.quiet:
         main_level = tool_level = logging.ERROR
-    log_prefix = '[DRY RUN] ' if args.dry_run else ''
     configure_logging()
 
+    prefix_filter.dry_run = args.dry_run
     stream_filter.stream_level = main_level
     mkvpriority_logger.setLevel(logging.DEBUG)
     for logger in (mkvpropedit_logger, mkvextract_logger, mkvmerge_logger):
@@ -179,6 +192,17 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             extension.extension_logger.setLevel(tool_level)
             extensions.append(extension)
 
+    if not suppress_header:
+        loaded_configs = [f"'{config.labeled_path}'" for config in configs.values()]
+        loaded_extensions = [f"'{extension.__class__.__name__}'" for extension in extensions]
+
+        if loaded_configs:
+            mkvpriority_logger.info(f'using config(s): {", ".join(loaded_configs)}')
+        if database is not None:
+            mkvpriority_logger.info(f"using database: '{database.db_path}'")
+        if loaded_extensions:
+            mkvpriority_logger.info(f'using extension(s): {", ".join(loaded_extensions)}')
+
     try:
         if args.prune:
             if database is None:
@@ -194,29 +218,25 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                 path_str, toml_label = path_str.rsplit('::', 1)
             matched_config = configs.get(toml_label) or configs.get('untagged')
             if not args.restore and matched_config is None:
-                mkvpriority_logger.warning(log_prefix + f"skipping (unmatched config) '{path_str}'")
+                mkvpriority_logger.warning(f"skipping '{path_str}' (unmatched config)")
                 continue
 
-            for file_path in collect_file_paths(path_str, args.dry_run):
+            for file_path in collect_file_paths(path_str):
                 if database is not None:
                     is_archived = get_archive_status(file_path, database, args.dry_run)
                     if not args.restore and is_archived and not args.override:
-                        mkvpriority_logger.info(log_prefix + f"skipping (archived) '{file_path}'")
+                        mkvpriority_logger.info(f"skipping '{file_path}' (already archived)")
                         continue
                     if args.restore and not is_archived:
-                        mkvpriority_logger.info(
-                            log_prefix + f"skipping (not archived) '{file_path}'"
-                        )
                         continue
 
                 if args.restore and database is not None:
-                    mkvpriority_logger.info(log_prefix + f"restoring '{file_path}'")
+                    mkvpriority_logger.info(f"restoring '{file_path}'")
                     restore_file(file_path, database, args.dry_run)
                 elif matched_config is not None:
                     toml_path, toml_label = matched_config.toml_path, matched_config.toml_label
-                    config_tag = f'::{toml_label}' if toml_label != 'untagged' else ''
-                    mkvpriority_logger.info(log_prefix + f"processing '{file_path}'")
-                    mkvpriority_logger.info(log_prefix + f"using config '{toml_path}{config_tag}'")
+                    config_tag = f' (tag: {toml_label})' if toml_label != 'untagged' else ''
+                    mkvpriority_logger.info(f"processing '{file_path}{config_tag}'")
                     process_file(file_path, matched_config, database, extensions, args.dry_run)
 
     finally:

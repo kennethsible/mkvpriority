@@ -1,6 +1,6 @@
 [project]
 name = "mkvpriority"
-version = "2.2.1"
+version = "2.3.0"
 description = "Automatically Prioritize Audio/Subtitle Tracks in MKV Files"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -41,17 +41,17 @@ docker = [
     "cron_descriptor>=2.2.1",
 ]
 dev = [
-    "ruff>=0.17.1",
-    "mypy>=2.4.0",
-    "pytest>=9.1.1",
+    "ruff>=0.17.3",
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
     "pytest-aiohttp>=1.1.1",
-    "pytest-asyncio>=1.4.0",
+    "pytest-asyncio>=1.4.1",
     "types-aiofiles",
     "types-requests",
 ]
 
 [project.optional-dependencies]
-subtitle_converter = ["pysubs2>=1.9.0"]
+subtitle_converter = ["pysubs2>=1.9.1"]
 
 [project.urls]
 homepage = "https://github.com/kennethsible/mkvpriority"
@@ -82,5 +82,5 @@ strict = true
 ignore_missing_imports = true
 
 [build-system]
-requires = ["hatchling>=1.32.4"]
+requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"

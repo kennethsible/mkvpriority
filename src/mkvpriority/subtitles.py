@@ -126,15 +126,12 @@ def count_unique_dialogue(temp_path: Path, is_srt: bool) -> int:
     return len(unique_dialogue)
 
 
-def compute_subtitle_sizes(
-    file_path: Path, tracks: list[Track], dry_run: bool = False
-) -> dict[int, int]:
-    ambiguous_tracks = [
-        f'Track {track.index} ({track.name})' if track.name else f'Track {track.index}'
+def compute_subtitle_sizes(file_path: Path, tracks: list[Track]) -> dict[int, int]:
+    ambiguous_tracks_str = ', '.join(
+        f'track {track.index} ("{track.name}")' if track.name else f'track {track.index}'
         for track in tracks
-    ]
-    log_prefix = '[DRY RUN] ' if dry_run else ''
-    mkvextract_logger.info(log_prefix + f'analyzing subtitle sizes for {ambiguous_tracks}')
+    )
+    mkvextract_logger.info(f'analyzing ambiguous subtitles: {ambiguous_tracks_str}')
 
     dialogue_counts: dict[int, int] = {track.index: 0 for track in tracks}
 
