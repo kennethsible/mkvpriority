@@ -190,23 +190,40 @@ class Multiplexer(Extension):
                 arguments.extend(['--sub-charset', '0:UTF-8'])
             arguments.append(str(subtitle_track.file_path))
 
-        formatted_order = []
-        for track in remaining_tracks:
-            prefix = f'+{track.category[:3]}' if track.is_external else track.category[:3]
-            formatted_order.append(f'{prefix}:{track.index}')
+        internal_tracks = [*video_tracks, *internal_audio_tracks, *internal_subtitle_tracks]
+        kept_track_uids = {track.uid for track in remaining_tracks if not track.is_external}
+        stripped_tracks = [track for track in internal_tracks if track.uid not in kept_track_uids]
+
+        log_diffs: list[str] = []
+        for track in external_tracks:
+            if track.file_path:
+                name_str = f" ('{track.name}')" if track.name else ''
+                log_diffs.append(f"+track '{track.file_path.name}'{name_str}")
+        for track in stripped_tracks:
+            name_str = f" ('{track.name}')" if track.name else ''
+            log_diffs.append(f'-track {track.index}{name_str}')
+        diff_str = f': {"; ".join(log_diffs)}' if log_diffs else ''
+
+        order_str = ''
+        if order_tracks or external_tracks:
+            formatted_order = [
+                f'{"+" if track.is_external else ""}{track.category[:3]}:{track.index}'
+                for track in remaining_tracks
+            ]
+            order_str = f' [{", ".join(formatted_order)}]'
 
         self.extension_logger.info(
-            f"multiplexing container '{file_path.name}' ({', '.join(formatted_order)})"
+            f"multiplexing container '{file_path.name}'{order_str}{diff_str}"
         )
         old_segment_uid, *_ = extract_tracks(file_path)
         if not dry_run:
             try:
                 self.multiplex_tracks(arguments)
                 if not parameters.remove_original_container:
-                    self.extension_logger.info(
-                        f"renaming original container to '{file_path.stem}.orig.mkv'"
-                    )
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
+                    self.extension_logger.info(
+                        f"renaming original container to '{backup_path.name}'"
+                    )
                     file_path.replace(backup_path)
                 temp_output_path.replace(file_path)
             except subprocess.CalledProcessError as e:
@@ -218,7 +235,7 @@ class Multiplexer(Extension):
             for track in external_tracks:
                 if track.file_path is None:
                     continue
-                self.extension_logger.info(f"removing external subtitles '{track.file_path.name}'")
+                self.extension_logger.info(f"removing subtitles '{track.file_path.name}'")
                 if not dry_run:
                     track.file_path.unlink(missing_ok=True)
 
@@ -242,7 +259,5 @@ class Multiplexer(Extension):
                 text=True,
             )
             mkvmerge_logger.debug(result.stdout.strip())
-        except subprocess.CalledProcessError as e:
-            self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
         finally:
             temp_file_path.unlink(missing_ok=True)

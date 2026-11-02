@@ -124,7 +124,7 @@ def restore_tracks(
         return
 
     arguments = [str(file_path)]
-    log_arguments: list[str] = []
+    log_diffs: list[str] = []
 
     for track in (*audio_tracks, *subtitle_tracks):
         if track.is_external or str(track.uid) not in metadata_by_uid:
@@ -141,16 +141,19 @@ def restore_tracks(
         if not flag_diffs:
             continue
 
-        track_name = f' ({track.name})' if track.name else ''
         arguments.extend(['--edit', f'track:={track.uid}'])
-        log_arguments.extend(['--edit', f'track:={track.index}{track_name}'])
-
         for flag, value in flag_diffs.items():
             arguments.extend(['--set', f'{flag}={value}'])
-            log_arguments.extend(['--set', f'{flag}={value}'])
+
+        name_str = f" ('{track.name}')" if track.name else ''
+        flag_str = ', '.join(
+            f'+{flag.removeprefix("flag-")}' if value == 1 else f'-{flag.removeprefix("flag-")}'
+            for flag, value in flag_diffs.items()
+        )
+        log_diffs.append(f'track {track.index}{name_str}: {flag_str}')
 
     if len(arguments) > 1:
-        mkvpropedit_logger.info(' '.join(log_arguments))
+        mkvpropedit_logger.info('; '.join(log_diffs))
         if not dry_run:
             try:
                 modify_tracks(arguments)
@@ -280,7 +283,7 @@ def process_tracks(
     )
 
     arguments = [str(file_path)]
-    log_arguments: list[str] = []
+    log_diffs: list[str] = []
 
     track_flags = {**audio_flags, **subtitle_flags}
     for track in (*audio_tracks, *subtitle_tracks):
@@ -288,18 +291,23 @@ def process_tracks(
         if not (flags := track_flags[track.uid]):
             continue
 
-        track_name = f' ({track.name})' if track.name else ''
         if not track.is_external:
             arguments.extend(['--edit', f'track:={track.uid}'])
-        log_arguments.extend(['--edit', f'track:={track.index}{track_name}'])
-
         for flag, value in flags.items():
             if not track.is_external:
                 arguments.extend(['--set', f'{flag}={value}'])
-            log_arguments.extend(['--set', f'{flag}={value}'])
+
+        name_str = f" ('{track.name}')" if track.name else ''
+        flag_str = ', '.join(
+            f'+{flag.removeprefix("flag-")}'
+            if str(value) == '1'
+            else f'-{flag.removeprefix("flag-")}'
+            for flag, value in flags.items()
+        )
+        log_diffs.append(f'track {track.index}{name_str}: {flag_str}')
 
     if len(arguments) > 1:
-        mkvpropedit_logger.info(' '.join(log_arguments))
+        mkvpropedit_logger.info('; '.join(log_diffs))
         if not dry_run:
             try:
                 modify_tracks(arguments)
