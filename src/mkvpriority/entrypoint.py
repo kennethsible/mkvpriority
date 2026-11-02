@@ -1,4 +1,3 @@
-import argparse
 import asyncio
 import json
 import logging
@@ -126,31 +125,6 @@ async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     return scheduler
 
 
-def migrate_database(config_file: Path) -> None:
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-c', '--config')
-    parser.add_argument('-a', '--archive')
-    parser.add_argument('-s', '--simulate', action='store_true')
-    parser.add_argument('-n', '--dry-run', action='store_true')
-    parser.add_argument('-d', '--debug', action='store_true')
-    args, _ = parser.parse_known_args(MKVPRIORITY_ARGS)
-
-    if args.archive:
-        arguments = ['-a', args.archive]
-        if args.config:
-            arguments.extend(['-c', args.config])
-        else:
-            arguments.extend(['-c', str(config_file)])
-        if args.simulate:
-            arguments.append('-s')
-        if args.dry_run:
-            arguments.append('-n')
-        if args.debug:
-            arguments.append('-d')
-
-        mkvpriority.main.main(arguments)
-
-
 async def run_daemon() -> None:
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -225,7 +199,6 @@ def main() -> None:
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
     entrypoint_logger.info(f'MKVPriority {__version__}')
     mkvpriority.main.main(MKVPRIORITY_ARGS)
-    migrate_database(config_file)
 
     asyncio.run(run_daemon())
 
