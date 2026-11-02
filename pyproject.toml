@@ -71,7 +71,7 @@ extend-select = ["I", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/**/*.py" = ["S404", "S603", "S607"]
-"tests/**/*.py" = ["S101"]
+"tests/**/*.py" = ["S101", "S603", "S607"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -80,6 +80,10 @@ quote-style = "single"
 files = ["src"]
 strict = true
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
 requires = ["hatchling>=1.33.0"]

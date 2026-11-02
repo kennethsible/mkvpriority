@@ -5,7 +5,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient
 
@@ -401,12 +400,11 @@ def test_config_overrides() -> None:
         assert {track.name for track in tracks if track.forced} == {'Signs & Songs [FanSub]'}
 
 
-@pytest.mark.asyncio
 async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
     with patch('mkvpriority.main.main') as mock_main:
         app = web.Application()
         queue: entrypoint.ProcessingQueue = asyncio.Queue()
-        app['processing_queue'] = queue
+        app[entrypoint.PROCESSING_QUEUE_KEY] = queue
         app.router.add_post('/process', entrypoint.process_handler)
         client = await aiohttp_client(app)
 

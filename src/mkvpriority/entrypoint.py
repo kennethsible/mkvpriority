@@ -25,6 +25,8 @@ entrypoint_logger = logging.getLogger('entrypoint')
 type ItemPayload = tuple[str, str, str | None]
 type ProcessingQueue = asyncio.Queue[ItemPayload]
 
+PROCESSING_QUEUE_KEY: web.AppKey[ProcessingQueue] = web.AppKey('processing_queue')
+
 MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
 LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
 
@@ -80,7 +82,7 @@ async def process_handler(request: web.Request) -> web.Response:
     if orig_lang := payload.get('orig_lang'):
         orig_lang = resolve_language(orig_lang, target_format='alpha_3')
 
-    queue: ProcessingQueue = request.app['processing_queue']
+    queue: ProcessingQueue = request.app[PROCESSING_QUEUE_KEY]
     await queue.put((file_path, item_tags, orig_lang))
     return web.json_response({'message': f"received '{file_path}'"})
 
@@ -88,7 +90,7 @@ async def process_handler(request: web.Request) -> web.Response:
 async def create_runner(host: str, port: int) -> web.AppRunner:
     app = web.Application()
     queue: ProcessingQueue = asyncio.Queue()
-    app['processing_queue'] = queue
+    app[PROCESSING_QUEUE_KEY] = queue
     app.router.add_post('/process', process_handler)
 
     async def on_startup(app: web.Application) -> None:
