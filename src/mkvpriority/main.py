@@ -25,18 +25,13 @@ mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
-class StreamFilter(logging.Filter):
-    def __init__(
-        self, stream_level: int = logging.INFO, simulate: bool = False, dry_run: bool = False
-    ):
+class PrefixFilter(logging.Filter):
+    def __init__(self, simulate: bool = False, dry_run: bool = False):
         super().__init__()
-        self.stream_level = stream_level
         self.simulate = simulate
         self.dry_run = dry_run
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.name == 'mkvpriority' and record.levelno < self.stream_level:
-            return False
         if record.name in ('mkvpriority.mkvpropedit', 'mkvpriority.mkvmerge'):
             use_prefix = self.simulate
         else:
@@ -45,6 +40,18 @@ class StreamFilter(logging.Filter):
         return True
 
 
+class StreamFilter(logging.Filter):
+    def __init__(self, stream_level: int = logging.INFO):
+        super().__init__()
+        self.stream_level = stream_level
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == 'mkvpriority':
+            return record.levelno >= self.stream_level
+        return True
+
+
+prefix_filter = PrefixFilter()
 stream_filter = StreamFilter()
 
 
@@ -57,12 +64,14 @@ def configure_logging(
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(logging.DEBUG)
+    stream_handler.addFilter(prefix_filter)
     stream_handler.addFilter(stream_filter)
 
     handlers: list[logging.Handler] = [stream_handler]
     if log_path_str:
         file_handler = RotatingFileHandler(log_path_str, maxBytes=max_bytes, backupCount=max_files)
         file_handler.setLevel(logging.DEBUG)
+        file_handler.addFilter(prefix_filter)
         handlers.append(file_handler)
 
     logging.basicConfig(
@@ -162,8 +171,8 @@ def main(
 
     dry_run = args.dry_run
     simulate = args.simulate or dry_run
-    stream_filter.dry_run = dry_run
-    stream_filter.simulate = simulate
+    prefix_filter.dry_run = dry_run
+    prefix_filter.simulate = simulate
     stream_filter.stream_level = main_level
 
     mkvpriority_logger.setLevel(logging.DEBUG)
