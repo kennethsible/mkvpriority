@@ -80,12 +80,12 @@ class SubtitleConverter(Extension):
             if target_path.is_file():
                 continue
 
-            self.extension_logger.info(
-                f"converting subtitles '{source_path.name}' to '{target_path.name}'"
-            )
-            remove_source = parameters.convert_remove_source
-            if self.convert_subtitles(source_path, target_path, dry_run) and remove_source:
-                self.extension_logger.info(f"removing subtitles '{source_path.name}'")
+            if (
+                self.convert_subtitles(file_path, source_path, target_path, dry_run)
+                and parameters.convert_remove_source
+            ):
+                source_suffix = source_path.name[len(file_path.stem) :]
+                self.extension_logger.info(f"removing '{source_suffix}'")
                 if not dry_run:
                     source_path.unlink(missing_ok=True)
                 if subtitle_track.is_external:
@@ -108,8 +108,12 @@ class SubtitleConverter(Extension):
         return Path(file_path).with_suffix(f'{suffix}.{extension}')
 
     def convert_subtitles(
-        self, source_path: Path, target_path: Path, dry_run: bool = False
+        self, file_path: Path, source_path: Path, target_path: Path, dry_run: bool = False
     ) -> bool:
+        source_suffix = source_path.name[len(file_path.stem) :]
+        target_suffix = target_path.name[len(file_path.stem) :]
+        self.extension_logger.info(f"converting '{source_suffix}' to '{target_suffix}'")
+
         if dry_run:
             return True
         try:

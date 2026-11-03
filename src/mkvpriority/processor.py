@@ -123,42 +123,42 @@ def restore_tracks(
     if not (metadata_by_uid := database.select_metadata(segment_uid)):
         return
 
-    log_diffs: list[str] = []
     arguments = [str(file_path)]
     for track in (*audio_tracks, *subtitle_tracks):
         if track.is_external or str(track.uid) not in metadata_by_uid:
             continue
 
         metadata = metadata_by_uid[str(track.uid)]
-        flag_diffs: dict[str, int] = {}
+        track_flags: dict[str, int] = {}
         if track.default != metadata.default:
-            flag_diffs['flag-default'] = int(metadata.default)
+            track_flags['flag-default'] = int(metadata.default)
         if track.forced != metadata.forced:
-            flag_diffs['flag-forced'] = int(metadata.forced)
+            track_flags['flag-forced'] = int(metadata.forced)
         if track.enabled != metadata.enabled:
-            flag_diffs['flag-enabled'] = int(metadata.enabled)
-        if not flag_diffs:
+            track_flags['flag-enabled'] = int(metadata.enabled)
+        if not track_flags:
             continue
 
+        track_diffs: list[str] = []
         arguments.extend(['--edit', f'track:={track.uid}'])
-        for flag, value in flag_diffs.items():
+        for flag, value in track_flags.items():
             arguments.extend(['--set', f'{flag}={value}'])
+            track_diffs.append(
+                f'+{flag.removeprefix("flag-")}'
+                if str(value) == '1'
+                else f'-{flag.removeprefix("flag-")}'
+            )
 
-        name_str = f" ('{track.name}')" if track.name else ''
-        flag_str = ', '.join(
-            f'+{flag.removeprefix("flag-")}' if value == 1 else f'-{flag.removeprefix("flag-")}'
-            for flag, value in flag_diffs.items()
-        )
-        log_diffs.append(f'track {track.index}{name_str}: {flag_str}')
+        diff_str = ' '.join(track_diffs)
+        name_str = f" '{track.name}'" if track.name else ''
+        mkvpriority_logger.info(f'  track {track.index}{name_str}: {diff_str}')
 
-    if len(arguments) > 1:
-        mkvpropedit_logger.info('; '.join(log_diffs))
-        if not simulate:
-            try:
-                modify_tracks(arguments)
-            except subprocess.CalledProcessError as e:
-                mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
-                return
+    if not simulate and len(arguments) > 1:
+        try:
+            modify_tracks(arguments)
+        except subprocess.CalledProcessError as e:
+            mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
+            return
 
     database.delete(segment_uid)
 
@@ -281,37 +281,35 @@ def process_tracks(
         subtitle_tracks, config.subtitle_group, orig_tracks, suppress_default=suppress_default
     )
 
-    log_diffs: list[str] = []
     arguments = [str(file_path)]
     track_flags = {**audio_flags, **subtitle_flags}
     for track in (*audio_tracks, *subtitle_tracks):
         mkvpriority_logger.debug(track)
-        if not (flags := track_flags[track.uid]):
+        if not (modified_flags := track_flags[track.uid]):
             continue
 
+        track_diffs: list[str] = []
         if not track.is_external:
             arguments.extend(['--edit', f'track:={track.uid}'])
-        for flag, value in flags.items():
+        for flag, value in modified_flags.items():
             if not track.is_external:
                 arguments.extend(['--set', f'{flag}={value}'])
+            track_diffs.append(
+                f'+{flag.removeprefix("flag-")}'
+                if str(value) == '1'
+                else f'-{flag.removeprefix("flag-")}'
+            )
 
-        name_str = f" ('{track.name}')" if track.name else ''
-        flag_str = ', '.join(
-            f'+{flag.removeprefix("flag-")}'
-            if str(value) == '1'
-            else f'-{flag.removeprefix("flag-")}'
-            for flag, value in flags.items()
-        )
-        log_diffs.append(f'track {track.index}{name_str}: {flag_str}')
+        diff_str = ', '.join(track_diffs)
+        name_str = f" '{track.name}'" if track.name else ''
+        mkvpriority_logger.info(f'  track {track.index}{name_str}: {diff_str}')
 
-    if len(arguments) > 1:
-        mkvpropedit_logger.info('; '.join(log_diffs))
-        if not simulate:
-            try:
-                modify_tracks(arguments)
-            except subprocess.CalledProcessError as e:
-                mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
-                return
+    if not simulate and len(arguments) > 1:
+        try:
+            modify_tracks(arguments)
+        except subprocess.CalledProcessError as e:
+            mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
+            return
 
     if database is not None:
         database.insert(segment_uid, file_path, list(orig_tracks.values()))

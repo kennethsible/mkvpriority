@@ -127,12 +127,6 @@ def count_unique_dialogue(temp_path: Path, is_srt: bool) -> int:
 
 
 def compute_subtitle_sizes(file_path: Path, tracks: list[Track]) -> dict[int, int]:
-    ambiguous_tracks_str = ', '.join(
-        f'track {track.index} ("{track.name}")' if track.name else f'track {track.index}'
-        for track in tracks
-    )
-    mkvextract_logger.info(f'analyzing ambiguous subtitles: {ambiguous_tracks_str}')
-
     dialogue_counts: dict[int, int] = {track.index: 0 for track in tracks}
 
     internal_tracks = [track for track in tracks if not track.is_external]

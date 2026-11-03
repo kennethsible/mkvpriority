@@ -236,14 +236,15 @@ def main(
                 path_str, toml_label = path_str.rsplit('::', 1)
             matched_config = configs.get(toml_label) or configs.get('untagged')
             if not args.restore and matched_config is None:
-                mkvpriority_logger.warning(f"skipping '{path_str}' (unmatched config)")
+                tag_suffix = f' [{toml_label}]' if toml_label != 'untagged' else ''
+                mkvpriority_logger.warning(f"skipping (missing config) '{path_str}'{tag_suffix}")
                 continue
 
             for file_path in collect_file_paths(path_str):
                 if database is not None:
                     is_archived = get_archive_status(file_path, database, simulate)
                     if not args.restore and is_archived and not args.override:
-                        mkvpriority_logger.info(f"skipping '{file_path}' (already archived)")
+                        mkvpriority_logger.info(f"skipping (archived) '{file_path}'")
                         continue
                     if args.restore and not is_archived:
                         continue
@@ -252,9 +253,9 @@ def main(
                     mkvpriority_logger.info(f"restoring '{file_path}'")
                     restore_file(file_path, database, simulate)
                 elif matched_config is not None:
-                    toml_path, toml_label = matched_config.toml_path, matched_config.toml_label
-                    config_tag = f' (tag: {toml_label})' if toml_label != 'untagged' else ''
-                    mkvpriority_logger.info(f"processing '{file_path}{config_tag}'")
+                    toml_label = matched_config.toml_label
+                    tag_suffix = f' [{toml_label}]' if toml_label != 'untagged' else ''
+                    mkvpriority_logger.info(f"processing '{file_path}'{tag_suffix}")
                     process_file(file_path, matched_config, database, extensions, simulate, dry_run)
 
     finally:

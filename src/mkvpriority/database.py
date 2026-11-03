@@ -77,10 +77,8 @@ class Database:
         segment_uid = normalize_segment_uid(segment_uid)
 
         cur = self.con.execute('SELECT 1 FROM archive WHERE segment_uid = ?', (str(segment_uid),))
-        is_update = cur.fetchone() is not None
-
-        log_action = 'updating' if is_update else 'inserting into'
-        mkvpriority_logger.info(f"{log_action} database '{self.db_path}'")
+        action_str = 'updating' if cur.fetchone() is not None else 'inserting into'
+        mkvpriority_logger.debug(f"{action_str} database '{self.db_path}'")
 
         if self.simulate:
             return
@@ -136,10 +134,9 @@ class Database:
     def delete(self, segment_uid: str, file_path: Path | None = None) -> None:
         segment_uid = normalize_segment_uid(segment_uid)
         if file_path:
-            file_path = file_path.resolve()
-            mkvpriority_logger.info(f"deleting from database '{self.db_path}': '{file_path}'")
+            mkvpriority_logger.debug(f"removing archive for '{file_path.resolve()}'")
         else:
-            mkvpriority_logger.info(f"deleting from database '{self.db_path}'")
+            mkvpriority_logger.debug(f"removing archive for segment_uid '{segment_uid}'")
 
         if not self.simulate:
             with self.con:
@@ -157,7 +154,7 @@ class Database:
             return
 
         for _, file_path in stale_records:
-            mkvpriority_logger.info(f"deleting from database '{self.db_path}': '{file_path}'")
+            mkvpriority_logger.info(f"pruning archive for '{file_path}'")
 
         if not self.simulate:
             with self.con:

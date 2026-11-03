@@ -85,7 +85,7 @@ class SubtitleRenamer(Extension):
                 )
                 if normalized_language is None and language_format:
                     self.extension_logger.warning(
-                        f"cannot format language '{track.language}' using format '{language_format}'"
+                        f"cannot format language '{track.language}' to '{language_format}'"
                     )
                 segments.append(normalized_language or track.language)
             if track.default:
@@ -95,16 +95,15 @@ class SubtitleRenamer(Extension):
             if track.name:
                 segments.append(track.name)
 
-            file_suffix = track.file_path.suffix.lower()
-            new_file_name = '.'.join(segments) + file_suffix
+            new_file_name = '.'.join(segments) + track.file_path.suffix.lower()
             new_file_path = file_path.parent / new_file_name
             if new_file_path != track.file_path:
                 if new_file_path.exists():
                     continue
 
-                self.extension_logger.info(
-                    f"renaming subtitles '{track.file_path.name}' -> '{new_file_name}'"
-                )
+                old_suffix = track.file_path.name[len(file_path.stem) :]
+                new_suffix = new_file_path.name[len(file_path.stem) :]
+                self.extension_logger.info(f"renaming '{old_suffix}' -> '{new_suffix}'")
                 if not dry_run:
                     track.file_path.rename(new_file_path)
                 track.file_path = new_file_path

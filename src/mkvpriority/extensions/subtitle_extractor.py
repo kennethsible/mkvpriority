@@ -92,8 +92,9 @@ class SubtitleExtractor(Extension):
         self, file_path: Path, subtitle_paths: list[tuple[Track, Path]], dry_run: bool = False
     ) -> None:
         for track, subtitle_path in subtitle_paths:
-            track_str = f"{track.index} ('{track.name}')" if track.name else str(track.index)
-            self.extension_logger.info(f"extracting track {track_str} to '{subtitle_path.name}'")
+            subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
+            track_str = f"{track.index} '{track.name}'" if track.name else str(track.index)
+            self.extension_logger.info(f"extracting track {track_str} to '{subtitle_suffix}'")
 
         arguments = [f'{track.index}:{subtitle_path}' for track, subtitle_path in subtitle_paths]
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:

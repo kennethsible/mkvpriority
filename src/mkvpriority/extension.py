@@ -59,7 +59,7 @@ def load_extension(module_name: str) -> Extension | None:
         try:
             module = importlib.import_module(f'mkvpriority.extensions.{module_name}')
         except ImportError:
-            mkvpriority_logger.error(f"could not locate extension '{module_name}'")
+            mkvpriority_logger.error(f"failed to locate extension module '{module_name}'")
             return None
 
     for class_name, member in inspect.getmembers(module, inspect.isclass):
@@ -71,8 +71,8 @@ def load_extension(module_name: str) -> Extension | None:
             try:
                 return member()
             except Exception:
-                mkvpriority_logger.exception(f"could not instantiate extension '{class_name}'")
+                mkvpriority_logger.exception(f"failed to instantiate extension '{class_name}'")
                 return None
 
-    mkvpriority_logger.error(f"no valid extension subclass found in '{module_name}'")
+    mkvpriority_logger.error(f"no extension subclass found in '{module_name}'")
     return None

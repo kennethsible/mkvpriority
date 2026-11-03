@@ -78,7 +78,7 @@ class SubtitleRestyler(Extension):
             for subtitle_track in target_tracks:
                 subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
                 if subtitle_path and subtitle_path.is_file():
-                    self.restyle_subtitles(subtitle_path, style_fields, dry_run)
+                    self.restyle_subtitles(file_path, subtitle_path, style_fields, dry_run)
 
     def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
         if track.is_external:
@@ -175,7 +175,11 @@ class SubtitleRestyler(Extension):
         return subtitle_styles
 
     def restyle_subtitles(
-        self, subtitle_path: Path, style_fields: dict[str, Any], dry_run: bool = False
+        self,
+        file_path: Path,
+        subtitle_path: Path,
+        style_fields: dict[str, Any],
+        dry_run: bool = False,
     ) -> None:
         with open(subtitle_path, encoding='utf-8-sig') as f:
             input_lines = f.readlines()
@@ -215,10 +219,9 @@ class SubtitleRestyler(Extension):
                         line = 'Style: ' + ','.join(style_parts) + '\n'
             output_lines.append(line)
 
+        subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
         formatted_styles = ', '.join(f"'{style}'" for style in sorted(subtitle_styles))
-        self.extension_logger.info(
-            f"restyling subtitles '{subtitle_path.name}' ({formatted_styles})"
-        )
+        self.extension_logger.info(f"restyling '{subtitle_suffix}': {formatted_styles}")
         if not dry_run:
             with open(subtitle_path, 'w', encoding='utf-8-sig') as f:
                 f.writelines(output_lines)

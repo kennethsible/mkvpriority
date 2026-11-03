@@ -191,40 +191,14 @@ class Multiplexer(Extension):
                 arguments.extend(['--sub-charset', '0:UTF-8'])
             arguments.append(str(subtitle_track.file_path))
 
-        internal_tracks = [*video_tracks, *internal_audio_tracks, *internal_subtitle_tracks]
-        kept_track_uids = {track.uid for track in remaining_tracks if not track.is_external}
-        stripped_tracks = [track for track in internal_tracks if track.uid not in kept_track_uids]
-
-        log_diffs: list[str] = []
-        for track in external_tracks:
-            if track.file_path:
-                name_str = f" ('{track.name}')" if track.name else ''
-                log_diffs.append(f"+track '{track.file_path.name}'{name_str}")
-        for track in stripped_tracks:
-            name_str = f" ('{track.name}')" if track.name else ''
-            log_diffs.append(f'-track {track.index}{name_str}')
-        diff_str = f': {"; ".join(log_diffs)}' if log_diffs else ''
-
-        order_str = ''
-        if order_tracks or external_tracks:
-            formatted_order = [
-                f'{"+" if track.is_external else ""}{track.category[:3]}:{track.index}'
-                for track in remaining_tracks
-            ]
-            order_str = f' [{", ".join(formatted_order)}]'
-
-        self.extension_logger.info(
-            f"multiplexing container '{file_path.name}'{order_str}{diff_str}"
-        )
+        self.extension_logger.info(f"remuxing '{file_path.name}'")
         old_segment_uid, *_ = extract_tracks(file_path)
         if not simulate:
             try:
                 self.multiplex_tracks(arguments)
                 if not parameters.remove_original_container:
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
-                    self.extension_logger.info(
-                        f"renaming original container to '{backup_path.name}'"
-                    )
+                    self.extension_logger.info(f"renaming '{file_path.name}' to '.orig.mkv'")
                     file_path.replace(backup_path)
                 temp_output_path.replace(file_path)
             except subprocess.CalledProcessError as e:
@@ -236,7 +210,8 @@ class Multiplexer(Extension):
             for track in external_tracks:
                 if track.file_path is None:
                     continue
-                self.extension_logger.info(f"removing subtitles '{track.file_path.name}'")
+                subtitle_suffix = track.file_path.name[len(file_path.stem) :]
+                self.extension_logger.info(f"removing '{subtitle_suffix}'")
                 if not simulate:
                     track.file_path.unlink(missing_ok=True)
 
