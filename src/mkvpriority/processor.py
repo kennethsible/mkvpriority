@@ -6,6 +6,7 @@ from pathlib import Path
 from .config import Config
 from .database import Database
 from .extension import Extension
+from .logger import VERBOSE
 from .mkvtoolnix import ensure_segment_uid, extract_tracks, modify_tracks
 from .subtitles import compute_subtitle_sizes, find_sidecar_tracks
 from .types import (
@@ -151,7 +152,7 @@ def restore_tracks(
 
         diff_str = ' '.join(track_diffs)
         name_str = f" '{track.name}'" if track.name else ''
-        mkvpriority_logger.info(f'  track {track.index}{name_str}: {diff_str}')
+        mkvpriority_logger.info(f'updating track {track.index}{name_str}: {diff_str}')
 
     if not simulate and len(arguments) > 1:
         try:
@@ -282,9 +283,10 @@ def process_tracks(
     )
 
     arguments = [str(file_path)]
+    track_dict: dict[int, tuple[str, str]] = {}
     track_flags = {**audio_flags, **subtitle_flags}
     for track in (*audio_tracks, *subtitle_tracks):
-        mkvpriority_logger.debug(track)
+        mkvpriority_logger.log(VERBOSE, track)
         if not (modified_flags := track_flags[track.uid]):
             continue
 
@@ -302,7 +304,10 @@ def process_tracks(
 
         diff_str = ', '.join(track_diffs)
         name_str = f" '{track.name}'" if track.name else ''
-        mkvpriority_logger.info(f'  track {track.index}{name_str}: {diff_str}')
+        track_dict[track.index] = (name_str, diff_str)
+
+    for track_index, (name_str, diff_str) in track_dict.items():
+        mkvpriority_logger.info(f'updating track {track_index}{name_str}: {diff_str}')
 
     if not simulate and len(arguments) > 1:
         try:

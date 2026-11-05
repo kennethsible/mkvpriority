@@ -17,6 +17,7 @@ from cron_descriptor import FormatError
 import mkvpriority.main
 from mkvpriority import __version__
 
+from .logger import configure_logging
 from .types import resolve_language
 
 entrypoint_logger = logging.getLogger('entrypoint')
@@ -193,7 +194,7 @@ def main() -> None:
 
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
-    mkvpriority.main.configure_logging('/config/mkvpriority.log', max_bytes, max_files)
+    configure_logging('/config/mkvpriority.log', max_bytes, max_files)
 
     entrypoint_logger.setLevel(logging.INFO)
     logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
