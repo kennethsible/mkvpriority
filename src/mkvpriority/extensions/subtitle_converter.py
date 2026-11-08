@@ -85,7 +85,7 @@ class SubtitleConverter(Extension):
                 and parameters.convert_remove_source
             ):
                 source_suffix = source_path.name[len(file_path.stem) :]
-                self.extension_logger.info(f"removing '{source_suffix}'")
+                self.extension_logger.info(f"removing subtitles '{source_suffix}'")
                 if not dry_run:
                     source_path.unlink(missing_ok=True)
                 if subtitle_track.is_external:
@@ -112,7 +112,7 @@ class SubtitleConverter(Extension):
     ) -> bool:
         source_suffix = source_path.name[len(file_path.stem) :]
         target_suffix = target_path.name[len(file_path.stem) :]
-        self.extension_logger.info(f"converting '{source_suffix}' to '{target_suffix}'")
+        self.extension_logger.info(f"converting subtitles '{source_suffix}' -> '{target_suffix}'")
 
         if dry_run:
             return True

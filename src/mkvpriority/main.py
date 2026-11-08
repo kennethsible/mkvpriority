@@ -97,9 +97,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(
-    argv: list[str] | None = None, orig_lang: str | None = None, suppress_header: bool = False
-) -> None:
+def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
 
@@ -148,17 +146,6 @@ def main(
         if extension := load_extension(module_name):
             extension.extension_logger.setLevel(tool_level)
             extensions.append(extension)
-
-    if not suppress_header:
-        loaded_configs = [f"'{config.labeled_path}'" for config in configs.values()]
-        loaded_extensions = [f"'{extension.__class__.__name__}'" for extension in extensions]
-
-        if loaded_configs:
-            mkvpriority_logger.info(f'using config(s): {", ".join(loaded_configs)}')
-        if database is not None:
-            mkvpriority_logger.info(f"using database: '{database.db_path}'")
-        if loaded_extensions:
-            mkvpriority_logger.info(f'using extension(s): {", ".join(loaded_extensions)}')
 
     try:
         if args.prune:

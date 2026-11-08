@@ -221,7 +221,7 @@ class SubtitleRestyler(Extension):
 
         subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
         formatted_styles = ', '.join(f"'{style}'" for style in sorted(subtitle_styles))
-        self.extension_logger.info(f"restyling '{subtitle_suffix}': {formatted_styles}")
+        self.extension_logger.info(f"restyling subtitles '{subtitle_suffix}': {formatted_styles}")
         if not dry_run:
             with open(subtitle_path, 'w', encoding='utf-8-sig') as f:
                 f.writelines(output_lines)

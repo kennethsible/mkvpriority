@@ -423,7 +423,7 @@ async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
         queue.task_done()
 
         expected_argv = [*entrypoint.MKVPRIORITY_ARGS, '/movies/dummy.mkv::anime']
-        mock_main.assert_called_once_with(expected_argv, 'jpn', suppress_header=True)
+        mock_main.assert_called_once_with(expected_argv, 'jpn')
 
 
 def test_penalize_unscored() -> None:

@@ -71,17 +71,13 @@ class Database:
                 self.con.execute('INSERT INTO schema_info (version) VALUES (?)', (SCHEMA_VERSION,))
 
     def insert(self, segment_uid: str | None, file_path: Path, tracks: list[Track]) -> None:
+        if self.simulate:
+            return
+
         file_path = file_path.resolve()
         if not segment_uid:
             segment_uid = ensure_segment_uid(file_path, self.simulate)
         segment_uid = normalize_segment_uid(segment_uid)
-
-        cur = self.con.execute('SELECT 1 FROM archive WHERE segment_uid = ?', (str(segment_uid),))
-        action_str = 'updating' if cur.fetchone() is not None else 'inserting into'
-        mkvpriority_logger.debug(f"{action_str} database '{self.db_path}'")
-
-        if self.simulate:
-            return
 
         file_mtime = file_path.stat().st_mtime
         metadata_records = [
@@ -131,14 +127,9 @@ class Database:
                     metadata_records,
                 )
 
-    def delete(self, segment_uid: str, file_path: Path | None = None) -> None:
-        segment_uid = normalize_segment_uid(segment_uid)
-        if file_path:
-            mkvpriority_logger.debug(f"removing archive for '{file_path.resolve()}'")
-        else:
-            mkvpriority_logger.debug(f"removing archive for segment_uid '{segment_uid}'")
-
+    def delete(self, segment_uid: str) -> None:
         if not self.simulate:
+            segment_uid = normalize_segment_uid(segment_uid)
             with self.con:
                 self.con.execute('DELETE FROM archive WHERE segment_uid = ?', (str(segment_uid),))
 

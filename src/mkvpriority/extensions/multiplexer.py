@@ -191,14 +191,16 @@ class Multiplexer(Extension):
                 arguments.extend(['--sub-charset', '0:UTF-8'])
             arguments.append(str(subtitle_track.file_path))
 
-        self.extension_logger.info(f"remuxing '{file_path.name}'")
+        self.extension_logger.info(f"remuxing container '{file_path.name}'")
         old_segment_uid, *_ = extract_tracks(file_path)
         if not simulate:
             try:
                 self.multiplex_tracks(arguments)
                 if not parameters.remove_original_container:
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
-                    self.extension_logger.info(f"renaming '{file_path.name}' to '.orig.mkv'")
+                    self.extension_logger.info(
+                        f"renaming container '{file_path.name}' to '.orig.mkv'"
+                    )
                     file_path.replace(backup_path)
                 temp_output_path.replace(file_path)
             except subprocess.CalledProcessError as e:
@@ -211,7 +213,7 @@ class Multiplexer(Extension):
                 if track.file_path is None:
                     continue
                 subtitle_suffix = track.file_path.name[len(file_path.stem) :]
-                self.extension_logger.info(f"removing '{subtitle_suffix}'")
+                self.extension_logger.info(f"removing subtitles '{subtitle_suffix}'")
                 if not simulate:
                     track.file_path.unlink(missing_ok=True)
 

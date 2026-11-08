@@ -52,7 +52,7 @@ async def process_item(file_path: str, item_tags: str, orig_lang: str | None) ->
         file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
     try:
         argv = [*MKVPRIORITY_ARGS, file_path]
-        await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang, suppress_header=True)
+        await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang)
     except Exception:
         entrypoint_logger.exception(f"error occurred while processing '{file_path}'")
 

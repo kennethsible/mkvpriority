@@ -1,6 +1,8 @@
 import copy
 import logging
 import subprocess
+import tempfile
+from contextlib import nullcontext
 from pathlib import Path
 
 from .config import Config
@@ -339,14 +341,20 @@ def process_file(
     )
 
     if extensions is not None:
-        for extension in extensions:
-            extension.process_file(
-                file_path,
-                video_tracks,
-                audio_tracks,
-                subtitle_tracks,
-                config,
-                database,
-                simulate,
-                dry_run,
-            )
+        with tempfile.TemporaryDirectory() if dry_run else nullcontext() as temp_dir:
+            target_file_path = file_path
+            if temp_dir:
+                target_file_path = Path(temp_dir) / file_path.name
+                target_file_path.symlink_to(file_path.resolve())
+
+            for extension in extensions:
+                extension.process_file(
+                    target_file_path,
+                    video_tracks,
+                    audio_tracks,
+                    subtitle_tracks,
+                    config,
+                    database,
+                    simulate,
+                    dry_run,
+                )
