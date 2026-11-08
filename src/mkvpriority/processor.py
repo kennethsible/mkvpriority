@@ -252,13 +252,15 @@ def apply_profiles[T: Profile](
             track.default = False
         if track.default and track.forced:
             store_original(track)
-            track.forced = False
-            if track.uid in orig_tracks and orig_tracks[track.uid].forced:
-                track_flags[track.uid]['flag-forced'] = '0'
+            track.default = False
+            if default_track == track:
+                default_track = None
+            if track.uid in orig_tracks and orig_tracks[track.uid].default:
+                track_flags[track.uid]['flag-default'] = '0'
             else:
-                track_flags[track.uid].pop('flag-forced', None)
+                track_flags[track.uid].pop('flag-default', None)
 
-    return default_track or tracks[0], track_flags
+    return default_track, track_flags
 
 
 def process_tracks(

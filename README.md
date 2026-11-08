@@ -188,7 +188,7 @@ Example: Princess Mononoke (1997).eng.default.ass
 ```
 
 > [!NOTE]
-> To avoid changing internal track flags and *only* use external subtitles, use the subtitle extractor with the `--dry-run` argument since subtitle extraction still runs during a dry run, which only prevents changes to the MKV container.
+> To avoid changing internal track flags and *only* use external subtitles, use the subtitle extractor with the `--simulate` argument since subtitle extraction still runs during a simulation, which only prevents changes to the MKV container.
 
 ### Example: Subtitle Converter
 
@@ -344,4 +344,4 @@ uv tool install mkvpriority
 
 ## Hardlinks Limitation
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--dry-run` argument ([see here](#example-subtitle-extractor)).
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--simulate` argument ([see here](#example-subtitle-extractor)).
