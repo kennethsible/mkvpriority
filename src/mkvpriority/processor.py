@@ -154,7 +154,7 @@ def restore_tracks(
 
         diff_str = ' '.join(track_diffs)
         name_str = f" '{track.name}'" if track.name else ''
-        mkvpriority_logger.info(f'updating track {track.index}{name_str}: {diff_str}')
+        mkvpriority_logger.info(f'restoring track {track.index}{name_str}: {diff_str}')
 
     if not simulate and len(arguments) > 1:
         try:
@@ -275,6 +275,9 @@ def process_tracks(
     orig_tracks: dict[int, Track] = {}
 
     score_tracks(file_path, audio_tracks, config.audio_group)
+    for track in audio_tracks:
+        mkvpriority_logger.log(VERBOSE, track)
+
     default_audio_track, audio_flags = apply_profiles(audio_tracks, config.audio_group, orig_tracks)
 
     suppress_default = (
@@ -282,6 +285,9 @@ def process_tracks(
         and default_audio_track.language in config.subtitle_group.native_languages
     )
     score_tracks(file_path, subtitle_tracks, config.subtitle_group)
+    for track in subtitle_tracks:
+        mkvpriority_logger.log(VERBOSE, track)
+
     _, subtitle_flags = apply_profiles(
         subtitle_tracks, config.subtitle_group, orig_tracks, suppress_default=suppress_default
     )
@@ -290,7 +296,6 @@ def process_tracks(
     track_dict: dict[int, tuple[str, str]] = {}
     track_flags = {**audio_flags, **subtitle_flags}
     for track in (*audio_tracks, *subtitle_tracks):
-        mkvpriority_logger.log(VERBOSE, track)
         if not (modified_flags := track_flags[track.uid]):
             continue
 
@@ -311,7 +316,7 @@ def process_tracks(
         track_dict[track.index] = (name_str, diff_str)
 
     for track_index, (name_str, diff_str) in track_dict.items():
-        mkvpriority_logger.info(f'updating track {track_index}{name_str}: {diff_str}')
+        mkvpriority_logger.info(f'modifying track {track_index}{name_str}: {diff_str}')
 
     if not simulate and len(arguments) > 1:
         try:
