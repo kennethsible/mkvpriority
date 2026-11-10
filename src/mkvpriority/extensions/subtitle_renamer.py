@@ -104,6 +104,12 @@ class SubtitleRenamer(Extension):
                 old_suffix = track.file_path.name[len(file_path.stem) :]
                 new_suffix = new_file_path.name[len(file_path.stem) :]
                 self.extension_logger.info(f"renaming subtitles '{old_suffix}' -> '{new_suffix}'")
-                if not dry_run:
-                    track.file_path.rename(new_file_path)
+
+                if dry_run and track.file_path.parent != file_path.parent:
+                    staged_path = file_path.parent / track.file_path.name
+                    if not staged_path.exists():
+                        staged_path.symlink_to(track.file_path.resolve())
+                    track.file_path = staged_path
+
+                track.file_path.rename(new_file_path)
                 track.file_path = new_file_path

@@ -192,9 +192,12 @@ class Multiplexer(Extension):
             arguments.append(str(subtitle_track.file_path))
 
         self.extension_logger.info(f"remuxing container '{file_path.name}'")
-        old_segment_uid, *_ = extract_tracks(file_path)
         if not simulate:
+            old_segment_uid: str | None = None
             try:
+                if database:
+                    old_segment_uid, *_ = extract_tracks(file_path)
+
                 self.multiplex_tracks(arguments)
                 if not parameters.remove_original_container:
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
@@ -203,6 +206,13 @@ class Multiplexer(Extension):
                     )
                     file_path.replace(backup_path)
                 temp_output_path.replace(file_path)
+
+                if database and old_segment_uid:
+                    database.delete(old_segment_uid)
+                    new_segment_uid, *_ = extract_tracks(file_path)
+                    if new_segment_uid:
+                        database.insert(new_segment_uid, file_path, [])
+
             except subprocess.CalledProcessError as e:
                 mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
                 temp_output_path.unlink(missing_ok=True)
@@ -217,14 +227,8 @@ class Multiplexer(Extension):
                 if not simulate:
                     track.file_path.unlink(missing_ok=True)
 
-        if not simulate and database and old_segment_uid:
-            database.delete(old_segment_uid)
-            new_segment_uid, *_ = extract_tracks(file_path)
-            if new_segment_uid:
-                database.insert(new_segment_uid, file_path, [])
-
     def multiplex_tracks(self, arguments: list[str]) -> None:
-        mkvmerge_logger.debug({' '.join(arguments)})
+        mkvmerge_logger.debug(' '.join(arguments))
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(arguments, temp_file)
             temp_file_path = Path(temp_file.name)

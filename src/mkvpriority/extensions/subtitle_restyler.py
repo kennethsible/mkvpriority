@@ -77,8 +77,16 @@ class SubtitleRestyler(Extension):
             target_tracks = [track for track in subtitle_tracks if track.default or track.forced]
             for subtitle_track in target_tracks:
                 subtitle_path = self.build_subtitle_path(file_path, subtitle_track)
-                if subtitle_path and subtitle_path.is_file():
-                    self.restyle_subtitles(file_path, subtitle_path, style_fields, dry_run)
+                if not subtitle_path or not subtitle_path.is_file():
+                    continue
+
+                if dry_run and subtitle_path.parent != file_path.parent:
+                    staged_path = file_path.parent / subtitle_path.name
+                    if not staged_path.exists():
+                        staged_path.write_bytes(subtitle_path.read_bytes())
+                    subtitle_path = staged_path
+
+                self.restyle_subtitles(file_path, subtitle_path, style_fields)
 
     def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
         if track.is_external:
@@ -175,11 +183,7 @@ class SubtitleRestyler(Extension):
         return subtitle_styles
 
     def restyle_subtitles(
-        self,
-        file_path: Path,
-        subtitle_path: Path,
-        style_fields: dict[str, Any],
-        dry_run: bool = False,
+        self, file_path: Path, subtitle_path: Path, style_fields: dict[str, Any]
     ) -> None:
         with open(subtitle_path, encoding='utf-8-sig') as f:
             input_lines = f.readlines()
@@ -222,6 +226,5 @@ class SubtitleRestyler(Extension):
         subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
         formatted_styles = ', '.join(f"'{style}'" for style in sorted(subtitle_styles))
         self.extension_logger.info(f"restyling subtitles '{subtitle_suffix}': {formatted_styles}")
-        if not dry_run:
-            with open(subtitle_path, 'w', encoding='utf-8-sig') as f:
-                f.writelines(output_lines)
+        with open(subtitle_path, 'w', encoding='utf-8-sig') as f:
+            f.writelines(output_lines)

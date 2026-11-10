@@ -72,7 +72,7 @@ class SubtitleExtractor(Extension):
                 subtitle_paths.append((track, subtitle_path))
 
         if subtitle_paths:
-            self.extract_subtitles(file_path, subtitle_paths, dry_run)
+            self.extract_subtitles(file_path, subtitle_paths)
 
     def build_subtitle_path(self, file_path: Path, track: Track) -> Path | None:
         subtitle_format = track.codec.split('/')[-1]
@@ -88,9 +88,7 @@ class SubtitleExtractor(Extension):
             suffix += '.forced'
         return Path(file_path).with_suffix(f'{suffix}.{extension}')
 
-    def extract_subtitles(
-        self, file_path: Path, subtitle_paths: list[tuple[Track, Path]], dry_run: bool = False
-    ) -> None:
+    def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[Track, Path]]) -> None:
         for track, subtitle_path in subtitle_paths:
             subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
             track_str = f"{track.index} '{track.name}'" if track.name else str(track.index)
@@ -101,17 +99,16 @@ class SubtitleExtractor(Extension):
             json.dump(['tracks', str(file_path), *arguments], temp_file)
             temp_file_path = Path(temp_file.name)
 
-        if not dry_run:
-            try:
-                result = subprocess.run(
-                    ['mkvextract', f'@{temp_file_path}'],
-                    capture_output=True,
-                    encoding='utf-8',
-                    check=True,
-                    text=True,
-                )
-                self.extension_logger.debug(result.stdout.strip())
-            except subprocess.CalledProcessError as e:
-                self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
-            finally:
-                temp_file_path.unlink(missing_ok=True)
+        try:
+            result = subprocess.run(
+                ['mkvextract', f'@{temp_file_path}'],
+                capture_output=True,
+                encoding='utf-8',
+                check=True,
+                text=True,
+            )
+            self.extension_logger.debug(result.stdout.strip())
+        except subprocess.CalledProcessError as e:
+            self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
+        finally:
+            temp_file_path.unlink(missing_ok=True)
