@@ -15,9 +15,9 @@ from ..database import Database
 from ..extension import Extension
 from ..types import Track
 
-SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
-
 mkvextract_logger = logging.getLogger('mkvextract')
+
+SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
 
 
 @dataclass

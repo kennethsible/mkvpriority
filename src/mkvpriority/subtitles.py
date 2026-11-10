@@ -9,6 +9,9 @@ from tempfile import NamedTemporaryFile
 
 from .types import Track, resolve_language
 
+mkvpriority_logger = logging.getLogger('mkvpriority')
+mkvextract_logger = logging.getLogger('mkvextract')
+
 POSITION_PATTERN = re.compile(r'\\(?:pos|move|org|i?clip|fade?|t)\s*\(|\\an[13-79]', re.IGNORECASE)
 ROTATION_PATTERN = re.compile(r'\\(fr[xyz]?|fa[xy])-?\d+\.?\d*', re.IGNORECASE)
 KARAOKE_PATTERN = re.compile(r'\\k[fo]?\d+\.?\d*', re.IGNORECASE)
@@ -16,9 +19,6 @@ DRAWING_PATTERN = re.compile(r'\\p[1-9]\d*', re.IGNORECASE)
 OVERRIDE_PATTERN = re.compile(r'\{[^}]*\}')
 
 SUBTITLE_EXTENSIONS = {'.ass': 'S_TEXT/ASS', '.ssa': 'S_TEXT/SSA', '.srt': 'S_TEXT/UTF8'}
-
-
-mkvextract_logger = logging.getLogger('mkvextract')
 
 
 def extract_header_title(subtitle_path: Path) -> str | None:
@@ -54,10 +54,10 @@ def parse_sidecar_track(subtitle_path: Path, file_stem: str, virtual_index: int)
             remaining_segments.append(segment)
 
     track_name = ''
-    if file_suffix in ('.ass', '.ssa'):
-        track_name = extract_header_title(subtitle_path) or ''
-    if not track_name and remaining_segments:
+    if remaining_segments:
         track_name = ' '.join(remaining_segments)
+    elif file_suffix in ('.ass', '.ssa'):
+        track_name = extract_header_title(subtitle_path) or ''
 
     return Track(
         index=virtual_index,
@@ -89,6 +89,14 @@ def find_sidecar_tracks(file_path: Path) -> list[Track]:
         if subtitle_track := parse_sidecar_track(sidecar_path, file_stem, virtual_id):
             subtitle_tracks.append(subtitle_track)
             virtual_id -= 1
+
+    if subtitle_tracks:
+        sidecar_suffixes = ', '.join(
+            f"'{subtitle_track.file_path.name[len(file_stem) :]}'"
+            for subtitle_track in subtitle_tracks
+            if subtitle_track.file_path
+        )
+        mkvpriority_logger.info(f'detected external subtitles: {sidecar_suffixes}')
 
     return subtitle_tracks
 

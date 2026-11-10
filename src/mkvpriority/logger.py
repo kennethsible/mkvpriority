@@ -2,13 +2,13 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-VERBOSE = 15
-logging.addLevelName(VERBOSE, 'VERBOSE')
-
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
 mkvextract_logger = logging.getLogger('mkvextract')
 mkvmerge_logger = logging.getLogger('mkvmerge')
+
+VERBOSE = 15
+logging.addLevelName(VERBOSE, 'VERBOSE')
 
 
 class PrefixFilter(logging.Filter):
