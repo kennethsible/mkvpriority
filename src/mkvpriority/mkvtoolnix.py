@@ -31,10 +31,11 @@ def normalize_segment_uid(segment_uid: str | None) -> str:
     return segment_uid.removeprefix('0x')
 
 
-def ensure_segment_uid(file_path: Path, simulate: bool = False) -> str:
+def ensure_segment_uid(file_path: Path, *, simulate: bool = False) -> str:
     segment_uid = uuid.uuid4().hex
     mkvpriority_logger.info(f"generating segment_uid for '{file_path}'")
     arguments = [str(file_path), '--edit', 'info', '--set', f'segment-uid={segment_uid}']
+    mkvpropedit_logger.debug(' '.join(arguments))
     if not simulate:
         try:
             modify_tracks(arguments)
@@ -44,8 +45,10 @@ def ensure_segment_uid(file_path: Path, simulate: bool = False) -> str:
 
 
 def identify_tracks(file_path: Path) -> Any:
+    arguments = ['--identification-format', 'json', '--identify', str(file_path)]
+    mkvmerge_logger.debug(' '.join(arguments))
     with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
-        json.dump(['--identification-format', 'json', '--identify', str(file_path)], temp_file)
+        json.dump(arguments, temp_file)
         temp_file_path = Path(temp_file.name)
 
     try:
@@ -62,8 +65,11 @@ def identify_tracks(file_path: Path) -> Any:
         temp_file_path.unlink(missing_ok=True)
 
 
-def modify_tracks(arguments: list[str]) -> None:
-    mkvpropedit_logger.debug({' '.join(arguments)})
+def modify_tracks(arguments: list[str], *, simulate: bool = False) -> None:
+    mkvpropedit_logger.debug(' '.join(arguments))
+    if simulate:
+        return
+
     with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
         json.dump(arguments, temp_file)
         temp_file_path = Path(temp_file.name)

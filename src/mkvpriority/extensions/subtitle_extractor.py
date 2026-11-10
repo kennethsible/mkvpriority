@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 import subprocess
 import tomllib
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ from ..extension import Extension
 from ..types import Track
 
 SUBTITLE_EXTENSIONS = {'ASS': 'ass', 'SSA': 'ssa', 'UTF8': 'srt'}
+
+mkvextract_logger = logging.getLogger('mkvextract')
 
 
 @dataclass
@@ -40,6 +43,7 @@ class SubtitleExtractor(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        *,
         simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
@@ -89,14 +93,17 @@ class SubtitleExtractor(Extension):
         return Path(file_path).with_suffix(f'{suffix}.{extension}')
 
     def extract_subtitles(self, file_path: Path, subtitle_paths: list[tuple[Track, Path]]) -> None:
+        path_args: list[str] = []
         for track, subtitle_path in subtitle_paths:
             subtitle_suffix = subtitle_path.name[len(file_path.stem) :]
+            path_args.append(f'{track.index}:{subtitle_path}')
             track_str = f"{track.index} '{track.name}'" if track.name else str(track.index)
             self.extension_logger.info(f"extracting track {track_str} to '{subtitle_suffix}'")
 
-        arguments = [f'{track.index}:{subtitle_path}' for track, subtitle_path in subtitle_paths]
+        arguments = ['tracks', str(file_path), *path_args]
+        mkvextract_logger.debug(' '.join(arguments))
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
-            json.dump(['tracks', str(file_path), *arguments], temp_file)
+            json.dump(arguments, temp_file)
             temp_file_path = Path(temp_file.name)
 
         try:
@@ -107,8 +114,8 @@ class SubtitleExtractor(Extension):
                 check=True,
                 text=True,
             )
-            self.extension_logger.debug(result.stdout.strip())
+            mkvextract_logger.debug(result.stdout.strip())
         except subprocess.CalledProcessError as e:
-            self.extension_logger.error((e.stderr or e.stdout or str(e)).strip())
+            mkvextract_logger.error((e.stderr or e.stdout or str(e)).strip())
         finally:
             temp_file_path.unlink(missing_ok=True)

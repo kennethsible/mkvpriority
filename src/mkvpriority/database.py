@@ -48,12 +48,12 @@ class MetadataRecord:
 
 
 class Database:
-    def __init__(self, db_path: str | Path, simulate: bool = False):
+    def __init__(self, db_path: str | Path, *, simulate: bool = False):
         self.db_path = db_path
         self.simulate = simulate
         self.con = sqlite3.connect(db_path)
 
-        _perform_migrations(self.con, db_path, simulate)
+        _perform_migrations(self.con, db_path, simulate=simulate)
 
         self.con.execute('PRAGMA foreign_keys = ON')
         self._create_tables()
@@ -76,7 +76,7 @@ class Database:
 
         file_path = file_path.resolve()
         if not segment_uid:
-            segment_uid = ensure_segment_uid(file_path, self.simulate)
+            segment_uid = ensure_segment_uid(file_path, simulate=self.simulate)
         segment_uid = normalize_segment_uid(segment_uid)
 
         file_mtime = file_path.stat().st_mtime
@@ -230,7 +230,7 @@ def _column_exists(con: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def _perform_migrations(
-    con: sqlite3.Connection, db_path: str | Path, simulate: bool = False
+    con: sqlite3.Connection, db_path: str | Path, *, simulate: bool = False
 ) -> None:
     if not _table_exists(con, 'archive'):
         return

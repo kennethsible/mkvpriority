@@ -285,6 +285,7 @@ You can easily write your own post-processing scripts to handle custom logic.
            subtitle_tracks: list[Track],
            config: Config,
            database: Database | None = None,
+           *,
            simulate: bool = False,
            dry_run: bool = False,
        ) -> None: ...

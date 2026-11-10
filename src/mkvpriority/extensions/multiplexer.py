@@ -52,6 +52,7 @@ class Multiplexer(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        *,
         simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
@@ -72,7 +73,7 @@ class Multiplexer(Extension):
                 subtitle_tracks,
                 parameters,
                 database,
-                simulate,
+                simulate=simulate,
             )
 
     @staticmethod
@@ -109,6 +110,7 @@ class Multiplexer(Extension):
         subtitle_tracks: list[Track],
         parameters: Parameters,
         database: Database | None = None,
+        *,
         simulate: bool = False,
     ) -> None:
         internal_audio_tracks = [track for track in audio_tracks if not track.is_external]
@@ -192,13 +194,14 @@ class Multiplexer(Extension):
             arguments.append(str(subtitle_track.file_path))
 
         self.extension_logger.info(f"remuxing container '{file_path.name}'")
-        if not simulate:
-            old_segment_uid: str | None = None
-            try:
-                if database:
-                    old_segment_uid, *_ = extract_tracks(file_path)
+        old_segment_uid: str | None = None
+        try:
+            if not simulate and database:
+                old_segment_uid, *_ = extract_tracks(file_path)
 
-                self.multiplex_tracks(arguments)
+            self.multiplex_tracks(arguments, simulate=simulate)
+
+            if not simulate:
                 if not parameters.remove_original_container:
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
                     self.extension_logger.info(
@@ -213,10 +216,10 @@ class Multiplexer(Extension):
                     if new_segment_uid:
                         database.insert(new_segment_uid, file_path, [])
 
-            except subprocess.CalledProcessError as e:
-                mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
-                temp_output_path.unlink(missing_ok=True)
-                raise
+        except subprocess.CalledProcessError as e:
+            mkvmerge_logger.error((e.stderr or e.stdout or str(e)).strip())
+            temp_output_path.unlink(missing_ok=True)
+            raise
 
         if parameters.remove_external_subtitles:
             for track in external_tracks:
@@ -227,8 +230,11 @@ class Multiplexer(Extension):
                 if not simulate:
                     track.file_path.unlink(missing_ok=True)
 
-    def multiplex_tracks(self, arguments: list[str]) -> None:
+    def multiplex_tracks(self, arguments: list[str], *, simulate: bool = False) -> None:
         mkvmerge_logger.debug(' '.join(arguments))
+        if simulate:
+            return
+
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
             json.dump(arguments, temp_file)
             temp_file_path = Path(temp_file.name)

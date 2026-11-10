@@ -12,7 +12,7 @@ mkvmerge_logger = logging.getLogger('mkvmerge')
 
 
 class PrefixFilter(logging.Filter):
-    def __init__(self, simulate: bool = False, dry_run: bool = False):
+    def __init__(self, *, simulate: bool = False, dry_run: bool = False):
         super().__init__()
         self.simulate = simulate
         self.dry_run = dry_run
@@ -68,6 +68,7 @@ def configure_logging(
 def set_log_levels(
     main_level: int = logging.INFO,
     tool_level: int = logging.INFO,
+    *,
     simulate: bool = False,
     dry_run: bool = False,
 ) -> None:

@@ -39,7 +39,7 @@ def collect_file_paths(path_str: str) -> list[Path]:
     return list(dict.fromkeys(file_paths))
 
 
-def get_archive_status(file_path: Path, database: Database, simulate: bool = False) -> bool:
+def get_archive_status(file_path: Path, database: Database, *, simulate: bool = False) -> bool:
     archive_record = database.select_by_path(file_path)
     file_mtime = int(file_path.stat().st_mtime)
     if archive_record and archive_record.file_mtime == file_mtime:
@@ -47,7 +47,7 @@ def get_archive_status(file_path: Path, database: Database, simulate: bool = Fal
 
     segment_uid, *_ = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, simulate)
+        segment_uid = ensure_segment_uid(file_path, simulate=simulate)
     if archive_record and archive_record.segment_uid != segment_uid:
         database.delete(archive_record.segment_uid)
 
@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     else:
         main_level = VERBOSE if args.verbose else logging.INFO
         tool_level = logging.DEBUG if args.debug else logging.INFO
-    set_log_levels(main_level, tool_level, simulate, dry_run)
+    set_log_levels(main_level, tool_level, simulate=simulate, dry_run=dry_run)
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     database: Database | None = None
     if args.archive:
         try:
-            database = Database(args.archive, simulate)
+            database = Database(args.archive, simulate=simulate)
         except (sqlite3.IntegrityError, RuntimeError):
             mkvpriority_logger.error(f"error occurred while migrating '{args.archive}'")
             raise
@@ -168,7 +168,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
             for file_path in collect_file_paths(path_str):
                 if database is not None:
-                    is_archived = get_archive_status(file_path, database, simulate)
+                    is_archived = get_archive_status(file_path, database, simulate=simulate)
                     if not args.restore and is_archived and not args.override:
                         mkvpriority_logger.info(f"skipping (archived) '{file_path}'")
                         continue
@@ -177,12 +177,19 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
                 if args.restore and database is not None:
                     mkvpriority_logger.info(f"restoring '{file_path}'")
-                    restore_file(file_path, database, simulate)
+                    restore_file(file_path, database, simulate=simulate)
                 elif matched_config is not None:
                     toml_label = matched_config.toml_label
                     tag_suffix = f' [{toml_label}]' if toml_label != 'untagged' else ''
                     mkvpriority_logger.info(f"processing '{file_path}'{tag_suffix}")
-                    process_file(file_path, matched_config, database, extensions, simulate, dry_run)
+                    process_file(
+                        file_path,
+                        matched_config,
+                        database,
+                        extensions,
+                        simulate=simulate,
+                        dry_run=dry_run,
+                    )
 
     finally:
         if database is not None:

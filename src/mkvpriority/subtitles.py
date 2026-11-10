@@ -1,9 +1,11 @@
 import glob
+import json
 import logging
 import re
 import subprocess
 import tempfile
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from .types import Track, resolve_language
 
@@ -140,28 +142,40 @@ def compute_subtitle_sizes(file_path: Path, tracks: list[Track]) -> dict[int, in
     if not internal_tracks:
         return dialogue_counts
 
+    def codec_ext(codec: str) -> str:
+        return 'ass' if codec in ('S_TEXT/ASS', 'S_TEXT/SSA') else 'srt'
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
-        arguments = ['mkvextract', 'tracks', str(file_path)]
-
-        def codec_ext(codec: str) -> str:
-            return 'ass' if codec in ('S_TEXT/ASS', 'S_TEXT/SSA') else 'srt'
-
-        temp_paths = [
+        track_paths = [
             (track, temp_dir_path / f'{track.index}.{codec_ext(track.codec)}')
             for track in internal_tracks
         ]
-        arguments.extend(f'{track.index}:{path}' for track, path in temp_paths)
+        path_args = [f'{track.index}:{temp_path}' for track, temp_path in track_paths]
+        arguments = ['tracks', str(file_path), *path_args]
+        mkvextract_logger.debug(' '.join(arguments))
+
+        with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:
+            json.dump(arguments, temp_file)
+            temp_file_path = Path(temp_file.name)
 
         try:
-            result = subprocess.run(arguments, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                ['mkvextract', f'@{temp_file_path}'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                check=True,
+            )
             if result.stdout.strip():
                 mkvextract_logger.debug(result.stdout.strip())
         except (subprocess.SubprocessError, OSError) as e:
             mkvextract_logger.error(str(e).strip())
             return dialogue_counts
+        finally:
+            temp_file_path.unlink(missing_ok=True)
 
-        for track, temp_path in temp_paths:
+        for track, temp_path in track_paths:
             if not temp_path.exists():
                 continue
             dialogue_counts[track.index] = count_unique_dialogue(

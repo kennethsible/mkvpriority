@@ -121,6 +121,7 @@ def restore_tracks(
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
     database: Database,
+    *,
     simulate: bool = False,
 ) -> None:
     if not (metadata_by_uid := database.select_metadata(segment_uid)):
@@ -156,9 +157,9 @@ def restore_tracks(
         name_str = f" '{track.name}'" if track.name else ''
         mkvpriority_logger.info(f'restoring track {track.index}{name_str}: {diff_str}')
 
-    if not simulate and len(arguments) > 1:
+    if len(arguments) > 1:
         try:
-            modify_tracks(arguments)
+            modify_tracks(arguments, simulate=simulate)
         except subprocess.CalledProcessError as e:
             mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
             return
@@ -166,18 +167,21 @@ def restore_tracks(
     database.delete(segment_uid)
 
 
-def restore_file(file_path: Path, database: Database, simulate: bool = False) -> None:
+def restore_file(file_path: Path, database: Database, *, simulate: bool = False) -> None:
     segment_uid, _, audio_tracks, subtitle_tracks = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, simulate)
+        segment_uid = ensure_segment_uid(file_path, simulate=simulate)
 
-    restore_tracks(segment_uid, file_path, audio_tracks, subtitle_tracks, database, simulate)
+    restore_tracks(
+        segment_uid, file_path, audio_tracks, subtitle_tracks, database, simulate=simulate
+    )
 
 
 def apply_profiles[T: Profile](
     tracks: list[Track],
     group: ProfileGroup[T],
     orig_tracks: dict[int, Track],
+    *,
     suppress_default: bool = False,
 ) -> tuple[Track | None, dict[int, dict[str, str]]]:
     if not tracks or not group.profiles:
@@ -270,6 +274,7 @@ def process_tracks(
     subtitle_tracks: list[Track],
     config: Config,
     database: Database | None = None,
+    *,
     simulate: bool = False,
 ) -> None:
     orig_tracks: dict[int, Track] = {}
@@ -318,9 +323,9 @@ def process_tracks(
     for track_index, (name_str, diff_str) in track_dict.items():
         mkvpriority_logger.info(f'modifying track {track_index}{name_str}: {diff_str}')
 
-    if not simulate and len(arguments) > 1:
+    if len(arguments) > 1:
         try:
-            modify_tracks(arguments)
+            modify_tracks(arguments, simulate=simulate)
         except subprocess.CalledProcessError as e:
             mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
             return
@@ -334,34 +339,36 @@ def process_file(
     config: Config,
     database: Database | None = None,
     extensions: list[Extension] | None = None,
+    *,
     simulate: bool = False,
     dry_run: bool = False,
 ) -> None:
     segment_uid, video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, simulate)
+        segment_uid = ensure_segment_uid(file_path, simulate=simulate)
     if config.subtitle_group.process_external_subtitles:
         subtitle_tracks.extend(find_sidecar_tracks(file_path))
 
     process_tracks(
-        segment_uid, file_path, audio_tracks, subtitle_tracks, config, database, simulate
+        segment_uid, file_path, audio_tracks, subtitle_tracks, config, database, simulate=simulate
     )
+    if not extensions:
+        return
 
-    if extensions is not None:
-        with tempfile.TemporaryDirectory() if dry_run else nullcontext() as temp_dir:
-            target_file_path = file_path
-            if temp_dir:
-                target_file_path = Path(temp_dir) / file_path.name
-                target_file_path.symlink_to(file_path.resolve())
+    with tempfile.TemporaryDirectory() if dry_run else nullcontext() as temp_dir:
+        target_file_path = file_path
+        if temp_dir:
+            target_file_path = Path(temp_dir) / file_path.name
+            target_file_path.symlink_to(file_path.resolve())
 
-            for extension in extensions:
-                extension.process_file(
-                    target_file_path,
-                    video_tracks,
-                    audio_tracks,
-                    subtitle_tracks,
-                    config,
-                    database,
-                    simulate,
-                    dry_run,
-                )
+        for extension in extensions:
+            extension.process_file(
+                target_file_path,
+                video_tracks,
+                audio_tracks,
+                subtitle_tracks,
+                config,
+                database,
+                simulate=simulate,
+                dry_run=dry_run,
+            )

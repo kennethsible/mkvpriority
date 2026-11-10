@@ -36,6 +36,7 @@ class SubtitleRenamer(Extension):
         subtitle_tracks: list[Track],
         config: Config,
         database: Database | None = None,
+        *,
         simulate: bool = False,
         dry_run: bool = False,
     ) -> None:
@@ -54,7 +55,7 @@ class SubtitleRenamer(Extension):
 
         if parameters.rename_external_subtitles:
             self.rename_subtitles(
-                file_path, subtitle_tracks, parameters.rename_language_format, dry_run
+                file_path, subtitle_tracks, parameters.rename_language_format, dry_run=dry_run
             )
 
     def rename_subtitles(
@@ -62,6 +63,7 @@ class SubtitleRenamer(Extension):
         file_path: Path,
         subtitle_tracks: list[Track],
         language_format: str | None = None,
+        *,
         dry_run: bool = False,
     ) -> None:
         for track in subtitle_tracks:
