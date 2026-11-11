@@ -1,0 +1,86 @@
+name: Bug Report
+description: Report an issue or unexpected behavior in MKVPriority.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please fill out the details below so we can diagnose and resolve the issue quickly.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Execution Environment
+      description: How are you running MKVPriority?
+      options:
+        - CLI
+        - Docker
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What host OS are you running on?
+      options:
+        - Linux
+        - Windows
+        - macOS
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MKVPriority Version
+      description: What version of MKVPriority are you running?
+      placeholder: "e.g., 2.3.0"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or Compose File
+      description: |
+        Provide the command used to invoke MKVPriority or your `compose.yaml`.
+      placeholder: |
+        # MKVPriority Command
+        mkvpriority -c config.toml -a archive.db /media/anime
+
+        # Docker Compose
+        services:
+          mkvpriority:
+            image: ghcr.io/kennethsible/mkvpriority:latest
+            ...
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: TOML Config
+      description: |
+        Provide any relevant config files or profile sections.
+      placeholder: |
+        [subtitle_profiles.global.languages]
+        enm = 101
+        eng = 100
+      render: toml
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem Description
+      description: What happened? What did you expect would happen?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug Logs
+      description: |
+        Run your command with `--debug` and paste the output below.
+        
+        *Please review and redact any sensitive information.*
+      render: shell
+    validations:
+      required: false
