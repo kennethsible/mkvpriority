@@ -62,7 +62,7 @@ class SubtitleRestyler(Extension):
         config: Config,
         database: Database | None = None,
         *,
-        simulate: bool = False,
+        no_modify: bool = False,
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:

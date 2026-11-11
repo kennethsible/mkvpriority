@@ -31,14 +31,14 @@ def normalize_segment_uid(segment_uid: str | None) -> str:
     return segment_uid.removeprefix('0x')
 
 
-def ensure_segment_uid(file_path: Path, *, simulate: bool = False) -> str | None:
+def ensure_segment_uid(file_path: Path, *, no_modify: bool = False) -> str | None:
     segment_uid = uuid.uuid4().hex
     mkvpriority_logger.info(
-        f"generating segment_uid for '{file_path}'", extra={'dry_run': simulate}
+        f"generating segment_uid for '{file_path}'", extra={'dry_run': no_modify}
     )
     arguments = [str(file_path), '--edit', 'info', '--set', f'segment-uid={segment_uid}']
-    mkvpropedit_logger.debug(' '.join(arguments), extra={'dry_run': simulate})
-    if not simulate:
+    mkvpropedit_logger.debug(' '.join(arguments), extra={'dry_run': no_modify})
+    if not no_modify:
         try:
             modify_tracks(arguments)
         except subprocess.CalledProcessError as e:
@@ -68,9 +68,9 @@ def identify_tracks(file_path: Path) -> Any:
         temp_file_path.unlink(missing_ok=True)
 
 
-def modify_tracks(arguments: list[str], *, simulate: bool = False) -> None:
-    mkvpropedit_logger.debug(' '.join(arguments), extra={'dry_run': simulate})
-    if simulate:
+def modify_tracks(arguments: list[str], *, no_modify: bool = False) -> None:
+    mkvpropedit_logger.debug(' '.join(arguments), extra={'dry_run': no_modify})
+    if no_modify:
         return
 
     with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:

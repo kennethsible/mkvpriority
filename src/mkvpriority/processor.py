@@ -122,7 +122,7 @@ def restore_tracks(
     subtitle_tracks: list[Track],
     database: Database,
     *,
-    simulate: bool = False,
+    no_modify: bool = False,
 ) -> None:
     if not (metadata_by_uid := database.select_metadata(segment_uid)):
         return
@@ -156,12 +156,12 @@ def restore_tracks(
         diff_str = ' '.join(track_diffs)
         name_str = f" '{track.name}'" if track.name else ''
         mkvpriority_logger.info(
-            f'restoring track {track.index}{name_str}: {diff_str}', extra={'dry_run': simulate}
+            f'restoring track {track.index}{name_str}: {diff_str}', extra={'dry_run': no_modify}
         )
 
     if len(arguments) > 1:
         try:
-            modify_tracks(arguments, simulate=simulate)
+            modify_tracks(arguments, no_modify=no_modify)
         except subprocess.CalledProcessError as e:
             mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
             return
@@ -169,14 +169,14 @@ def restore_tracks(
     database.delete(segment_uid)
 
 
-def restore_file(file_path: Path, database: Database, *, simulate: bool = False) -> None:
+def restore_file(file_path: Path, database: Database, *, no_modify: bool = False) -> None:
     segment_uid, _, audio_tracks, subtitle_tracks = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, simulate=simulate)
+        segment_uid = ensure_segment_uid(file_path, no_modify=no_modify)
 
     if segment_uid:
         restore_tracks(
-            segment_uid, file_path, audio_tracks, subtitle_tracks, database, simulate=simulate
+            segment_uid, file_path, audio_tracks, subtitle_tracks, database, no_modify=no_modify
         )
 
 
@@ -278,7 +278,7 @@ def process_tracks(
     config: Config,
     database: Database | None = None,
     *,
-    simulate: bool = False,
+    no_modify: bool = False,
 ) -> None:
     orig_tracks: dict[int, Track] = {}
 
@@ -325,12 +325,12 @@ def process_tracks(
 
     for track_index, (name_str, diff_str) in track_dict.items():
         mkvpriority_logger.info(
-            f'modifying track {track_index}{name_str}: {diff_str}', extra={'dry_run': simulate}
+            f'modifying track {track_index}{name_str}: {diff_str}', extra={'dry_run': no_modify}
         )
 
     if len(arguments) > 1:
         try:
-            modify_tracks(arguments, simulate=simulate)
+            modify_tracks(arguments, no_modify=no_modify)
         except subprocess.CalledProcessError as e:
             mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
             return
@@ -345,17 +345,17 @@ def process_file(
     database: Database | None = None,
     extensions: list[Extension] | None = None,
     *,
-    simulate: bool = False,
+    no_modify: bool = False,
     dry_run: bool = False,
 ) -> None:
     segment_uid, video_tracks, audio_tracks, subtitle_tracks = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, simulate=simulate)
+        segment_uid = ensure_segment_uid(file_path, no_modify=no_modify)
     if config.subtitle_group.process_external_subtitles:
         subtitle_tracks.extend(find_sidecar_tracks(file_path))
 
     process_tracks(
-        segment_uid, file_path, audio_tracks, subtitle_tracks, config, database, simulate=simulate
+        segment_uid, file_path, audio_tracks, subtitle_tracks, config, database, no_modify=no_modify
     )
     if not extensions:
         return
@@ -374,6 +374,6 @@ def process_file(
                 subtitle_tracks,
                 config,
                 database,
-                simulate=simulate,
+                no_modify=no_modify,
                 dry_run=dry_run,
             )

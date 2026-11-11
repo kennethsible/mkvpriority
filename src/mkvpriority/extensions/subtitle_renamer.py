@@ -37,7 +37,7 @@ class SubtitleRenamer(Extension):
         config: Config,
         database: Database | None = None,
         *,
-        simulate: bool = False,
+        no_modify: bool = False,
         dry_run: bool = False,
     ) -> None:
         if not subtitle_tracks:

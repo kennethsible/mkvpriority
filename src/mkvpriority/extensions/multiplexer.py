@@ -53,7 +53,7 @@ class Multiplexer(Extension):
         config: Config,
         database: Database | None = None,
         *,
-        simulate: bool = False,
+        no_modify: bool = False,
         dry_run: bool = False,
     ) -> None:
         if config.toml_path in self.parameters:
@@ -73,7 +73,7 @@ class Multiplexer(Extension):
                 subtitle_tracks,
                 parameters,
                 database,
-                simulate=simulate,
+                no_modify=no_modify,
             )
 
     @staticmethod
@@ -111,7 +111,7 @@ class Multiplexer(Extension):
         parameters: Parameters,
         database: Database | None = None,
         *,
-        simulate: bool = False,
+        no_modify: bool = False,
     ) -> None:
         internal_audio_tracks = [track for track in audio_tracks if not track.is_external]
         internal_subtitle_tracks = [track for track in subtitle_tracks if not track.is_external]
@@ -194,25 +194,25 @@ class Multiplexer(Extension):
             arguments.append(str(subtitle_track.file_path))
 
         self.extension_logger.info(
-            f"remuxing container '{file_path.name}'", extra={'dry_run': simulate}
+            f"remuxing container '{file_path.name}'", extra={'dry_run': no_modify}
         )
         old_segment_uid: str | None = None
         try:
-            if not simulate and database:
+            if not no_modify and database:
                 old_segment_uid, *_ = extract_tracks(file_path)
 
-            self.multiplex_tracks(arguments, simulate=simulate)
+            self.multiplex_tracks(arguments, no_modify=no_modify)
 
             if not parameters.remove_original_container:
                 self.extension_logger.info(
                     f"renaming container '{file_path.name}' to '.orig.mkv'",
-                    extra={'dry_run': simulate},
+                    extra={'dry_run': no_modify},
                 )
-                if not simulate:
+                if not no_modify:
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
                     file_path.replace(backup_path)
 
-            if not simulate:
+            if not no_modify:
                 temp_output_path.replace(file_path)
 
                 if database and old_segment_uid:
@@ -232,14 +232,14 @@ class Multiplexer(Extension):
                     continue
                 subtitle_suffix = track.file_path.name[len(file_path.stem) :]
                 self.extension_logger.info(
-                    f"removing subtitles '{subtitle_suffix}'", extra={'dry_run': simulate}
+                    f"removing subtitles '{subtitle_suffix}'", extra={'dry_run': no_modify}
                 )
-                if not simulate:
+                if not no_modify:
                     track.file_path.unlink(missing_ok=True)
 
-    def multiplex_tracks(self, arguments: list[str], *, simulate: bool = False) -> None:
-        mkvmerge_logger.debug(' '.join(arguments), extra={'dry_run': simulate})
-        if simulate:
+    def multiplex_tracks(self, arguments: list[str], *, no_modify: bool = False) -> None:
+        mkvmerge_logger.debug(' '.join(arguments), extra={'dry_run': no_modify})
+        if no_modify:
             return
 
         with NamedTemporaryFile('w+', encoding='utf-8', suffix='.json', delete=False) as temp_file:

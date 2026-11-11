@@ -39,7 +39,7 @@ def collect_file_paths(path_str: str) -> list[Path]:
     return list(dict.fromkeys(file_paths))
 
 
-def get_archive_status(file_path: Path, database: Database, *, simulate: bool = False) -> bool:
+def get_archive_status(file_path: Path, database: Database, *, no_modify: bool = False) -> bool:
     archive_record = database.select_by_path(file_path)
     file_mtime = int(file_path.stat().st_mtime)
     if archive_record and archive_record.file_mtime == file_mtime:
@@ -47,7 +47,7 @@ def get_archive_status(file_path: Path, database: Database, *, simulate: bool = 
 
     segment_uid, *_ = extract_tracks(file_path)
     if not segment_uid:
-        segment_uid = ensure_segment_uid(file_path, simulate=simulate)
+        segment_uid = ensure_segment_uid(file_path, no_modify=no_modify)
     if not segment_uid:
         return False
     if archive_record and archive_record.segment_uid != segment_uid:
@@ -73,11 +73,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
         '-r', '--restore', action='store_true', help='restore original track flags from database'
     )
     parser.add_argument(
-        '-s', '--simulate', action='store_true', help='process files without modifying containers'
+        '-m', '--no-modify', action='store_true', help='process files without modifying containers'
     )
-    # parser.add_argument(  # TODO rename --simulate to --no-modify
-    #     '-m', '--no-modify', action='store_true', help='process files without modifying containers'
-    # )
     parser.add_argument(
         '-n', '--dry-run', action='store_true', help='simulate execution without writing to disk'
     )
@@ -112,14 +109,12 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
         parser.error(str(e))
 
     configure_logging()
-    dry_run = args.dry_run
-    simulate = args.simulate or dry_run
     if args.quiet:
         main_level = tool_level = logging.ERROR
     else:
         main_level = VERBOSE if args.verbose else logging.INFO
         tool_level = logging.DEBUG if args.debug else logging.INFO
-    update_log_state(main_level, tool_level, dry_run=dry_run)
+    update_log_state(main_level, tool_level, dry_run=args.dry_run)
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
@@ -138,10 +133,12 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     if not configs and not (args.prune or args.restore):
         parser.error('cannot process file(s) without --config')
 
+    no_modify = args.no_modify or args.dry_run
+
     database: Database | None = None
     if args.archive:
         try:
-            database = Database(args.archive, simulate=simulate, dry_run=dry_run)
+            database = Database(args.archive, no_modify=no_modify, dry_run=args.dry_run)
         except (sqlite3.IntegrityError, RuntimeError):
             mkvpriority_logger.error(f"error occurred while migrating '{args.archive}'")
             raise
@@ -173,7 +170,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
             for file_path in collect_file_paths(path_str):
                 if database is not None:
-                    is_archived = get_archive_status(file_path, database, simulate=simulate)
+                    is_archived = get_archive_status(file_path, database, no_modify=no_modify)
                     if not args.restore and is_archived and not args.override:
                         mkvpriority_logger.info(f"skipping (archived) '{file_path}'")
                         continue
@@ -182,7 +179,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
 
                 if args.restore and database is not None:
                     mkvpriority_logger.info(f"restoring '{file_path}'")
-                    restore_file(file_path, database, simulate=simulate)
+                    restore_file(file_path, database, no_modify=no_modify)
                 elif matched_config is not None:
                     toml_label = matched_config.toml_label
                     tag_suffix = f' [{toml_label}]' if toml_label != 'untagged' else ''
@@ -192,8 +189,8 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
                         matched_config,
                         database,
                         extensions,
-                        simulate=simulate,
-                        dry_run=dry_run,
+                        no_modify=no_modify,
+                        dry_run=args.dry_run,
                     )
 
     finally:

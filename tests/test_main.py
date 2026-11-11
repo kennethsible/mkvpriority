@@ -649,7 +649,7 @@ def test_prune_database() -> None:
             assert database.select_by_path(file_path) is None
 
 
-def test_simulate_dry_run() -> None:
+def test_no_modify_mode() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
         file_path = temp_path / 'dummy.mkv'
@@ -674,7 +674,7 @@ def test_simulate_dry_run() -> None:
         assert len(list(temp_path.glob('*dummy*.ass'))) == 0
 
         mkvpriority.main.main(
-            ['-c', str(toml_path), '-s', '-i', 'subtitle_extractor', str(file_path)]
+            ['-c', str(toml_path), '-m', '-i', 'subtitle_extractor', str(file_path)]
         )
 
         assert file_path.stat().st_mtime_ns == file_mtime

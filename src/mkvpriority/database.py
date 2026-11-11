@@ -48,12 +48,12 @@ class MetadataRecord:
 
 
 class Database:
-    def __init__(self, db_path: str | Path, simulate: bool = False, dry_run: bool = False):
+    def __init__(self, db_path: str | Path, no_modify: bool = False, dry_run: bool = False):
         self.db_path = db_path
         self.dry_run = dry_run
         self.con = sqlite3.connect(db_path)
 
-        _migrate_schema(self, simulate=simulate, dry_run=dry_run)
+        _migrate_schema(self, no_modify=no_modify, dry_run=dry_run)
 
         self.con.execute('PRAGMA foreign_keys = ON')
         self._create_tables()
@@ -227,7 +227,7 @@ def _column_exists(con: sqlite3.Connection, table: str, column: str) -> bool:
     return column in [row[0] for row in cur.fetchall()]
 
 
-def _migrate_schema(database: Database, *, simulate: bool = False, dry_run: bool = False) -> None:
+def _migrate_schema(database: Database, *, no_modify: bool = False, dry_run: bool = False) -> None:
     if not _table_exists(con := database.con, 'archive'):
         return
 
@@ -289,7 +289,7 @@ def _migrate_schema(database: Database, *, simulate: bool = False, dry_run: bool
 
                 segment_uid, *_ = extract_tracks(file_path)
                 if not segment_uid:
-                    if simulate:
+                    if no_modify:
                         mkvpriority_logger.warning(f"skipping (missing segment_uid) '{file_path}'")
                         continue
                     segment_uid = ensure_segment_uid(file_path)

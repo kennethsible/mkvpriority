@@ -188,7 +188,7 @@ Example: Princess Mononoke (1997).eng.default.ass
 ```
 
 > [!NOTE]
-> To avoid changing internal track flags and *only* use external subtitles, use the subtitle extractor with the `--simulate` argument since subtitle extraction still runs during a simulation, which only prevents changes to the MKV container.
+> To avoid changing internal track flags and *only* use external subtitles, use the subtitle extractor with the `--no-modify` argument since subtitle extraction still runs in no-modify mode, which only prevents changes to the MKV container.
 
 ### Example: Subtitle Converter
 
@@ -236,10 +236,10 @@ Example: Princess Mononoke (1997).jpn.default.commentary.ass
 You can use the `multiplexer` extension to strip tracks with unwanted languages and reorder tracks by priority scores. Since remuxing involves unpacking and rewriting the container, these features are delegated to an extension module. To enable them, add the `[multiplexer]` section to your config file and include this extension in your arguments.
 
 ```toml
-[audio_profiles.strip]
+[audio_profiles.strip_tracks]
 audio_mode = ["enabled"]
 
-[subtitle_profiles.strip]
+[subtitle_profiles.strip_tracks]
 subtitle_mode = ["enabled"]
 
 [multiplexer]
@@ -249,8 +249,8 @@ remove_external_subtitles = true
 mkvmerge_arguments = []
 
 strip_unscored_tracks = true
-strip_audio_profile = "strip"
-strip_subtitle_profile = "strip"
+strip_audio_profile = "strip_tracks"
+strip_subtitle_profile = "strip_tracks"
 
 order_tracks_by_score = true
 order_audio_profile = "default"
@@ -286,7 +286,7 @@ You can easily write your own post-processing scripts to handle custom logic.
            config: Config,
            database: Database | None = None,
            *,
-           simulate: bool = False,
+           no_modify: bool = False,
            dry_run: bool = False,
        ) -> None: ...
    ```
@@ -305,7 +305,7 @@ You can easily write your own post-processing scripts to handle custom logic.
 [MKVToolNix](https://mkvtoolnix.download/) must be installed on your system unless you are using the Docker image.
 
 ```text
-usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i EXTENSION] [-o KEY=VALUE] [-p] [-r] [-s] [-n] [-v] [-d] [-q] [--version] [PATH[::TAG] ...]
+usage: mkvpriority [-h] [-c TOML_PATH[::TAG]] [-a DB_PATH] [-i EXTENSION] [-o KEY=VALUE] [-p] [-r] [-m] [-n] [-v] [-d] [-q] [--version] [PATH[::TAG] ...]
 
 positional arguments:
   PATH[::TAG]           files, directories, or glob patterns
@@ -318,7 +318,7 @@ options:
   -o, --override KEY=VALUE
   -p, --prune           prune database entries for missing files
   -r, --restore         restore original track flags from database
-  -s, --simulate        process files without modifying containers
+  -m, --no-modify       process files without modifying containers
   -n, --dry-run         simulate execution without writing to disk
   -v, --verbose         display track metadata and computed scores
   -d, --debug           print mkvtoolnix output and debug messages
@@ -345,4 +345,4 @@ uv tool install mkvpriority
 
 ## Hardlinks Limitation
 
-MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--simulate` argument ([see here](#example-subtitle-extractor)).
+MKVPriority avoids remuxing by using `mkvpropedit`, but this still affects hardlinks since the metadata is modified. To avoid breaking hardlinks, use the subtitle extractor with the `--no-modify` argument ([see here](#example-subtitle-extractor)).
