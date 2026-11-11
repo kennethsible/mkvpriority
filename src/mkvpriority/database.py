@@ -48,12 +48,12 @@ class MetadataRecord:
 
 
 class Database:
-    def __init__(self, db_path: str | Path, *, simulate: bool = False):
+    def __init__(self, db_path: str | Path, simulate: bool = False, dry_run: bool = False):
         self.db_path = db_path
-        self.simulate = simulate
+        self.dry_run = dry_run
         self.con = sqlite3.connect(db_path)
 
-        _perform_migrations(self.con, db_path, simulate=simulate)
+        _migrate_schema(self, simulate=simulate, dry_run=dry_run)
 
         self.con.execute('PRAGMA foreign_keys = ON')
         self._create_tables()
@@ -70,13 +70,11 @@ class Database:
             with self.con:
                 self.con.execute('INSERT INTO schema_info (version) VALUES (?)', (SCHEMA_VERSION,))
 
-    def insert(self, segment_uid: str | None, file_path: Path, tracks: list[Track]) -> None:
-        if self.simulate:
+    def insert(self, segment_uid: str, file_path: Path, tracks: list[Track]) -> None:
+        if self.dry_run:
             return
 
         file_path = file_path.resolve()
-        if not segment_uid:
-            segment_uid = ensure_segment_uid(file_path, simulate=self.simulate)
         segment_uid = normalize_segment_uid(segment_uid)
 
         file_mtime = file_path.stat().st_mtime
@@ -128,7 +126,7 @@ class Database:
                 )
 
     def delete(self, segment_uid: str) -> None:
-        if not self.simulate:
+        if not self.dry_run:
             segment_uid = normalize_segment_uid(segment_uid)
             with self.con:
                 self.con.execute('DELETE FROM archive WHERE segment_uid = ?', (str(segment_uid),))
@@ -147,7 +145,7 @@ class Database:
         for _, file_path in stale_records:
             mkvpriority_logger.info(f"pruning archive for '{file_path}'")
 
-        if not self.simulate:
+        if not self.dry_run:
             with self.con:
                 self.con.executemany(
                     'DELETE FROM archive WHERE segment_uid = ?',
@@ -229,10 +227,8 @@ def _column_exists(con: sqlite3.Connection, table: str, column: str) -> bool:
     return column in [row[0] for row in cur.fetchall()]
 
 
-def _perform_migrations(
-    con: sqlite3.Connection, db_path: str | Path, *, simulate: bool = False
-) -> None:
-    if not _table_exists(con, 'archive'):
+def _migrate_schema(database: Database, *, simulate: bool = False, dry_run: bool = False) -> None:
+    if not _table_exists(con := database.con, 'archive'):
         return
 
     schema_version = 0
@@ -249,11 +245,11 @@ def _perform_migrations(
 
     if schema_version >= SCHEMA_VERSION:
         return
-    if simulate:
+    if dry_run:
         raise RuntimeError(
-            f'cannot perform migration to schema version {SCHEMA_VERSION} during DRY RUN'
+            f'cannot perform migration to schema version {SCHEMA_VERSION} during a dry run'
         )
-    mkvpriority_logger.info(f"migrating '{db_path}' to schema version {SCHEMA_VERSION}")
+    mkvpriority_logger.info(f"migrating '{database.db_path}' to schema version {SCHEMA_VERSION}")
 
     with con:
         if schema_version < 1:
@@ -293,6 +289,9 @@ def _perform_migrations(
 
                 segment_uid, *_ = extract_tracks(file_path)
                 if not segment_uid:
+                    if simulate:
+                        mkvpriority_logger.warning(f"skipping (missing segment_uid) '{file_path}'")
+                        continue
                     segment_uid = ensure_segment_uid(file_path)
 
                 file_mtime = file_path.stat().st_mtime

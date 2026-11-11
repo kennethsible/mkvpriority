@@ -12,16 +12,12 @@ logging.addLevelName(VERBOSE, 'VERBOSE')
 
 
 class PrefixFilter(logging.Filter):
-    def __init__(self, *, simulate: bool = False, dry_run: bool = False):
+    def __init__(self, *, dry_run: bool = False):
         super().__init__()
-        self.simulate = simulate
         self.dry_run = dry_run
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if record.name in ('mkvpriority.mkvpropedit', 'mkvpriority.mkvmerge'):
-            use_prefix = self.simulate
-        else:
-            use_prefix = self.dry_run
+        use_prefix = self.dry_run or getattr(record, 'dry_run', False)
         record.prefix = '[DRY RUN] ' if use_prefix else ''
         return True
 
@@ -65,15 +61,13 @@ def configure_logging(
     )
 
 
-def set_log_levels(
+def update_log_state(
     main_level: int = logging.INFO,
     tool_level: int = logging.INFO,
     *,
-    simulate: bool = False,
     dry_run: bool = False,
 ) -> None:
     prefix_filter.dry_run = dry_run
-    prefix_filter.simulate = simulate
     stream_filter.stream_level = main_level
 
     mkvpriority_logger.setLevel(logging.DEBUG)

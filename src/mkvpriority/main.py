@@ -9,7 +9,7 @@ from mkvpriority import __version__
 from .config import Config, ConfigError
 from .database import Database
 from .extension import Extension, load_extension
-from .logger import VERBOSE, configure_logging, set_log_levels
+from .logger import VERBOSE, configure_logging, update_log_state
 from .mkvtoolnix import (
     MissingCommandError,
     ensure_segment_uid,
@@ -48,6 +48,8 @@ def get_archive_status(file_path: Path, database: Database, *, simulate: bool = 
     segment_uid, *_ = extract_tracks(file_path)
     if not segment_uid:
         segment_uid = ensure_segment_uid(file_path, simulate=simulate)
+    if not segment_uid:
+        return False
     if archive_record and archive_record.segment_uid != segment_uid:
         database.delete(archive_record.segment_uid)
 
@@ -73,6 +75,9 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '-s', '--simulate', action='store_true', help='process files without modifying containers'
     )
+    # parser.add_argument(  # TODO rename --simulate to --no-modify
+    #     '-m', '--no-modify', action='store_true', help='process files without modifying containers'
+    # )
     parser.add_argument(
         '-n', '--dry-run', action='store_true', help='simulate execution without writing to disk'
     )
@@ -114,7 +119,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     else:
         main_level = VERBOSE if args.verbose else logging.INFO
         tool_level = logging.DEBUG if args.debug else logging.INFO
-    set_log_levels(main_level, tool_level, simulate=simulate, dry_run=dry_run)
+    update_log_state(main_level, tool_level, dry_run=dry_run)
 
     configs: dict[str, Config] = {}
     for toml_path in args.config:
@@ -136,7 +141,7 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
     database: Database | None = None
     if args.archive:
         try:
-            database = Database(args.archive, simulate=simulate)
+            database = Database(args.archive, simulate=simulate, dry_run=dry_run)
         except (sqlite3.IntegrityError, RuntimeError):
             mkvpriority_logger.error(f"error occurred while migrating '{args.archive}'")
             raise

@@ -193,7 +193,9 @@ class Multiplexer(Extension):
                 arguments.extend(['--sub-charset', '0:UTF-8'])
             arguments.append(str(subtitle_track.file_path))
 
-        self.extension_logger.info(f"remuxing container '{file_path.name}'")
+        self.extension_logger.info(
+            f"remuxing container '{file_path.name}'", extra={'dry_run': simulate}
+        )
         old_segment_uid: str | None = None
         try:
             if not simulate and database:
@@ -201,13 +203,16 @@ class Multiplexer(Extension):
 
             self.multiplex_tracks(arguments, simulate=simulate)
 
-            if not simulate:
-                if not parameters.remove_original_container:
+            if not parameters.remove_original_container:
+                self.extension_logger.info(
+                    f"renaming container '{file_path.name}' to '.orig.mkv'",
+                    extra={'dry_run': simulate},
+                )
+                if not simulate:
                     backup_path = file_path.with_name(f'{file_path.stem}.orig.mkv')
-                    self.extension_logger.info(
-                        f"renaming container '{file_path.name}' to '.orig.mkv'"
-                    )
                     file_path.replace(backup_path)
+
+            if not simulate:
                 temp_output_path.replace(file_path)
 
                 if database and old_segment_uid:
@@ -226,12 +231,14 @@ class Multiplexer(Extension):
                 if track.file_path is None:
                     continue
                 subtitle_suffix = track.file_path.name[len(file_path.stem) :]
-                self.extension_logger.info(f"removing subtitles '{subtitle_suffix}'")
+                self.extension_logger.info(
+                    f"removing subtitles '{subtitle_suffix}'", extra={'dry_run': simulate}
+                )
                 if not simulate:
                     track.file_path.unlink(missing_ok=True)
 
     def multiplex_tracks(self, arguments: list[str], *, simulate: bool = False) -> None:
-        mkvmerge_logger.debug(' '.join(arguments))
+        mkvmerge_logger.debug(' '.join(arguments), extra={'dry_run': simulate})
         if simulate:
             return
 

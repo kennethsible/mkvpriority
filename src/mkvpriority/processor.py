@@ -155,7 +155,9 @@ def restore_tracks(
 
         diff_str = ' '.join(track_diffs)
         name_str = f" '{track.name}'" if track.name else ''
-        mkvpriority_logger.info(f'restoring track {track.index}{name_str}: {diff_str}')
+        mkvpriority_logger.info(
+            f'restoring track {track.index}{name_str}: {diff_str}', extra={'dry_run': simulate}
+        )
 
     if len(arguments) > 1:
         try:
@@ -172,9 +174,10 @@ def restore_file(file_path: Path, database: Database, *, simulate: bool = False)
     if not segment_uid:
         segment_uid = ensure_segment_uid(file_path, simulate=simulate)
 
-    restore_tracks(
-        segment_uid, file_path, audio_tracks, subtitle_tracks, database, simulate=simulate
-    )
+    if segment_uid:
+        restore_tracks(
+            segment_uid, file_path, audio_tracks, subtitle_tracks, database, simulate=simulate
+        )
 
 
 def apply_profiles[T: Profile](
@@ -268,7 +271,7 @@ def apply_profiles[T: Profile](
 
 
 def process_tracks(
-    segment_uid: str,
+    segment_uid: str | None,
     file_path: Path,
     audio_tracks: list[Track],
     subtitle_tracks: list[Track],
@@ -321,7 +324,9 @@ def process_tracks(
         track_dict[track.index] = (name_str, diff_str)
 
     for track_index, (name_str, diff_str) in track_dict.items():
-        mkvpriority_logger.info(f'modifying track {track_index}{name_str}: {diff_str}')
+        mkvpriority_logger.info(
+            f'modifying track {track_index}{name_str}: {diff_str}', extra={'dry_run': simulate}
+        )
 
     if len(arguments) > 1:
         try:
@@ -330,7 +335,7 @@ def process_tracks(
             mkvpropedit_logger.error((e.stderr or e.stdout or str(e)).strip())
             return
 
-    if database is not None:
+    if database is not None and segment_uid is not None:
         database.insert(segment_uid, file_path, list(orig_tracks.values()))
 
 
