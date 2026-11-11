@@ -757,6 +757,10 @@ def parse_external_subtitles(
     if file_suffix not in SUBTITLE_EXTENSIONS:
         return None
 
+    stem = subtitle_path.stem
+    if stem != file_stem and not stem.startswith(file_stem + '.'):
+        return None
+
     file_infix = subtitle_path.name[len(file_stem) : -len(file_suffix)]
     segments = [segment.strip() for segment in file_infix.split('.') if segment.strip()]
 

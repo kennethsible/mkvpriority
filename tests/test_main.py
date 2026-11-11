@@ -11,6 +11,7 @@ from aiohttp.test_utils import TestClient
 
 import mkvpriority
 from mkvpriority import entrypoint
+from mkvpriority.main import parse_external_subtitles
 from mkvpriority.extensions.multiplexer import Multiplexer
 from mkvpriority.extensions.subtitle_converter import SubtitleConverter
 from mkvpriority.extensions.subtitle_extractor import SubtitleExtractor
@@ -865,3 +866,22 @@ def test_strip_tracks() -> None:
         _, video_tracks, audio_tracks, subtitle_tracks = mkvpriority.extract_tracks(file_path)
         tracks = video_tracks + audio_tracks + subtitle_tracks
         assert 'ger' not in {track.language for track in tracks}
+
+
+def test_parse_external_subtitles_rejects_sibling_stem(tmp_path) -> None:
+    movie = tmp_path / 'movie.mkv'
+    movie.touch()
+    sibling = tmp_path / 'movie2.eng.srt'
+    sibling.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
+
+    assert parse_external_subtitles(sibling, 'movie', -1) is None
+
+
+def test_parse_external_subtitles_accepts_own_sidecar(tmp_path) -> None:
+    own = tmp_path / 'movie.eng.srt'
+    own.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
+
+    track = parse_external_subtitles(own, 'movie', -1)
+    assert track is not None
+    assert track.language == 'eng'
+
