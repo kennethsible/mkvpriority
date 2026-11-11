@@ -37,13 +37,16 @@ def parse_sidecar_track(subtitle_path: Path, file_stem: str, virtual_index: int)
         return None
 
     file_infix = subtitle_path.name[len(file_stem) : -len(file_suffix)]
-    segments = [segment.strip() for segment in file_infix.split('.') if segment.strip()]
+    if file_infix and not file_infix.startswith('.'):
+        return None
 
     track_lang = 'und'
     is_default = is_forced = False
     remaining_segments: list[str] = []
 
-    for segment in segments:
+    for segment in file_infix.split('.'):
+        if not (segment := segment.strip()):
+            continue
         if segment.lower() == 'default':
             is_default = True
         elif segment.lower() == 'forced':

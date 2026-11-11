@@ -823,16 +823,21 @@ def test_rename_subtitles() -> None:
 
         initial_srt = temp_path / 'dummy.en.default.External Commentary.srt'
         initial_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
+        sibling_srt = temp_path / 'dummy2.en.default.External Commentary.srt'
+        sibling_srt.write_text('1\n00:00:00,000 --> 00:00:01,000\nDialogue\n')
+
         mkvpriority.process_file(file_path, config, extensions=[SubtitleRenamer()])
 
         demoted_srt = temp_path / 'dummy.eng.External Commentary.srt'
         assert not initial_srt.exists() and demoted_srt.is_file()
+        assert sibling_srt.is_file()
 
         config.subtitle_group.profiles['signs_songs'].filters['commentar'] = 10000
         mkvpriority.process_file(file_path, config, extensions=[SubtitleRenamer(), Multiplexer()])
 
         promoted_srt = temp_path / 'dummy.eng.forced.External Commentary.srt'
         assert not demoted_srt.exists() and promoted_srt.is_file()
+        assert sibling_srt.is_file()
 
 
 def test_remux_subtitles() -> None:
