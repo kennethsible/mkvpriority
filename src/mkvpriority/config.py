@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
+import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +21,26 @@ from .types import (
 
 class ConfigError(Exception):
     pass
+
+
+def get_config_dir() -> Path:
+    if env_dir := os.getenv('MKVPRIORITY_CONFIG_DIR'):
+        return Path(env_dir).expanduser()
+
+    docker_dir = Path('/config')
+    if docker_dir.is_dir() and os.access(docker_dir, os.W_OK):
+        return docker_dir
+
+    match sys.platform:
+        case 'win32':
+            root_dir = Path(os.getenv('APPDATA') or Path.home() / 'AppData' / 'Roaming')
+        case 'darwin':
+            root_dir = Path.home() / 'Library' / 'Application Support'
+        case _:
+            xdg_config = os.getenv('XDG_CONFIG_HOME')
+            root_dir = Path(xdg_config).expanduser() if xdg_config else Path.home() / '.config'
+
+    return root_dir / 'mkvpriority'
 
 
 def apply_override(toml_dict: dict[str, Any], override: str) -> None:

@@ -18,12 +18,12 @@ services:
     container_name: mkvpriority
     user: ${PUID:-1000}:${PGID:-1000}
     environment:
-      WEBHOOK_PORT: "8080"
-      MKVPRIORITY_ARGS: >
+      MKVPRIORITY_WEBHOOK_PORT: "8080"
+      MKVPRIORITY_ARGUMENTS: >
         --archive /config/archive.db
-      # TZ: "America/New_York"
-      # CRON_SCHEDULE: "0 0 * * *"
-      # CRON_TARGET_PATH: /media
+      # MKVPRIORITY_CRON_TIMEZONE: "America/New_York"
+      # MKVPRIORITY_CRON_SCHEDULE: "0 0 * * *"
+      # MKVPRIORITY_CRON_TARGET_PATH: /media
     volumes:
       - /path/to/media:/media # <-- same mount point
       - /path/to/mkvpriority/config:/config

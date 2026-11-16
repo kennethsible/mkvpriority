@@ -422,7 +422,7 @@ async def test_webhook_listener(aiohttp_client: AIOClientFixture) -> None:
         await entrypoint.process_item(*queued_item)
         queue.task_done()
 
-        expected_argv = [*entrypoint.MKVPRIORITY_ARGS, '/movies/dummy.mkv::anime']
+        expected_argv = [*entrypoint.MKVPRIORITY_ARGUMENTS, '/movies/dummy.mkv::anime']
         mock_main.assert_called_once_with(expected_argv, 'jpn')
 
 

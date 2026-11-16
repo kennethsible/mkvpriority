@@ -27,7 +27,7 @@
 
 ## Docker Image
 
-A Docker image is provided to simplify the installation process and enable quick deployment.
+A Docker image is provided to simplify the installation process and enable quick deployment. While the following examples use a Docker container, MKVPriority can also run on bare metal (see [CLI Usage](#cli-usage)).
 
 ```bash
 docker run --rm -v /path/to/media:/media ghcr.io/kennethsible/mkvpriority /media
@@ -105,8 +105,8 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_PORT: "8080"
-    MKVPRIORITY_ARGS: >
+    MKVPRIORITY_WEBHOOK_PORT: "8080"
+    MKVPRIORITY_ARGUMENTS: >
       --archive /config/archive.db
   volumes:
     - /path/to/media:/media
@@ -130,8 +130,8 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    WEBHOOK_PORT: "8080"
-    MKVPRIORITY_ARGS: >
+    MKVPRIORITY_WEBHOOK_PORT: "8080"
+    MKVPRIORITY_ARGUMENTS: >
       --config /config/anime.toml::anime
       --archive /config/archive.db
   volumes:
@@ -155,10 +155,10 @@ mkvpriority:
   container_name: mkvpriority
   user: ${PUID}:${PGID}
   environment:
-    TZ: "America/New_York"
-    CRON_SCHEDULE: "0 0 * * *"
-    CRON_TARGET_PATHS: /media
-    MKVPRIORITY_ARGS: >
+    MKVPRIORITY_CRON_TIMEZONE: "America/New_York"
+    MKVPRIORITY_CRON_SCHEDULE: "0 0 * * *"
+    MKVPRIORITY_CRON_TARGET_PATHS: /media
+    MKVPRIORITY_ARGUMENTS: >
       --archive /config/archive.db
   volumes:
     - /path/to/media:/media
@@ -264,10 +264,7 @@ order_subtitle_profile = "dialogue"
 
 You can easily write your own post-processing scripts to handle custom logic.
 
-1. Create a Python script (e.g., `my_extension.py`) inside any of the following:
-   - current working directory (recommend for local development)
-   - `~/.config/mkvpriority/extensions` (recommended for `pip`)
-   - `/config/extensions` (recommended for Docker)
+1. Create a Python script (e.g., `my_extension.py`) in the `extensions` subdirectory of your config directory ([see here](#config-directory)) or in the current working directory for local development.
 2. Import the `Extension` class and implement the `process_file` method:
 
    ```python
@@ -334,6 +331,13 @@ To install the standalone CLI tool (without Docker), you can use `pip`:
 pip install mkvpriority
 ```
 
+To include the webhook listener and cron scheduler, install the `daemon` extra and start `mkvpriority-daemon`:
+
+```bash
+pip install "mkvpriority[daemon]"
+mkvpriority-daemon
+```
+
 To keep the CLI tool isolated from your environment, you can use [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
@@ -341,7 +345,16 @@ uv tool install mkvpriority
 ```
 
 > [!NOTE]
-> If you have `uv` installed, you can also run MKVPriority without installing using `uvx mkvpriority`.
+> If you have `uv` installed, you can also run the CLI without installing using `uvx mkvpriority`.
+
+### Config Directory
+
+When running the daemon (`mkvpriority-daemon`), default files are automatically created in the config directory, which can be overridden with `MKVPRIORITY_CONFIG_DIR`:
+
+- **Linux:** `~/.config/mkvpriority`
+- **macOS:** `~/Library/Application Support/mkvpriority`
+- **Windows:** `%APPDATA%\mkvpriority`
+- **Docker:** `/config`
 
 ## Hardlinks Limitation
 

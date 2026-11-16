@@ -6,6 +6,8 @@ import re
 import shlex
 import shutil
 import signal
+import sys
+from importlib.resources import as_file, files
 from pathlib import Path
 
 import cron_descriptor
@@ -17,21 +19,46 @@ from cron_descriptor import FormatError
 import mkvpriority.main
 from mkvpriority import __version__
 
+from .config import get_config_dir
 from .logger import configure_logging
 from .types import resolve_language
 
 entrypoint_logger = logging.getLogger('entrypoint')
+logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
 
 type ItemPayload = tuple[str, str, str | None]
 type ProcessingQueue = asyncio.Queue[ItemPayload]
 
-PROCESSING_QUEUE_KEY: web.AppKey[ProcessingQueue] = web.AppKey('processing_queue')
+_DEPRECATION_WARNINGS: list[str] = []
 
-MKVPRIORITY_ARGS = ['-c', '/config/config.toml'] + shlex.split(os.getenv('MKVPRIORITY_ARGS', ''))
-LOG_MAX_BYTES, LOG_MAX_FILES = os.getenv('LOG_MAX_BYTES'), os.getenv('LOG_MAX_FILES')
 
-WEBHOOK_PORT_STR = os.getenv('WEBHOOK_PORT')
+def get_env_var(name: str, legacy_name: str | None = None) -> str | None:
+    if (value := os.getenv(name)) is not None:
+        return value
+    if legacy_name and (legacy_value := os.getenv(legacy_name)) is not None:
+        _DEPRECATION_WARNINGS.append(
+            f"environment variable '{legacy_name}' is deprecated; use '{name}' instead"
+        )
+        return legacy_value
+    return None
+
+
+CONFIG_DIR = get_config_dir()
+MKVPRIORITY_ARGUMENTS = ['-c', str(CONFIG_DIR / 'config.toml')] + shlex.split(
+    get_env_var('MKVPRIORITY_ARGUMENTS', 'MKVPRIORITY_ARGS') or ''
+)
+
+LOG_MAX_BYTES = get_env_var('MKVPRIORITY_LOG_MAX_BYTES', 'LOG_MAX_BYTES')
+LOG_MAX_FILES = get_env_var('MKVPRIORITY_LOG_MAX_FILES', 'LOG_MAX_FILES')
+
+WEBHOOK_PORT_STR = get_env_var('MKVPRIORITY_WEBHOOK_PORT', 'WEBHOOK_PORT')
 WEBHOOK_PORT = int(WEBHOOK_PORT_STR) if WEBHOOK_PORT_STR else None
+
+CRON_TIMEZONE = get_env_var('MKVPRIORITY_CRON_TIMEZONE') or os.getenv('TZ', 'UTC')
+CRON_SCHEDULE = get_env_var('MKVPRIORITY_CRON_SCHEDULE', 'CRON_SCHEDULE')
+CRON_TARGET_PATHS = shlex.split(
+    get_env_var('MKVPRIORITY_CRON_TARGET_PATHS', 'CRON_TARGET_PATHS') or ''
+)
 
 CRON_MACROS = {
     '@yearly': '0 0 1 1 *',
@@ -42,16 +69,15 @@ CRON_MACROS = {
     '@midnight': '0 0 * * *',
     '@hourly': '0 * * * *',
 }
-CRON_TIMEZONE = os.getenv('TZ', 'UTC')
-CRON_SCHEDULE = os.getenv('CRON_SCHEDULE')
-CRON_TARGET_PATHS = shlex.split(os.getenv('CRON_TARGET_PATHS', ''))
+
+PROCESSING_QUEUE_KEY: web.AppKey[ProcessingQueue] = web.AppKey('processing_queue')
 
 
 async def process_item(file_path: str, item_tags: str, orig_lang: str | None) -> None:
     if item_tags:
         file_path += f'::{re.split(r"[,;|]", item_tags)[0]}'
     try:
-        argv = [*MKVPRIORITY_ARGS, file_path]
+        argv = [*MKVPRIORITY_ARGUMENTS, file_path]
         await asyncio.to_thread(mkvpriority.main.main, argv, orig_lang)
     except Exception:
         entrypoint_logger.exception(f"error occurred while processing '{file_path}'")
@@ -116,7 +142,7 @@ async def create_runner(host: str, port: int) -> web.AppRunner:
 async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     trigger = CronTrigger.from_crontab(expr, timezone)
-    cron_argv = MKVPRIORITY_ARGS + CRON_TARGET_PATHS
+    cron_argv = MKVPRIORITY_ARGUMENTS + CRON_TARGET_PATHS
 
     async def run_cron_job() -> None:
         await asyncio.to_thread(mkvpriority.main.main, cron_argv)
@@ -134,8 +160,16 @@ async def run_daemon() -> None:
         entrypoint_logger.info(f'received {sig_name} signal')
         stop_event.set()
 
-    loop.add_signal_handler(signal.SIGTERM, lambda: handle_signal('SIGTERM'))
-    loop.add_signal_handler(signal.SIGINT, lambda: handle_signal('SIGINT'))
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(signum, handle_signal, signum.name)
+        except NotImplementedError:
+            signal.signal(
+                signum,
+                lambda value, _: loop.call_soon_threadsafe(
+                    handle_signal, signal.Signals(value).name
+                ),
+            )
 
     runner: web.AppRunner | None = None
     scheduler: AsyncIOScheduler | None = None
@@ -169,37 +203,57 @@ async def run_daemon() -> None:
             await runner.cleanup()
 
 
+def copy_resource(resource_name: str, dst_path: Path) -> None:
+    if dst_path.is_file():
+        return
+
+    resource = files('mkvpriority').joinpath(resource_name)
+    if resource.is_file():
+        with as_file(resource) as src_path:
+            shutil.copy2(src_path, dst_path)
+        return
+
+    fallback_path = Path(__file__).resolve().parents[2] / resource_name
+    shutil.copy2(fallback_path, dst_path)
+
+
 def main() -> None:
-    config_dir = Path('/config')
     try:
-        config_dir.mkdir(parents=True, exist_ok=True)
-        config_file = config_dir / 'config.toml'
-        if not config_file.is_file():
-            shutil.copy2('config.toml', config_file)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        config_path = CONFIG_DIR / 'config.toml'
+        copy_resource('config.toml', config_path)
 
-        extensions_dir = Path('/config/extensions')
+        extensions_dir = CONFIG_DIR / 'extensions'
         extensions_dir.mkdir(parents=True, exist_ok=True)
-        init_file = extensions_dir / '__init__.py'
-        init_file.touch(exist_ok=True)
+        init_path = extensions_dir / '__init__.py'
+        init_path.touch(exist_ok=True)
 
-        script_file = config_dir / 'mkvpriority.sh'
-        if not script_file.is_file():
-            shutil.copy2('mkvpriority.sh', script_file)
+        if sys.platform != 'win32':
+            script_path = CONFIG_DIR / 'mkvpriority.sh'
+            copy_resource('mkvpriority.sh', script_path)
+            script_path.chmod(0o755)
 
-        database_file = config_dir / 'archive.db'
-        database_file.touch(exist_ok=True)
+        database_path = CONFIG_DIR / 'archive.db'
+        database_path.touch(exist_ok=True)
     except PermissionError:
-        entrypoint_logger.warning(f'recreate {config_dir} with correct PUID/PGID ownership')
+        if os.getenv('MKVPRIORITY_CONFIG_DIR') == '/config':
+            entrypoint_logger.warning(f'recreate {CONFIG_DIR} with correct PUID/PGID ownership')
+        else:
+            entrypoint_logger.warning(f'permission denied writing to {CONFIG_DIR}')
         raise
 
+    log_path = CONFIG_DIR / 'mkvpriority.log'
     max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
     max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
-    configure_logging('/config/mkvpriority.log', max_bytes, max_files)
+    configure_logging(log_path, max_bytes, max_files)
 
     entrypoint_logger.setLevel(logging.INFO)
-    logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
     entrypoint_logger.info(f'MKVPriority {__version__}')
-    mkvpriority.main.main(MKVPRIORITY_ARGS)
+    for warning in _DEPRECATION_WARNINGS:
+        entrypoint_logger.warning(warning)
+
+    if config_path.is_file():
+        mkvpriority.main.main(MKVPRIORITY_ARGUMENTS)
 
     asyncio.run(run_daemon())
 

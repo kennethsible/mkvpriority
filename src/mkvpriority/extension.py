@@ -1,12 +1,11 @@
 import importlib
 import inspect
 import logging
-import os
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .config import Config
+from .config import Config, get_config_dir
 from .database import Database
 from .types import Track
 
@@ -34,12 +33,7 @@ class Extension(ABC):
 
 
 def _ensure_import_paths() -> None:
-    ext_dirs: list[Path] = []
-    if env_dir := os.getenv('MKVPRIORITY_EXT_DIR'):
-        ext_dirs.append(Path(env_dir).resolve())
-
-    ext_dirs.append(Path.home() / '.config' / 'mkvpriority' / 'extensions')
-    ext_dirs.append(Path.cwd())
+    ext_dirs = [get_config_dir() / 'extensions', Path.cwd()]
 
     modified = False
     for ext_dir in ext_dirs:

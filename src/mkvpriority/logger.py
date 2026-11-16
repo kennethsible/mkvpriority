@@ -1,6 +1,7 @@
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 mkvpriority_logger = logging.getLogger('mkvpriority')
 mkvpropedit_logger = logging.getLogger('mkvpropedit')
@@ -37,9 +38,7 @@ prefix_filter = PrefixFilter()
 stream_filter = StreamFilter()
 
 
-def configure_logging(
-    log_path_str: str | None = None, max_bytes: int = 0, max_files: int = 1
-) -> None:
+def configure_logging(log_path: Path | None = None, max_bytes: int = 0, max_files: int = 1) -> None:
     root_logger = logging.getLogger()
     if root_logger.hasHandlers():
         return
@@ -50,8 +49,8 @@ def configure_logging(
     stream_handler.addFilter(stream_filter)
 
     handlers: list[logging.Handler] = [stream_handler]
-    if log_path_str:
-        file_handler = RotatingFileHandler(log_path_str, maxBytes=max_bytes, backupCount=max_files)
+    if log_path:
+        file_handler = RotatingFileHandler(log_path, maxBytes=max_bytes, backupCount=max_files)
         file_handler.setLevel(logging.DEBUG)
         file_handler.addFilter(prefix_filter)
         handlers.append(file_handler)
