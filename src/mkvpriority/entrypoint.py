@@ -9,6 +9,7 @@ import signal
 import sys
 from importlib.resources import as_file, files
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import cron_descriptor
 from aiohttp import web
@@ -36,9 +37,7 @@ def get_env_var(name: str, legacy_name: str | None = None) -> str | None:
     if (value := os.getenv(name)) is not None:
         return value
     if legacy_name and (legacy_value := os.getenv(legacy_name)) is not None:
-        _DEPRECATION_WARNINGS.append(
-            f"environment variable '{legacy_name}' is deprecated; use '{name}' instead"
-        )
+        _DEPRECATION_WARNINGS.append(f"'{legacy_name}' is deprecated; use '{name}' instead")
         return legacy_value
     return None
 
@@ -54,7 +53,7 @@ LOG_MAX_FILES = get_env_var('MKVPRIORITY_LOG_MAX_FILES', 'LOG_MAX_FILES')
 WEBHOOK_PORT_STR = get_env_var('MKVPRIORITY_WEBHOOK_PORT', 'WEBHOOK_PORT')
 WEBHOOK_PORT = int(WEBHOOK_PORT_STR) if WEBHOOK_PORT_STR else None
 
-CRON_TIMEZONE = get_env_var('MKVPRIORITY_CRON_TIMEZONE') or os.getenv('TZ', 'UTC')
+CRON_TIMEZONE = get_env_var('MKVPRIORITY_CRON_TIMEZONE') or os.getenv('TZ') or 'UTC'
 CRON_SCHEDULE = get_env_var('MKVPRIORITY_CRON_SCHEDULE', 'CRON_SCHEDULE')
 CRON_TARGET_PATHS = shlex.split(
     get_env_var('MKVPRIORITY_CRON_TARGET_PATHS', 'CRON_TARGET_PATHS') or ''
@@ -139,9 +138,9 @@ async def create_runner(host: str, port: int) -> web.AppRunner:
     return runner
 
 
-async def create_scheduler(expr: str, timezone: str | None) -> AsyncIOScheduler:
-    scheduler = AsyncIOScheduler()
-    trigger = CronTrigger.from_crontab(expr, timezone)
+async def create_scheduler(cron_expr: str, timezone: ZoneInfo | None = None) -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler(timezone=timezone)
+    trigger = CronTrigger.from_crontab(cron_expr, timezone)
     cron_argv = MKVPRIORITY_ARGUMENTS + CRON_TARGET_PATHS
 
     async def run_cron_job() -> None:
@@ -185,13 +184,21 @@ async def run_daemon() -> None:
                 except KeyError as e:
                     e.add_note(f"unsupported cron macro '{cron_expr}'")
                     raise
+
+            try:
+                timezone = ZoneInfo(CRON_TIMEZONE)
+            except ZoneInfoNotFoundError as e:
+                e.add_note(f"invalid cron timezone '{CRON_TIMEZONE}'")
+                raise
+
             try:
                 expr_desc = cron_descriptor.get_description(cron_expr)
                 expr_desc = expr_desc[0].lower() + expr_desc[1:]
-                scheduler = await create_scheduler(cron_expr, CRON_TIMEZONE)
+                scheduler = await create_scheduler(cron_expr, timezone)
             except (FormatError, ValueError) as e:
                 e.add_note(f"unsupported cron expression '{cron_expr}'")
                 raise
+
             entrypoint_logger.info(f'scheduled task to run {expr_desc} ({CRON_TIMEZONE})')
 
         await stop_event.wait()
