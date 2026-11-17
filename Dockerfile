@@ -25,7 +25,7 @@ if __name__ == '__main__':
     sys.exit(main())
 EOF
 
-COPY pyproject.toml ./
+COPY config.toml mkvpriority.sh pyproject.toml ./
 COPY src ./src
 
 ENV MKVPRIORITY_WEBHOOK_HOST=0.0.0.0
