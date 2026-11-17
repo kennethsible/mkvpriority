@@ -11,18 +11,22 @@ from importlib.resources import as_file, files
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import cron_descriptor
-from aiohttp import web
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from cron_descriptor import FormatError
-
 import mkvpriority.main
 from mkvpriority import __version__
 
 from .config import get_config_dir
 from .logger import configure_logging
 from .types import resolve_language
+
+try:
+    from aiohttp import web
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from cron_descriptor import FormatError, get_description
+except ImportError as e:
+    raise ImportError(
+        "mkvpriority-daemon requires the 'daemon' extra (install 'mkvpriority[daemon]')"
+    ) from e
 
 entrypoint_logger = logging.getLogger('entrypoint')
 logging.getLogger('aiohttp.access').setLevel(logging.WARNING)
@@ -37,7 +41,7 @@ def get_env_var(name: str, legacy_name: str | None = None) -> str | None:
     if (value := os.getenv(name)) is not None:
         return value
     if legacy_name and (legacy_value := os.getenv(legacy_name)) is not None:
-        _DEPRECATION_WARNINGS.append(f"'{legacy_name}' is deprecated; use '{name}' instead")
+        _DEPRECATION_WARNINGS.append(f"'{legacy_name}' is deprecated (use '{name}')")
         return legacy_value
     return None
 
@@ -193,7 +197,7 @@ async def run_daemon() -> None:
                 raise
 
             try:
-                expr_desc = cron_descriptor.get_description(cron_expr)
+                expr_desc = get_description(cron_expr)
                 expr_desc = expr_desc[0].lower() + expr_desc[1:]
                 scheduler = await create_scheduler(cron_expr, timezone)
             except (FormatError, ValueError) as e:
@@ -236,28 +240,22 @@ def main() -> None:
         config_path = CONFIG_DIR / 'config.toml'
         copy_resource('config.toml', config_path)
 
-        extensions_dir = CONFIG_DIR / 'extensions'
-        extensions_dir.mkdir(parents=True, exist_ok=True)
-        init_path = extensions_dir / '__init__.py'
-        init_path.touch(exist_ok=True)
-
         if sys.platform != 'win32':
             script_path = CONFIG_DIR / 'mkvpriority.sh'
             copy_resource('mkvpriority.sh', script_path)
             script_path.chmod(0o755)
 
-        database_path = CONFIG_DIR / 'archive.db'
-        database_path.touch(exist_ok=True)
+        extensions_dir = CONFIG_DIR / 'extensions'
+        extensions_dir.mkdir(parents=True, exist_ok=True)
+        init_path = extensions_dir / '__init__.py'
+        init_path.touch(exist_ok=True)
     except PermissionError:
         configure_logging()
-        if os.getenv('MKVPRIORITY_CONFIG_DIR') == '/config':
-            entrypoint_logger.warning(f'recreate {CONFIG_DIR} with correct PUID/PGID ownership')
-        else:
-            entrypoint_logger.warning(f'permission denied writing to {CONFIG_DIR}')
+        entrypoint_logger.warning(f'recreate {CONFIG_DIR} with matching ownership (UID/GID)')
         raise
 
     if not WEBHOOK_PORT and not CRON_SCHEDULE:
-        entrypoint_logger.warning('configure webhook listener or cron scheduler')
+        entrypoint_logger.warning('set MKVPRIORITY_WEBHOOK_PORT or MKVPRIORITY_CRON_SCHEDULE')
         return
 
     entrypoint_logger.setLevel(logging.INFO)
