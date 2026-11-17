@@ -28,6 +28,7 @@ EOF
 COPY pyproject.toml ./
 COPY src ./src
 
+ENV MKVPRIORITY_WEBHOOK_HOST=0.0.0.0
 ENV MKVPRIORITY_CONFIG_DIR="/config"
 ENV PYTHONPATH="/app/src"
 ENV PATH="/app/.venv/bin:$PATH"

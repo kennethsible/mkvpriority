@@ -50,6 +50,7 @@ MKVPRIORITY_ARGUMENTS = ['-c', str(CONFIG_DIR / 'config.toml')] + shlex.split(
 LOG_MAX_BYTES = get_env_var('MKVPRIORITY_LOG_MAX_BYTES', 'LOG_MAX_BYTES')
 LOG_MAX_FILES = get_env_var('MKVPRIORITY_LOG_MAX_FILES', 'LOG_MAX_FILES')
 
+WEBHOOK_HOST = get_env_var('MKVPRIORITY_WEBHOOK_HOST', 'WEBHOOK_HOST') or '127.0.0.1'
 WEBHOOK_PORT_STR = get_env_var('MKVPRIORITY_WEBHOOK_PORT', 'WEBHOOK_PORT')
 WEBHOOK_PORT = int(WEBHOOK_PORT_STR) if WEBHOOK_PORT_STR else None
 
@@ -173,9 +174,9 @@ async def run_daemon() -> None:
     runner: web.AppRunner | None = None
     scheduler: AsyncIOScheduler | None = None
     try:
-        if WEBHOOK_PORT:
-            runner = await create_runner('0.0.0.0', WEBHOOK_PORT)  # noqa: S104
-            entrypoint_logger.info(f'webhook listener started on 0.0.0.0:{WEBHOOK_PORT}')
+        if WEBHOOK_HOST and WEBHOOK_PORT:
+            runner = await create_runner(WEBHOOK_HOST, WEBHOOK_PORT)
+            entrypoint_logger.info(f'webhook listener started on {WEBHOOK_HOST}:{WEBHOOK_PORT}')
 
         if cron_expr := CRON_SCHEDULE:
             if cron_expr.startswith('@'):
