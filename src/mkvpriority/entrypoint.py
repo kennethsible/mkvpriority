@@ -226,15 +226,13 @@ def copy_resource(resource_name: str, dst_path: Path) -> None:
 
 
 def main() -> None:
-    if not WEBHOOK_PORT and not CRON_SCHEDULE:
-        entrypoint_logger.warning(
-            'neither webhook listener nor cron scheduler is configured '
-            '(set MKVPRIORITY_WEBHOOK_PORT or MKVPRIORITY_CRON_SCHEDULE)'
-        )
-        return
-
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        log_path = CONFIG_DIR / 'mkvpriority.log'
+        max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
+        max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
+        configure_logging(log_path, max_bytes, max_files)
+
         config_path = CONFIG_DIR / 'config.toml'
         copy_resource('config.toml', config_path)
 
@@ -251,16 +249,16 @@ def main() -> None:
         database_path = CONFIG_DIR / 'archive.db'
         database_path.touch(exist_ok=True)
     except PermissionError:
+        configure_logging()
         if os.getenv('MKVPRIORITY_CONFIG_DIR') == '/config':
             entrypoint_logger.warning(f'recreate {CONFIG_DIR} with correct PUID/PGID ownership')
         else:
             entrypoint_logger.warning(f'permission denied writing to {CONFIG_DIR}')
         raise
 
-    log_path = CONFIG_DIR / 'mkvpriority.log'
-    max_bytes = 5242880 if LOG_MAX_BYTES is None else int(LOG_MAX_BYTES)
-    max_files = 3 if LOG_MAX_FILES is None else int(LOG_MAX_FILES)
-    configure_logging(log_path, max_bytes, max_files)
+    if not WEBHOOK_PORT and not CRON_SCHEDULE:
+        entrypoint_logger.warning('configure webhook listener or cron scheduler')
+        return
 
     entrypoint_logger.setLevel(logging.INFO)
     entrypoint_logger.info(f'MKVPriority {__version__}')
