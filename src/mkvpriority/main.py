@@ -163,12 +163,18 @@ def main(argv: list[str] | None = None, orig_lang: str | None = None) -> None:
             if '::' in path_str:
                 path_str, toml_label = path_str.rsplit('::', 1)
             matched_config = configs.get(toml_label) or configs.get('untagged')
+
             if not args.restore and matched_config is None:
                 tag_suffix = f' <{toml_label}>' if toml_label != 'untagged' else ''
                 mkvpriority_logger.warning(f"skipping (missing config) '{path_str}'{tag_suffix}")
                 continue
 
-            for file_path in collect_file_paths(path_str):
+            if not (file_paths := collect_file_paths(path_str)):
+                if '*' not in path_str and '?' not in path_str and not Path(path_str).exists():
+                    mkvpriority_logger.warning(f"skipping (not found) '{path_str}'")
+                continue
+
+            for file_path in file_paths:
                 if database is not None:
                     is_archived = get_archive_status(file_path, database, no_modify=no_modify)
                     if not args.restore and is_archived and not args.override:
