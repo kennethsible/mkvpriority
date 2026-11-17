@@ -325,23 +325,17 @@ options:
 
 ### Python Package
 
-To install the standalone CLI tool (without Docker), you can use `pip`:
+To install the standalone CLI tool (without Docker), you can use [`uv`](https://docs.astral.sh/uv/) or [`pipx`](https://pipx.pypa.io/stable/):
 
 ```bash
-pip install mkvpriority
+uv tool install mkvpriority
 ```
 
 To include the webhook listener and cron scheduler, install the `daemon` extra and start `mkvpriority-daemon`:
 
 ```bash
-pip install "mkvpriority[daemon]"
+uv tool install "mkvpriority[daemon]"
 mkvpriority-daemon
-```
-
-To keep the CLI tool isolated from your environment, you can use [`uv`](https://docs.astral.sh/uv/):
-
-```bash
-uv tool install mkvpriority
 ```
 
 > [!NOTE]

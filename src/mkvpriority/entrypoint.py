@@ -218,6 +218,13 @@ def copy_resource(resource_name: str, dst_path: Path) -> None:
 
 
 def main() -> None:
+    if not WEBHOOK_PORT and not CRON_SCHEDULE:
+        entrypoint_logger.warning(
+            'neither webhook listener nor cron scheduler is configured '
+            '(set MKVPRIORITY_WEBHOOK_PORT or MKVPRIORITY_CRON_SCHEDULE)'
+        )
+        return
+
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         config_path = CONFIG_DIR / 'config.toml'

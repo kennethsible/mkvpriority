@@ -49,7 +49,7 @@ daemon = [
     "apscheduler>=3.11.3",
     "requests>=2.34.2",
     "pycountry>=26.2.16",
-    "cron_descriptor>=2.2.1",
+    "cron_descriptor>=2.3.1",
 ]
 subtitle_converter = ["pysubs2>=1.9.1"]
 
